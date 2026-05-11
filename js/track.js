@@ -1,57 +1,54 @@
 // ============= レーストラック (3Dコース) =============
 const Track = {
-  // 中央線の制御点（閉じたループ）
   controlPoints: [],
-  pathPoints: [],   // 補間後の点列 {x, z}
+  pathPoints: [],
   pathLength: 0,
-  cumLen: [],       // 累積距離
-  width: 22,        // コース幅(半幅) - 広めに(壁ありで操作しやすく)
-  wallHeight: 2.6,  // 壁の高さ
+  cumLen: [],
+  width: 24,        // コース幅 - 広めにして操作しやすく
+  wallHeight: 2.8,
 
   group: null,
   trackMesh: null,
-  itemBoxes: [],    // {mesh, pos, active, respawn}
-  boostPads: [],    // {mesh, x, z, dirX, dirZ, lastTrigger: Map<carId, time>}
-  jumpPads: [],     // {mesh, x, z, dirX, dirZ, lastTrigger: Map<carId, time>}
+  itemBoxes: [],
+  boostPads: [],
+  jumpPads: [],
+  oilPads: [],       // ハザード: オイル
+  shortcuts: [],     // 近道(芝ショートカット)
 
-  // 壁衝突用セグメント (外側 / 内側) - 2D 線分
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
 
-  // 進行度キャッシュ
-  _segDir: [],   // 各セグメントの単位方向ベクトル {ux, uz}
-  _segNorm: [],  // 法線(左方向)
+  _segDir: [],
+  _segNorm: [],
 
   generate(scene) {
     this.group = new THREE.Group();
     scene.add(this.group);
 
     // 制御点（複雑な閉ループ：S字, ヘアピン, シケイン入り）
-    // スタート→直線→緩い右→ヘアピン→S字→ロング左→シケイン→右ループ→戻り
     this.controlPoints = [
-      { x:    0, z:  170 },   // スタート直線
+      { x:    0, z:  170 },
       { x:   60, z:  175 },
       { x:  120, z:  160 },
-      { x:  180, z:  120 },   // 右へカーブイン
+      { x:  180, z:  120 },
       { x:  220, z:   50 },
-      { x:  230, z:  -30 },   // ロング右コーナー
+      { x:  230, z:  -30 },
       { x:  200, z: -100 },
       { x:  140, z: -140 },
-      { x:   70, z: -120 },   // S字 上下
+      { x:   70, z: -120 },
       { x:   20, z:  -80 },
-      { x:  -20, z: -100 },   // ヘアピン入り
+      { x:  -20, z: -100 },
       { x:  -70, z: -160 },
       { x: -140, z: -170 },
-      { x: -200, z: -110 },   // 大きな左コーナー
+      { x: -200, z: -110 },
       { x: -220, z:  -30 },
       { x: -210, z:   50 },
-      { x: -160, z:  100 },   // シケイン
+      { x: -160, z:  100 },
       { x: -120, z:   80 },
       { x:  -80, z:  120 },
       { x:  -40, z:  150 },
     ];
 
-    // Catmull-Rom補間で滑らかパス生成
     this.pathPoints = this._catmullRomLoop(this.controlPoints, 16);
     this._buildCumLen();
     this._buildSegmentDirs();
@@ -59,12 +56,13 @@ const Track = {
     this._buildGround(scene);
     this._buildSkybox(scene);
     this._buildTrack();
-    this._buildCurbs();      // 縁石(赤白)
-    this._buildBarriers();   // 壁
+    this._buildCurbs();
+    this._buildBarriers();
     this._buildStartLine();
     this._buildItemBoxes();
-    this._buildBoostPads();  // ダッシュ盤
-    this._buildJumpPads();   // ジャンプ盤
+    this._buildBoostPads();
+    this._buildJumpPads();
+    this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
     this._buildDecorations();
 
     return this;
@@ -123,12 +121,10 @@ const Track = {
       const len = Math.hypot(dx, dz) || 1;
       const ux = dx / len, uz = dz / len;
       this._segDir[i] = { ux, uz };
-      // 左方向(進行方向に対して左) - 右手系では
       this._segNorm[i] = { nx: -uz, nz: ux };
     }
   },
 
-  // 道路メッシュ：内側・外側の両端点列を作って三角形ストリップ
   _buildTrack() {
     const verts = [];
     const uvs = [];
@@ -142,12 +138,11 @@ const Track = {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
 
-      verts.push(cur.x + nx * this.width, 0.02, cur.z + nz * this.width); // 左端(外側)
-      verts.push(cur.x - nx * this.width, 0.02, cur.z - nz * this.width); // 右端(内側)
+      verts.push(cur.x + nx * this.width, 0.02, cur.z + nz * this.width);
+      verts.push(cur.x - nx * this.width, 0.02, cur.z - nz * this.width);
       uvs.push(0, i * 0.4);
       uvs.push(1, i * 0.4);
 
-      // 壁線分用に外/内の点を保存
       this.wallSegmentsOuter.push({ x: cur.x + nx * this.width, z: cur.z + nz * this.width });
       this.wallSegmentsInner.push({ x: cur.x - nx * this.width, z: cur.z - nz * this.width });
     }
@@ -173,7 +168,6 @@ const Track = {
     this.trackMesh.receiveShadow = true;
     this.group.add(this.trackMesh);
 
-    // 中央線
     this._buildCenterLine();
   },
 
@@ -183,14 +177,12 @@ const Track = {
     const ctx = c.getContext('2d');
     ctx.fillStyle = '#5a5a60';
     ctx.fillRect(0, 0, 128, 128);
-    // ノイズ
     for (let i = 0; i < 800; i++) {
       const x = Math.random() * 128, y = Math.random() * 128;
       const g = 70 + Math.random() * 40;
       ctx.fillStyle = `rgb(${g},${g},${g+2})`;
       ctx.fillRect(x, y, 2, 2);
     }
-    // 路肩風白線
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 6;
     ctx.strokeRect(3, 0, 122, 128);
@@ -215,12 +207,10 @@ const Track = {
     this.group.add(line);
   },
 
-  // 縁石（赤白チェック）- コース内側・外側のエッジ装飾
   _buildCurbs() {
     const n = this.pathPoints.length;
     const curbWidth = 1.4;
     const curbHeight = 0.15;
-    // 外側 と 内側
     for (const side of [1, -1]) {
       const verts = [];
       const colors = [];
@@ -232,7 +222,6 @@ const Track = {
         const outer = side * (this.width + curbWidth);
         verts.push(cur.x + nx * inner, 0.05, cur.z + nz * inner);
         verts.push(cur.x + nx * outer, curbHeight, cur.z + nz * outer);
-        // 赤白縞
         const isRed = (Math.floor(i / 2) % 2 === 0);
         const r = isRed ? 0.85 : 0.95;
         const g = isRed ? 0.18 : 0.95;
@@ -261,14 +250,12 @@ const Track = {
     }
   },
 
-  // 立体的な壁（衝突判定用）
   _buildBarriers() {
     const n = this.pathPoints.length;
     const curbWidth = 1.4;
     const wallThickness = 0.6;
     const wallHeight = this.wallHeight;
 
-    // 壁ジオメトリ(両側)
     for (const side of [1, -1]) {
       const verts = [];
       const colors = [];
@@ -279,26 +266,21 @@ const Track = {
       for (let i = 0; i < n; i++) {
         const cur = this.pathPoints[i];
         const { nx, nz } = this._segNorm[i];
-        // 4頂点: 下内側、下外側、上外側、上内側 (1セグメントあたり)
         const xi1 = cur.x + nx * wallOff1, zi1 = cur.z + nz * wallOff1;
         const xi2 = cur.x + nx * wallOff2, zi2 = cur.z + nz * wallOff2;
-        verts.push(xi1, 0.15, zi1);          // 0 下内
-        verts.push(xi2, 0.15, zi2);          // 1 下外
-        verts.push(xi2, wallHeight, zi2);    // 2 上外
-        verts.push(xi1, wallHeight, zi1);    // 3 上内
+        verts.push(xi1, 0.15, zi1);
+        verts.push(xi2, 0.15, zi2);
+        verts.push(xi2, wallHeight, zi2);
+        verts.push(xi1, wallHeight, zi1);
 
-        // 赤白縞色
         const c1 = (Math.floor(i / 3) % 2 === 0) ? [0.92, 0.92, 0.92] : [0.85, 0.15, 0.15];
         for (let k = 0; k < 4; k++) colors.push(c1[0], c1[1], c1[2]);
       }
       for (let i = 0; i < n; i++) {
         const a = i * 4;
         const b = ((i + 1) % n) * 4;
-        // 内面 (コース側): 頂点 a+0,a+3 と b+0,b+3
         idx.push(a + 0, b + 0, a + 3, a + 3, b + 0, b + 3);
-        // 上面: a+3,a+2,b+3,b+2
         idx.push(a + 3, b + 3, a + 2, a + 2, b + 3, b + 2);
-        // 外面
         idx.push(a + 1, a + 2, b + 1, b + 1, a + 2, b + 2);
       }
       const geo = new THREE.BufferGeometry();
@@ -311,7 +293,6 @@ const Track = {
       this.group.add(m);
     }
 
-    // 上部に黒い線(タイヤバリア風アクセント)
     const topLineMat = new THREE.LineBasicMaterial({ color: 0x222222 });
     for (const side of [1, -1]) {
       const pts = [];
@@ -326,13 +307,12 @@ const Track = {
       this.group.add(new THREE.Line(geo, topLineMat));
     }
 
-    // 壁衝突用の境界点列を保存(外側/内側)
     this.wallSegmentsOuter = [];
     this.wallSegmentsInner = [];
     for (let i = 0; i < n; i++) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
-      const off = this.width; // 路面端 (内壁面)
+      const off = this.width;
       this.wallSegmentsOuter.push({ x: cur.x + nx * off, z: cur.z + nz * off });
       this.wallSegmentsInner.push({ x: cur.x - nx * off, z: cur.z - nz * off });
     }
@@ -345,7 +325,6 @@ const Track = {
     const len = Math.hypot(dx, dz) || 1;
     const nx = -dz / len, nz = dx / len;
 
-    // チェッカーパターン
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const ctx = c.getContext('2d');
@@ -366,7 +345,6 @@ const Track = {
     m.rotation.z = angle;
     this.group.add(m);
 
-    // スタートゲート（アーチ）
     this._buildArch(p.x, p.z, angle);
 
     this.startAngle = angle;
@@ -390,7 +368,6 @@ const Track = {
     beam.position.set(0, 7, 0);
     grp.add(post1, post2, beam);
 
-    // バナー
     const c = document.createElement('canvas');
     c.width = 1024; c.height = 128;
     const ctx = c.getContext('2d');
@@ -419,7 +396,6 @@ const Track = {
     const c = document.createElement('canvas');
     c.width = c.height = 256;
     const ctx = c.getContext('2d');
-    // 芝
     const base = ctx.createLinearGradient(0, 0, 256, 256);
     base.addColorStop(0, '#7cc26b');
     base.addColorStop(1, '#5fa84b');
@@ -444,7 +420,6 @@ const Track = {
   },
 
   _buildSkybox(scene) {
-    // 青空〜地平線グラデ
     const c = document.createElement('canvas');
     c.width = 64; c.height = 512;
     const ctx = c.getContext('2d');
@@ -454,7 +429,6 @@ const Track = {
     grad.addColorStop(0.85, '#ffe0b2');
     grad.addColorStop(1, '#ffcc80');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, 64, 512);
-    // 雲
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for (let i = 0; i < 12; i++) {
       const y = 30 + Math.random() * 180;
@@ -479,7 +453,6 @@ const Track = {
     const n = this.pathPoints.length;
     const step = Math.floor(n / 8);
 
-    // 6面それぞれ違うレインボー風カラー
     const colors = ['#FF5252', '#FFD740', '#69F0AE', '#40C4FF', '#E040FB', '#FFAB40'];
     const makeFace = (color) => {
       const c = document.createElement('canvas');
@@ -490,11 +463,9 @@ const Track = {
       g.addColorStop(0.3, color);
       g.addColorStop(1, color);
       ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
-      // 内枠
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 6;
       ctx.strokeRect(10, 10, 108, 108);
-      // ?マーク
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 80px sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -505,13 +476,12 @@ const Track = {
       return new THREE.MeshLambertMaterial({ map: tex, emissive: new THREE.Color(color).multiplyScalar(0.3), emissiveIntensity: 0.5 });
     };
     const mats = colors.map(makeFace);
-    const boxGeo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
+    const boxGeo = new THREE.BoxGeometry(1.8, 1.8, 1.8);  // 当たり判定取りやすく少し大きく
 
     for (let i = 4; i < n; i += step) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
 
-      // 中央＋左右 3 つ並べる
       const offsets = [-this.width * 0.55, 0, this.width * 0.55];
       offsets.forEach(off => {
         const px = cur.x + nx * off;
@@ -521,24 +491,28 @@ const Track = {
         m.castShadow = true;
         this.group.add(m);
 
-        // 下に光るリング
-        const ringGeo = new THREE.RingGeometry(1.2, 1.6, 24);
+        const ringGeo = new THREE.RingGeometry(1.4, 1.85, 24);
         const ringMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = -Math.PI / 2;
         ring.position.set(px, 0.05, pz);
         this.group.add(ring);
 
-        this.itemBoxes.push({ mesh: m, ring, x: px, z: pz, active: true, respawn: 0 });
+        // 光柱 (取得しやすさ向上)
+        const beamGeo = new THREE.CylinderGeometry(0.15, 0.15, 4, 8, 1, true);
+        const beamMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+        const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.position.set(px, 2.0, pz);
+        this.group.add(beam);
+
+        this.itemBoxes.push({ mesh: m, ring, beam, x: px, z: pz, active: true, respawn: 0 });
       });
     }
   },
 
-  // ===== ダッシュ盤(ブーストパッド) =====
   _buildBoostPads() {
     const n = this.pathPoints.length;
-    // 直線・ヘアピン脱出部にダッシュ盤を配置 (相対位置)
-    const positions = [0.08, 0.32, 0.58, 0.82];
+    const positions = [0.06, 0.20, 0.34, 0.48, 0.62, 0.78, 0.92];
     const padTex = this._makeBoostPadTexture();
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -552,7 +526,7 @@ const Track = {
       for (const off of [-this.width * 0.35, this.width * 0.35]) {
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
-        const geo = new THREE.PlaneGeometry(5, 7);
+        const geo = new THREE.PlaneGeometry(6, 8);
         const mat = new THREE.MeshBasicMaterial({ map: padTex, transparent: true });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.rotation.x = -Math.PI / 2;
@@ -560,18 +534,18 @@ const Track = {
         mesh.rotation.z = Math.atan2(dirX, dirZ);
         this.group.add(mesh);
 
-        // 矢印エミッシブ (盛り上がる光)
-        const arrowGeo = new THREE.ConeGeometry(1.8, 0.3, 4);
+        const arrowGeo = new THREE.ConeGeometry(2.0, 0.4, 4);
         const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.7 });
         const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-        arrow.position.set(px, 0.18, pz);
+        arrow.position.set(px, 0.22, pz);
         arrow.rotation.x = -Math.PI / 2;
         arrow.rotation.z = Math.atan2(dirX, dirZ);
         this.group.add(arrow);
 
         this.boostPads.push({
           mesh, arrow, x: px, z: pz, dirX, dirZ,
-          radius: 2.6, _phase: Math.random() * Math.PI * 2,
+          radius: 3.2,
+          _phase: Math.random() * Math.PI * 2,
           _lastTrigger: new Map(),
         });
       }
@@ -582,13 +556,11 @@ const Track = {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
     const ctx = c.getContext('2d');
-    // ベース
     const grad = ctx.createLinearGradient(0, 0, 0, 128);
     grad.addColorStop(0, '#FF9800');
     grad.addColorStop(0.5, '#FFEB3B');
     grad.addColorStop(1, '#FF5722');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
-    // 矢印
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#C62828'; ctx.lineWidth = 4;
     for (let i = 0; i < 3; i++) {
@@ -607,11 +579,10 @@ const Track = {
     return tex;
   },
 
-  // ===== ジャンプ盤 =====
+  // ===== ジャンプ盤 (大型化、両側にスロープ感) =====
   _buildJumpPads() {
     const n = this.pathPoints.length;
-    // ジャンプ盤は2箇所 (中盤と終盤)
-    const positions = [0.22, 0.68];
+    const positions = [0.18, 0.45, 0.72];
     const padTex = this._makeJumpPadTexture();
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -621,50 +592,45 @@ const Track = {
       const len = Math.hypot(dx, dz) || 1;
       const dirX = dx / len, dirZ = dz / len;
 
-      // 中央配置
       const px = cur.x, pz = cur.z;
-      // 斜面風 (ランプ) - 進行方向先端が高くなる楔型
-      const rampGeo = this._makeRampGeometry(6, 1.2, 5);
+      // ランプを大きめに（横幅広く、高さも高く）
+      const rampGeo = this._makeRampGeometry(8, 1.8, 6);
       const rampMat = new THREE.MeshLambertMaterial({ map: padTex });
       const ramp = new THREE.Mesh(rampGeo, rampMat);
       ramp.position.set(px, 0, pz);
       ramp.rotation.y = Math.atan2(dirX, dirZ);
       this.group.add(ramp);
 
-      // 上面に光る矢印 (平面)
-      const glowGeo = new THREE.PlaneGeometry(5, 4);
+      const glowGeo = new THREE.PlaneGeometry(6, 5);
       const glowMat = new THREE.MeshBasicMaterial({ map: padTex, transparent: true, opacity: 0.9 });
       const glow = new THREE.Mesh(glowGeo, glowMat);
       glow.rotation.x = -Math.PI / 2;
-      glow.position.set(px, 0.05, pz);
+      glow.position.set(px + dirX * 0.5, 1.3, pz + dirZ * 0.5);
       glow.rotation.z = Math.atan2(dirX, dirZ);
       this.group.add(glow);
 
       this.jumpPads.push({
         mesh: ramp, glow, x: px, z: pz, dirX, dirZ,
-        radius: 3.2, _phase: Math.random() * Math.PI * 2,
+        radius: 4.0,    // 当たり判定広く (取り損なわない)
+        _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });
     }
   },
 
-  // ランプ形状を頂点操作で作る (前方が高い斜面)
   _makeRampGeometry(width, height, depth) {
-    // 単純な楔(くさび)型ジオメトリ: 後ろは平ら、前は1.2高い
     const w = width / 2, d = depth / 2;
     const verts = new Float32Array([
-      // 底面
       -w, 0, -d,   w, 0, -d,   w, 0,  d,  -w, 0,  d,
-      // 上面 (前方が高い)
       -w, 0.2, -d,  w, 0.2, -d,  w, height,  d,  -w, height,  d,
     ]);
     const idx = [
-      0, 1, 2,  0, 2, 3,    // 底
-      4, 6, 5,  4, 7, 6,    // 上
-      0, 5, 1,  0, 4, 5,    // 後ろ
-      3, 2, 6,  3, 6, 7,    // 前
-      0, 3, 7,  0, 7, 4,    // 左
-      1, 5, 6,  1, 6, 2,    // 右
+      0, 1, 2,  0, 2, 3,
+      4, 6, 5,  4, 7, 6,
+      0, 5, 1,  0, 4, 5,
+      3, 2, 6,  3, 6, 7,
+      0, 3, 7,  0, 7, 4,
+      1, 5, 6,  1, 6, 2,
     ];
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
@@ -682,7 +648,6 @@ const Track = {
     grad.addColorStop(0.5, '#42A5F5');
     grad.addColorStop(1, '#26C6DA');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
-    // 上向き矢印
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#0D47A1'; ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(64, 18);
@@ -698,8 +663,75 @@ const Track = {
     return tex;
   },
 
+  // ===== ショートカット (内側を攻めるとアスファルト化された近道) =====
+  _buildShortcuts() {
+    // ヘアピン内側に短い直線ショートカット（弱めに減速かつアスファルト的扱い）
+    // 簡易実装: 2箇所の特定セグメントで内側 path 上に shortcut zone を定義
+    const n = this.pathPoints.length;
+    const shortcuts = [
+      // {fromIdx, toIdx} : 内側を斜めに突っ切る (進行方向)
+      { from: Math.floor(n * 0.08), to: Math.floor(n * 0.16) },
+      { from: Math.floor(n * 0.40), to: Math.floor(n * 0.50) },
+    ];
+    for (const sc of shortcuts) {
+      const a = this.pathPoints[sc.from];
+      const b = this.pathPoints[sc.to];
+      const an = this._segNorm[sc.from];
+      const bn = this._segNorm[sc.to];
+      const off = -this.width * 1.05; // 内側に少し外
+      const ax = a.x + an.nx * off, az = a.z + an.nz * off;
+      const bx = b.x + bn.nx * off, bz = b.z + bn.nz * off;
+      const cx = (ax + bx) / 2, cz = (az + bz) / 2;
+      const dx = bx - ax, dz = bz - az;
+      const len = Math.hypot(dx, dz) || 1;
+      const ang = Math.atan2(dx, dz);
+      // 地面に少しだけ薄いダート風メッシュ
+      const geo = new THREE.PlaneGeometry(8, len);
+      const tex = this._makeDirtTexture();
+      const mat = new THREE.MeshLambertMaterial({ map: tex, transparent: true, opacity: 0.95 });
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.rotation.z = ang;
+      m.position.set(cx, 0.03, cz);
+      this.group.add(m);
+
+      this.shortcuts.push({
+        x: cx, z: cz, halfLen: len / 2, halfWid: 4, ang,
+        cosA: Math.cos(ang), sinA: Math.sin(ang),
+      });
+    }
+  },
+
+  _makeDirtTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 128, 128);
+    grad.addColorStop(0, '#8d6e63');
+    grad.addColorStop(1, '#a1887f');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 500; i++) {
+      ctx.fillStyle = `rgba(60,40,20,${Math.random() * 0.3})`;
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  },
+
+  // ショートカット上か判定
+  isOnShortcut(x, z) {
+    for (const sc of this.shortcuts) {
+      const rx = x - sc.x, rz = z - sc.z;
+      // ローカル座標
+      const lx = rx * sc.cosA - rz * sc.sinA;
+      const lz = rx * sc.sinA + rz * sc.cosA;
+      if (Math.abs(lx) < sc.halfWid && Math.abs(lz) < sc.halfLen) return true;
+    }
+    return false;
+  },
+
   _buildDecorations() {
-    // 木をコース外側にランダム配置
     const treeMat1 = new THREE.MeshLambertMaterial({ color: 0x2e7d32 });
     const treeMat2 = new THREE.MeshLambertMaterial({ color: 0x6d4c41 });
     const leafGeo = new THREE.ConeGeometry(2.5, 6, 8);
@@ -725,7 +757,6 @@ const Track = {
       }
     }
 
-    // 観客スタンド風のボックスをスタート付近に
     const p = this.pathPoints[0];
     const standColors = [0xffffff, 0xe53935, 0x1976d2, 0xfbc02d];
     for (let i = 0; i < 6; i++) {
@@ -737,7 +768,6 @@ const Track = {
       stand.rotation.y = this.startAngle;
       this.group.add(stand);
 
-      // 観客(色付きドット)
       const audCanvas = document.createElement('canvas');
       audCanvas.width = 256; audCanvas.height = 64;
       const actx = audCanvas.getContext('2d');
@@ -754,12 +784,10 @@ const Track = {
       audience.position.copy(stand.position);
       audience.position.y += 2.5;
       audience.rotation.y = this.startAngle;
-      // 少し前
       audience.position.x -= Math.cos(this.startAngle) * 0.1;
       this.group.add(audience);
     }
 
-    // 看板/旗
     const flagColors = [0xff5252, 0xffd54f, 0x4fc3f7, 0x81c784];
     for (let i = 0; i < n; i += 8) {
       const cur = this.pathPoints[i];
@@ -787,13 +815,11 @@ const Track = {
     }
   },
 
-  // 進行度計算: 効率的にcurrent indexの近傍だけサーチ
   getProgress(x, z, hintIdx = -1) {
     const n = this.pathPoints.length;
     let best = 0;
     let bestD = Infinity;
     if (hintIdx >= 0) {
-      // 近傍探索 (±20点)
       const range = 30;
       for (let k = -range; k <= range; k++) {
         const i = ((hintIdx + k) % n + n) % n;
@@ -811,7 +837,6 @@ const Track = {
     return { index: best, dist: Math.sqrt(bestD), totalDist: this.cumLen[best] };
   },
 
-  // スタートグリッド：count台分の初期位置を返す
   getStartPositions(count) {
     const out = [];
     const sx = this.startX, sz = this.startZ;
@@ -831,28 +856,31 @@ const Track = {
     return out;
   },
 
-  // コースから外れているか？
   isOffTrack(x, z, hintIdx = -1) {
     const { dist } = this.getProgress(x, z, hintIdx);
-    return dist > this.width;
+    if (dist <= this.width) return false;
+    if (this.isOnShortcut(x, z)) return false; // ショートカットはOK
+    return true;
   },
 
-  // 壁衝突解決：x, z 位置を壁内に押し戻して返す
-  // 戻り値: { x, z, hit: bool, normalX, normalZ }
+  // 壁衝突解決 (改善版: 法線にのみ押し戻し、接線は保存)
   resolveWalls(x, z, radius, hintIdx = -1) {
     const prog = this.getProgress(x, z, hintIdx);
-    // 中心点から法線方向への距離（符号付き）
     const cur = this.pathPoints[prog.index];
     const { nx, nz } = this._segNorm[prog.index];
-    // 距離(法線方向の射影)
     const rx = x - cur.x, rz = z - cur.z;
-    const lateral = rx * nx + rz * nz; // +側は外側(左), -側は内側(右)
+    const lateral = rx * nx + rz * nz;
     const limit = this.width - radius;
     if (Math.abs(lateral) > limit) {
+      // ショートカット上ならスキップ
+      if (this.isOnShortcut(x, z)) {
+        return { x, z, hit: false, nx: 0, nz: 0, lateral };
+      }
       const sign = Math.sign(lateral);
       const excess = Math.abs(lateral) - limit;
       const newX = x - sign * nx * excess;
       const newZ = z - sign * nz * excess;
+      // 壁外向き法線 (車の押し戻す向きは内側 = -sign*n)
       return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral };
     }
     return { x, z, hit: false, nx: 0, nz: 0, lateral };
@@ -869,13 +897,16 @@ const Track = {
           b.ring.scale.set(s, s, 1);
           b.ring.material.opacity = 0.35 + Math.sin(now * 0.005) * 0.2;
         }
+        if (b.beam) {
+          b.beam.material.opacity = 0.18 + Math.sin(now * 0.004) * 0.1;
+        }
       } else if (now > b.respawn) {
         b.active = true;
         b.mesh.visible = true;
         if (b.ring) b.ring.visible = true;
+        if (b.beam) b.beam.visible = true;
       }
     }
-    // パッドの脈動アニメ
     for (const p of this.boostPads) {
       p._phase += dt * 5;
       if (p.arrow) {
@@ -888,20 +919,19 @@ const Track = {
       p._phase += dt * 4;
       if (p.glow) {
         p.glow.material.opacity = 0.7 + Math.sin(p._phase) * 0.25;
-        p.glow.position.y = 0.95 + Math.sin(p._phase) * 0.08;
+        p.glow.position.y = 1.4 + Math.sin(p._phase) * 0.15;
       }
     }
   },
 
-  // ===== パッド衝突チェック (carごとに呼ぶ) =====
-  // 戻り値: { boost: bool, jump: bool }
+  // ===== パッド衝突チェック =====
   checkPads(car, now) {
     let result = { boost: false, jump: false };
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
       if (d < p.radius) {
         const last = p._lastTrigger.get(car.id) || 0;
-        if (now - last > 600) {
+        if (now - last > 500) {
           p._lastTrigger.set(car.id, now);
           result.boost = true;
         }
@@ -909,9 +939,9 @@ const Track = {
     }
     for (const p of this.jumpPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
-      if (d < p.radius) {
+      if (d < p.radius && car.y < 1.5) {  // 空中時は再発動しない
         const last = p._lastTrigger.get(car.id) || 0;
-        if (now - last > 1200) {
+        if (now - last > 1500) {
           p._lastTrigger.set(car.id, now);
           result.jump = true;
         }
@@ -920,14 +950,15 @@ const Track = {
     return result;
   },
 
-  collectItemBox(x, z, radius = 1.8) {
+  collectItemBox(x, z, radius = 2.2) {
     for (const b of this.itemBoxes) {
       if (!b.active) continue;
       if (Utils.dist2(x, z, b.x, b.z) < radius) {
         b.active = false;
         b.mesh.visible = false;
         if (b.ring) b.ring.visible = false;
-        b.respawn = performance.now() + 4000;
+        if (b.beam) b.beam.visible = false;
+        b.respawn = performance.now() + 3500;
         return true;
       }
     }

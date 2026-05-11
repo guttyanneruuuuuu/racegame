@@ -627,10 +627,137 @@ input { font-family: inherit; outline: none; }
   body.in-game #rotate-hint { display: flex; }
 }
 
+/* ============= 追加: ドリフトチャージ ============= */
+.drift-charge {
+  position: absolute;
+  bottom: 130px; left: 50%; transform: translateX(-50%);
+  display: none;
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  letter-spacing: 1px;
+  pointer-events: none;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  z-index: 6;
+}
+.drift-charge.show { display: block; animation: driftPulse 0.4s infinite alternate; }
+.drift-charge.tier-blue   { background: linear-gradient(180deg, #40C4FF, #0288D1); }
+.drift-charge.tier-yellow { background: linear-gradient(180deg, #FFEB3B, #F57C00); color: #5D2C00; text-shadow: 0 2px 0 rgba(255,255,255,0.3); }
+.drift-charge.tier-purple { background: linear-gradient(180deg, #E040FB, #6A1B9A); }
+@keyframes driftPulse {
+  from { transform: translateX(-50%) scale(1); }
+  to { transform: translateX(-50%) scale(1.08); }
+}
+
+/* ============= 追加: 逆走警告 ============= */
+.wrong-way {
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: none;
+  padding: 12px 28px;
+  background: rgba(198, 40, 40, 0.92);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-radius: 14px;
+  border: 3px solid #FFEB3B;
+  box-shadow: 0 6px 20px rgba(198,40,40,0.6), 0 0 30px rgba(255,235,59,0.6);
+  text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  z-index: 6;
+  pointer-events: none;
+}
+.wrong-way.show { display: block; animation: wwBlink 0.45s steps(2) infinite; }
+@keyframes wwBlink {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* ============= 追加: インクスプラッシュ ============= */
+.ink-splat {
+  position: fixed; inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 1.5s;
+}
+.ink-splat svg { width: 100%; height: 100%; }
+.ink-splat.fade { opacity: 0; }
+
+/* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
+.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 60px; height: 60px; font-size: 22px; }
+.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 60px; height: 60px; font-size: 20px; }
+
+/* ============= 追加: アイテムスロットロール演出 ============= */
+.hud-item.rolling .item-box {
+  animation: itemRoll 0.55s ease-out;
+}
+@keyframes itemRoll {
+  0%   { transform: rotateY(0deg) scale(0.7); filter: brightness(2); }
+  50%  { transform: rotateY(540deg) scale(1.25); filter: brightness(1.6); }
+  100% { transform: rotateY(720deg) scale(1); filter: brightness(1); }
+}
+
+/* ============= 追加: ブースト時スピードライン強調 ============= */
+.speed-lines.boost {
+  background:
+    repeating-radial-gradient(circle at 50% 60%,
+      transparent 0px, transparent 14%,
+      rgba(255,200,80,0.0) 14%, rgba(255,200,80,0.45) 14.3%,
+      transparent 15%, transparent 100%);
+  animation: speedLinesFast 0.18s linear infinite;
+}
+@keyframes speedLinesFast {
+  from { transform: scale(1); }
+  to { transform: scale(1.25); }
+}
+
+/* ============= 追加: 順位カラム / ベストラップ表示 ============= */
+.standings-lap { font-size: 10px; color: #B0BEC5; margin-left: auto; }
+.final-lap { color: #FFCDD2 !important; animation: finalLapBlink 0.7s infinite alternate; }
+@keyframes finalLapBlink {
+  from { text-shadow: 0 0 0 transparent; }
+  to   { text-shadow: 0 0 10px #FF5252, 0 0 18px #FFEB3B; }
+}
+.result-best {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #2E7D32;
+  font-weight: 800;
+  margin-left: 6px;
+}
+
+/* ============= 追加: ロビープレイヤー数 ============= */
+.lobby-count {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1565C0;
+  margin-bottom: 10px;
+}
+#player-count {
+  font-family: 'Courier New', monospace;
+  color: #C62828;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+/* ============= 追加: 反転チェック ============= */
+.sensitivity-ctrl .invert-lbl {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800; color: #1f2733;
+  padding-left: 6px; border-left: 1px solid rgba(0,0,0,0.2);
+}
+.sensitivity-ctrl .invert-lbl input { transform: scale(1.1); }
+
 /* スマホ最適化 */
 @media (max-height: 480px) {
   .ctrl-btn { width: 84px; height: 66px; font-size: 12px; }
   .ctrl-item { width: 66px; height: 66px; font-size: 12px; }
+  .ctrl-look, .ctrl-respawn { width: 54px; height: 54px; font-size: 18px; }
   .hud-mini { width: 96px; height: 96px; }
   .hud-speed { padding: 6px 14px; }
   .speed-val { font-size: 28px; }
@@ -638,4 +765,6 @@ input { font-family: inherit; outline: none; }
   .steer-indicator { bottom: 92px; width: 170px; }
   .settings-stack { top: 72px; }
   .btn-icon { width: 34px; height: 34px; font-size: 15px; }
+  .wrong-way { font-size: 18px; padding: 10px 22px; }
+  .drift-charge { bottom: 110px; font-size: 12px; padding: 3px 12px; }
 }

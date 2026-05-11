@@ -36,7 +36,7 @@ const GameUI = {
     document.getElementById('btn-enable-gyro').addEventListener('click', () => this._onEnableGyro());
     document.getElementById('btn-skip-gyro').addEventListener('click', () => this._onSkipGyro());
 
-    // 再キャリブレーション (タップで即実行)
+    // 再キャリブレーション
     const recBtn = document.getElementById('btn-recalibrate');
     if (recBtn) {
       const fire = (e) => {
@@ -72,7 +72,35 @@ const GameUI = {
       });
     }
 
-    // 名前入力(初期値)
+    // 反転チェックボックス
+    const invertChk = document.getElementById('sens-invert');
+    if (invertChk) {
+      invertChk.checked = Input.invert;
+      invertChk.addEventListener('change', () => {
+        Input.setInvert(invertChk.checked);
+      });
+    }
+
+    // ミュートボタン
+    const muteBtn = document.getElementById('btn-mute');
+    if (muteBtn) {
+      let muted = localStorage.getItem('gyrorush-muted') === '1';
+      const apply = () => {
+        if (window.SFX) SFX.setMuted(muted);
+        muteBtn.textContent = muted ? '🔇' : '🔊';
+        localStorage.setItem('gyrorush-muted', muted ? '1' : '0');
+      };
+      apply();
+      const fire = (e) => {
+        e.preventDefault();
+        muted = !muted;
+        apply();
+      };
+      muteBtn.addEventListener('touchstart', fire, { passive: false });
+      muteBtn.addEventListener('mousedown', fire);
+    }
+
+    // 名前入力
     const nameEl = document.getElementById('player-name');
     const saved = localStorage.getItem('gyrorush-name');
     if (saved) nameEl.value = saved;
@@ -88,12 +116,15 @@ const GameUI = {
       const c = Game.localCar;
       if (!c) { lines.classList.remove('show'); return; }
       const sp = Math.abs(c.speed);
-      if (sp > 45 || c.boostTimer > 0) {
+      if (sp > 45 || c.boostTimer > 0 || c.miniTurboTimer > 0) {
         lines.classList.add('show');
+        if (c.boostTimer > 0) lines.classList.add('boost');
+        else lines.classList.remove('boost');
       } else {
         lines.classList.remove('show');
+        lines.classList.remove('boost');
       }
-    }, 200);
+    }, 100);
   },
 
   showScreen(id) {
@@ -164,6 +195,7 @@ const GameUI = {
       await this._askGyro();
     }
     this.showScreen('screen-game');
+    Input.autoCalibrateOnStart();
     Game.setupRace(players, localId, mode);
     Game.startCountdown(Date.now() + 3500);
   },
@@ -229,6 +261,10 @@ const GameUI = {
 
     document.getElementById('btn-start-race').style.display = Net.isHost ? '' : 'none';
 
+    // プレイヤー数表示
+    const countEl = document.getElementById('player-count');
+    if (countEl) countEl.textContent = `${players.length} / 6`;
+
     for (const p of players) {
       const row = document.createElement('div');
       row.className = 'player-row';
@@ -265,6 +301,9 @@ const GameUI = {
       box.textContent = d.emoji;
       box.classList.add('has-item');
       box.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)`;
+      // 取得時にアイテムロール演出
+      slot.classList.add('rolling');
+      setTimeout(() => slot.classList.remove('rolling'), 600);
     }
   },
 
@@ -276,8 +315,10 @@ const GameUI = {
       el.classList.remove('show');
       void el.offsetWidth;
       el.classList.add('show');
+      if (window.SFX) SFX.play('countdown');
       if (count === 0) {
         el.textContent = 'GO!';
+        if (window.SFX) SFX.play('go');
         setTimeout(() => {
           el.classList.remove('show');
           onFinish && onFinish();
@@ -305,7 +346,27 @@ const GameUI = {
     setTimeout(() => el.remove(), duration + 50);
   },
 
+  // 墨スプラッシュ (画面全体に黒い染み)
+  flashInk() {
+    const el = document.createElement('div');
+    el.className = 'ink-splat';
+    el.innerHTML = `<svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+      <defs><filter id="ink-blur"><feGaussianBlur stdDeviation="8"/></filter></defs>
+      <g filter="url(#ink-blur)" fill="#0a0a1a">
+        <circle cx="280" cy="220" r="160"/>
+        <circle cx="500" cy="320" r="180"/>
+        <circle cx="380" cy="400" r="120"/>
+        <circle cx="600" cy="180" r="80"/>
+        <circle cx="160" cy="380" r="100"/>
+      </g>
+    </svg>`;
+    document.body.appendChild(el);
+    setTimeout(() => el.classList.add('fade'), 2200);
+    setTimeout(() => el.remove(), 3800);
+  },
+
   showResults(cars) {
+    if (window.SFX) SFX.play('finish');
     const overlay = document.getElementById('finish-overlay');
     const list = document.getElementById('finish-results');
     list.innerHTML = '';
@@ -325,7 +386,9 @@ const GameUI = {
       const name = document.createElement('div'); name.className = 'result-name'; name.textContent = c.name;
       const time = document.createElement('div'); time.className = 'result-time';
       time.textContent = c.finished ? Utils.formatTime(c.finishTime) : 'DNF';
-      row.appendChild(rank); row.appendChild(chip); row.appendChild(name); row.appendChild(time);
+      const best = document.createElement('div'); best.className = 'result-best';
+      best.textContent = isFinite(c.bestLap) ? ('BEST ' + Utils.formatTime(c.bestLap)) : '';
+      row.appendChild(rank); row.appendChild(chip); row.appendChild(name); row.appendChild(time); row.appendChild(best);
       list.appendChild(row);
     });
 

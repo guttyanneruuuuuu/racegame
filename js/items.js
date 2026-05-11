@@ -101,27 +101,59 @@ const ItemSystem = {
   _mkBanana() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(
-      new THREE.TorusGeometry(0.45, 0.2, 8, 12, Math.PI),
-      new THREE.MeshLambertMaterial({ color: 0xfdd835 })
+      new THREE.TorusGeometry(0.55, 0.24, 10, 16, Math.PI),
+      new THREE.MeshLambertMaterial({ color: 0xfdd835, emissive: 0x664400, emissiveIntensity: 0.3 })
     );
     body.rotation.x = Math.PI / 2;
     g.add(body);
+    // 黒い端っこ
+    const tipMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+    const tip1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), tipMat);
+    tip1.position.set(-0.55, 0, 0);
+    const tip2 = tip1.clone();
+    tip2.position.set(0.55, 0, 0);
+    g.add(tip1, tip2);
+    // 黄色いハロー
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(0.7, 1.0, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = -0.3;
+    g.add(halo);
     return g;
   },
   _mkRocket() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.3, 0.3, 1.5, 8),
-      new THREE.MeshLambertMaterial({ color: 0xc62828 })
+      new THREE.CylinderGeometry(0.32, 0.28, 1.6, 12),
+      new THREE.MeshLambertMaterial({ color: 0xd32f2f, emissive: 0x500000, emissiveIntensity: 0.5 })
     );
     body.rotation.x = Math.PI / 2;
     const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35, 0.6, 8),
+      new THREE.ConeGeometry(0.36, 0.7, 12),
       new THREE.MeshLambertMaterial({ color: 0xffffff })
     );
     nose.rotation.x = Math.PI / 2;
-    nose.position.z = 1.0;
-    g.add(body, nose);
+    nose.position.z = 1.05;
+    // フィン x 3
+    const finMat = new THREE.MeshLambertMaterial({ color: 0x424242 });
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.45, 0.4), finMat);
+      const ang = (i / 3) * Math.PI * 2;
+      fin.position.set(Math.cos(ang) * 0.32, Math.sin(ang) * 0.32, -0.7);
+      fin.rotation.z = ang;
+      g.add(fin);
+    }
+    // 後ろの炎
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(0.25, 0.8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.9 })
+    );
+    flame.rotation.x = Math.PI / 2;
+    flame.position.z = -1.0;
+    g.add(body, nose, flame);
+    g._flame = flame;
     return g;
   },
 
@@ -145,8 +177,14 @@ const ItemSystem = {
         p.z += p.vz * dt;
         p.mesh.position.set(p.x, 0.8 + Math.sin(performance.now() * 0.02) * 0.1, p.z);
         p.mesh.rotation.y = Math.atan2(p.vx, p.vz);
+        // 炎を脈動
+        if (p.mesh._flame) {
+          const s = 0.8 + Math.random() * 0.5;
+          p.mesh._flame.scale.set(s, 1 + Math.random() * 0.4, s);
+        }
       } else if (p.kind === 'banana') {
         p.mesh.rotation.y += dt * 2;
+        p.mesh.position.y = 0.4 + Math.sin(performance.now() * 0.004) * 0.1;
       }
 
       // 衝突判定

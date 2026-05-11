@@ -36,30 +36,27 @@ const GameUI = {
     document.getElementById('btn-enable-gyro').addEventListener('click', () => this._onEnableGyro());
     document.getElementById('btn-skip-gyro').addEventListener('click', () => this._onSkipGyro());
 
-    // 再キャリブレーション (長押しで感度スライダー表示)
+    // 再キャリブレーション (タップで即実行)
     const recBtn = document.getElementById('btn-recalibrate');
     if (recBtn) {
-      let pressTimer = null;
-      const startPress = () => {
-        pressTimer = setTimeout(() => {
-          const sc = document.getElementById('sensitivity-ctrl');
-          if (sc) sc.classList.toggle('show');
-          pressTimer = null;
-        }, 600);
+      const fire = (e) => {
+        e.preventDefault();
+        Input.recalibrate();
+        showToast('ジャイロを再設定しました', 1000);
       };
-      const endPress = (e) => {
-        if (pressTimer) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-          Input.recalibrate();
-          showToast('ジャイロを再設定しました', 1200);
-        }
+      recBtn.addEventListener('touchstart', fire, { passive: false });
+      recBtn.addEventListener('mousedown', fire);
+    }
+    // 感度トグル
+    const sensBtn = document.getElementById('btn-toggle-sens');
+    if (sensBtn) {
+      const tg = (e) => {
+        e.preventDefault();
+        const sc = document.getElementById('sensitivity-ctrl');
+        if (sc) sc.classList.toggle('show');
       };
-      recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startPress(); });
-      recBtn.addEventListener('touchend', endPress);
-      recBtn.addEventListener('mousedown', startPress);
-      recBtn.addEventListener('mouseup', endPress);
-      recBtn.addEventListener('mouseleave', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+      sensBtn.addEventListener('touchstart', tg, { passive: false });
+      sensBtn.addEventListener('mousedown', tg);
     }
 
     // 感度スライダー
@@ -262,12 +259,12 @@ const GameUI = {
     if (!item) {
       box.textContent = '?';
       box.classList.remove('has-item');
-      box.style.background = 'linear-gradient(135deg, #FFEB3B, #FBC02D)';
+      box.style.background = '';
     } else {
       const d = ItemSystem.getDisplay(item);
       box.textContent = d.emoji;
       box.classList.add('has-item');
-      box.style.background = `linear-gradient(135deg, ${d.color}, #fff)`;
+      box.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)`;
     }
   },
 

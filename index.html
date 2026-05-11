@@ -121,17 +121,20 @@
       <button class="ctrl-btn ctrl-accel" id="ctrl-accel">ACCEL ▶</button>
     </div>
 
-    <!-- ジャイロキャリブレーション (右上に移動) -->
-    <button class="btn-recalibrate" id="btn-recalibrate">⟲</button>
+    <!-- 設定ボタン群 (右上、HUDアイテムの下) -->
+    <div class="settings-stack">
+      <button class="btn-icon" id="btn-recalibrate" title="ジャイロ再設定">⟲</button>
+      <button class="btn-icon" id="btn-toggle-sens" title="感度調整">⚙</button>
+    </div>
 
-    <!-- 感度スライダー -->
+    <!-- 感度スライダー (右上、設定ボタンの下) -->
     <div class="sensitivity-ctrl" id="sensitivity-ctrl">
       <label>感度</label>
       <input type="range" id="sens-slider" min="8" max="35" step="1" value="18" />
       <span id="sens-val">18°</span>
     </div>
 
-    <!-- ステアインジケーター (上部に移動) -->
+    <!-- ステアインジケーター (下中央) -->
     <div class="steer-indicator" id="steer-indicator">
       <div class="steer-bar"><div class="steer-fill" id="steer-fill"></div></div>
     </div>

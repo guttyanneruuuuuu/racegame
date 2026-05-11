@@ -41,9 +41,9 @@ const Game = {
     this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    // 視野狭め (低めFOV)、車のすぐ後ろからの低い視点
-    this.camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.3, 900);
-    this.camera.position.set(0, 3, -7);
+    // 視野狭め (低めFOV)、車のすぐ後ろからの低い視点 - 車が画面1/3を占める
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
+    this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
     // 光源
@@ -136,6 +136,7 @@ const Game = {
       this._sendNetwork(now);
       ItemSystem.update(dt, this.cars);
       this._checkPickups(now);
+      this._checkPads(now);
       for (const c of this.cars) c.updateMesh();
     } else if (this.state === 'countdown') {
       for (const c of this.cars) c.updateMesh();
@@ -312,6 +313,27 @@ const Game = {
     return best;
   },
 
+  _checkPads(now) {
+    for (const c of this.cars) {
+      if (c.finished) continue;
+      const r = Track.checkPads(c, now);
+      if (r.boost) {
+        c.applyBoost(1.6);
+        if (c.isLocal) {
+          this._camShakeTime = 0.18;
+          this._camShakeAmp = 0.25;
+          showToast('⚡ BOOST PAD!', 700);
+        }
+      }
+      if (r.jump) {
+        c.applyJump(14);
+        if (c.isLocal) {
+          showToast('🚀 JUMP!', 700);
+        }
+      }
+    }
+  },
+
   _checkPickups(now) {
     for (const c of this.cars) {
       if (c.finished) continue;
@@ -352,41 +374,43 @@ const Game = {
   },
 
   // ===================== カメラ =====================
-  // 車の真後ろ・低い視点・狭い視野 - 緊張感ある画作り
+  // 車のすぐ後ろ・低めの視点・狭い視野 - 車が画面の1/3を占める
   _updateCamera(dt, snap = false) {
     if (!this.localCar) return;
     const c = this.localCar;
     const absSpeed = Math.abs(c.speed);
 
-    // 後方距離・高さ (速度に応じて低めに、後ろに引かない)
-    // 低速時はやや高く、高速時に低く近く
+    // 後方距離・高さ (車のすぐ後ろから、車が画面の~1/3を占める)
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
-    const back = Utils.lerp(5.6, 6.4, speedT);    // 真後ろの距離(短い)
-    const up   = Utils.lerp(2.3, 1.8, speedT);    // 高さ(低い)
-    const lookFwd = Utils.lerp(7, 14, speedT);    // 視点先
+    const back = Utils.lerp(4.2, 5.0, speedT);   // 真後ろの距離(かなり近い)
+    const up   = Utils.lerp(2.0, 1.6, speedT);   // 高さ(低い)
+    const lookFwd = Utils.lerp(6, 12, speedT);   // 視点先
 
     // バック時は前方にカメラを置く
     let backDir = 1;
     if (c.speed < -1) backDir = -1;
 
+    // 車のジャンプ中はカメラもやや上げる
+    const yOff = c.y * 0.7;
+
     const tx = c.x - Math.sin(c.angle) * back * backDir;
     const tz = c.z - Math.cos(c.angle) * back * backDir;
-    const ty = up;
+    const ty = up + yOff;
 
     if (snap) {
       this.camera.position.set(tx, ty, tz);
     } else {
       // 追従の追従度を速度に応じて(高速ほどタイト)
-      const followStrength = Utils.lerp(0.18, 0.28, speedT);
+      const followStrength = Utils.lerp(0.22, 0.32, speedT);
       this.camera.position.x = Utils.lerp(this.camera.position.x, tx, followStrength);
-      this.camera.position.y = Utils.lerp(this.camera.position.y, ty, 0.22);
+      this.camera.position.y = Utils.lerp(this.camera.position.y, ty, 0.25);
       this.camera.position.z = Utils.lerp(this.camera.position.z, tz, followStrength);
     }
 
     // 視点: 車の前方
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    const ly = 1.0;
+    const ly = 0.9 + c.y * 0.5;
 
     // カメラシェイク
     let shakeX = 0, shakeY = 0;
@@ -408,9 +432,10 @@ const Game = {
     this.camera.lookAt(lx, ly, lz);
 
     // FOV: 狭めの基本値、ブースト時に広く(スピード感)
-    const baseFov = 58;
-    const speedFovAdd = Math.min(14, absSpeed * 0.22);
-    const targetFov = c.boostTimer > 0 ? 78 : baseFov + speedFovAdd;
+    // 狭めにすることで車が大きく見える
+    const baseFov = 52;
+    const speedFovAdd = Math.min(12, absSpeed * 0.2);
+    const targetFov = c.boostTimer > 0 ? 72 : baseFov + speedFovAdd;
     this.camera.fov = Utils.lerp(this.camera.fov, targetFov, 0.1);
     this.camera.updateProjectionMatrix();
   },
@@ -526,6 +551,25 @@ const Game = {
     ctx.beginPath();
     ctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
     ctx.fill();
+
+    // ブーストパッド (オレンジ点)
+    if (Track.boostPads) {
+      ctx.fillStyle = '#FF9800';
+      for (const p of Track.boostPads) {
+        ctx.beginPath();
+        ctx.arc(toX(p.x), toZ(p.z), 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // ジャンプパッド (青点)
+    if (Track.jumpPads) {
+      ctx.fillStyle = '#42A5F5';
+      for (const p of Track.jumpPads) {
+        ctx.beginPath();
+        ctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // 車
     for (const c of this.cars) {

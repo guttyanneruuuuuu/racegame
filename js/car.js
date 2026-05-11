@@ -7,8 +7,8 @@ const CarPhysics = {
   REVERSE_ACCEL: 16,
   FRICTION: 5,              // 自然減速
   OFFTRACK_FRICTION: 24,    // コース外の減速
-  STEER_SPEED: 3.2,         // ハンドル回転速度 (rad/s) - 強めに
-  STEER_AT_SPEED: 0.45,     // 高速時の操舵減衰
+  STEER_SPEED: 2.8,         // ハンドル回転速度 (rad/s) - より自然な旋回
+  STEER_AT_SPEED: 0.35,     // 高速時の操舋減衷 - 緩和した
   LATERAL_GRIP: 9.0,
   SPIN_FRICTION: 4.0,
   WALL_BOUNCE: 0.35,        // 壁反発係数
@@ -267,12 +267,12 @@ class Car {
     // 操舵: 一定速度以上で効きが良くなる
     // 低速時も最低限ハンドル効くように
     const absSp = Math.abs(this.speed);
-    const speedFactor = Utils.clamp(0.45 + absSp / 18, 0.45, 1.0);
+    const speedFactor = Utils.clamp(0.50 + absSp / 20, 0.50, 1.0);
     const highSpeedDamp = 1 - Math.min(1, absSp / CarPhysics.MAX_SPEED) * CarPhysics.STEER_AT_SPEED;
     const turnEffect = CarPhysics.STEER_SPEED * speedFactor * highSpeedDamp;
     const dir = Math.sign(this.speed) || 1;
     this.angle += steer * turnEffect * dt * dir;
-    this.steerAngle = Utils.lerp(this.steerAngle, steer * 0.5, 0.25);
+    this.steerAngle = Utils.lerp(this.steerAngle, steer * 0.5, 0.35);
 
     // ドリフト演出量(高速で大きく切るほど)
     this.driftAmount = Utils.lerp(this.driftAmount, Math.abs(steer) * Math.min(1, absSp / 30), 0.2);

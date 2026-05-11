@@ -12,8 +12,8 @@ const Input = {
 
   // ジャイロ感度設定 (ローカルストレージ保存)
   // sensitivity: 最大角度 (deg) → ±この角度で steer ±1
-  sensitivity: 18,
-  deadzone: 1.2,    // 小さな揺らぎを無視 (deg)
+  sensitivity: 24,
+  deadzone: 2.0,    // 小さな揺らぎを無視 (deg)
 
   _keys: {},
   _touchSteer: 0,   // タッチハンドルからの入力
@@ -168,10 +168,10 @@ const Input = {
     if (Math.abs(diff) < this.deadzone) diff = 0;
     else diff -= Math.sign(diff) * this.deadzone;
 
-    // 非線形カーブ(中央付近マイルド、外側強力)
+    // 非線形カーブ(中央付近をより簡単に、外側を強力に)
     // ユーザー要望: 端末を傾けた方向と車の進む向きを一致させる(符号反転)
     const norm = Utils.clamp(diff / this.sensitivity, -1.2, 1.2);
-    const curved = Math.sign(norm) * Math.pow(Math.min(1, Math.abs(norm)), 1.35);
+    const curved = Math.sign(norm) * Math.pow(Math.min(1, Math.abs(norm)), 1.25);
     this.steer = -Utils.clamp(curved, -1, 1);
   },
 

@@ -74,6 +74,7 @@
         部屋コード: <span id="room-code-show">------</span>
         <button class="btn-mini" id="btn-copy-code">📋 コピー</button>
       </div>
+      <div class="lobby-count">参加: <span id="player-count">0 / 6</span></div>
       <div id="player-list" class="player-list"></div>
       <div class="lobby-actions">
         <button class="btn btn-primary" id="btn-start-race">🏎️ レース開始！</button>
@@ -108,6 +109,12 @@
       <div class="hud-mini" id="hud-minimap"></div>
       <div class="hud-standings" id="hud-standings"></div>
 
+      <!-- ドリフトチャージ表示 -->
+      <div class="drift-charge" id="drift-charge"></div>
+
+      <!-- 逆走警告 -->
+      <div class="wrong-way" id="wrong-way">⚠ 逆走中！</div>
+
       <!-- スピードライン (ブースト演出) -->
       <div class="speed-lines" id="speed-lines"></div>
     </div>
@@ -115,23 +122,30 @@
     <!-- 操作ボタン -->
     <div class="touch-controls">
       <button class="ctrl-btn ctrl-brake" id="ctrl-brake">◀ BRAKE</button>
+      <button class="ctrl-btn ctrl-look" id="ctrl-look" title="後ろを見る">👀</button>
+      <button class="ctrl-btn ctrl-respawn" id="ctrl-respawn" title="復帰">🔄</button>
     </div>
     <div class="touch-controls-right">
       <button class="ctrl-btn ctrl-item" id="ctrl-item">★<br>USE</button>
       <button class="ctrl-btn ctrl-accel" id="ctrl-accel">ACCEL ▶</button>
     </div>
 
-    <!-- ジャイロキャリブレーション (右上に移動) -->
-    <button class="btn-recalibrate" id="btn-recalibrate">⟲</button>
+    <!-- 設定ボタン群 (右上、HUDアイテムの下) -->
+    <div class="settings-stack">
+      <button class="btn-icon" id="btn-recalibrate" title="ジャイロ再設定">⟲</button>
+      <button class="btn-icon" id="btn-toggle-sens" title="感度調整">⚙</button>
+      <button class="btn-icon" id="btn-mute" title="ミュート">🔊</button>
+    </div>
 
-    <!-- 感度スライダー -->
+    <!-- 感度スライダー (右上、設定ボタンの下) -->
     <div class="sensitivity-ctrl" id="sensitivity-ctrl">
       <label>感度</label>
       <input type="range" id="sens-slider" min="8" max="35" step="1" value="18" />
       <span id="sens-val">18°</span>
+      <label class="invert-lbl"><input type="checkbox" id="sens-invert" /> 反転</label>
     </div>
 
-    <!-- ステアインジケーター (上部に移動) -->
+    <!-- ステアインジケーター (下中央) -->
     <div class="steer-indicator" id="steer-indicator">
       <div class="steer-bar"><div class="steer-fill" id="steer-fill"></div></div>
     </div>
@@ -169,6 +183,7 @@
   <!-- ゲームスクリプト -->
   <script src="js/utils.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/sfx.js"></script>
   <script src="js/track.js"></script>
   <script src="js/car.js"></script>
   <script src="js/items.js"></script>

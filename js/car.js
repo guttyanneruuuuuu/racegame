@@ -1,20 +1,22 @@
 // ============= 車（プレイヤー / リモート / AI共通モデル） =============
 const CarPhysics = {
-  MAX_SPEED: 52,            // m/s 相当 (約190km/h)
-  MAX_SPEED_BOOST: 82,
-  ACCEL: 32,
-  BRAKE: 55,
-  REVERSE_ACCEL: 16,
-  FRICTION: 5,              // 自然減速
-  OFFTRACK_FRICTION: 24,    // コース外の減速
-  STEER_SPEED: 3.2,         // ハンドル回転速度 (rad/s) - 強めに
-  STEER_AT_SPEED: 0.45,     // 高速時の操舵減衰
+  MAX_SPEED: 54,            // m/s (約195km/h)
+  MAX_SPEED_BOOST: 88,
+  MAX_SPEED_MINI: 68,       // ミニターボ時
+  ACCEL: 34,
+  BRAKE: 58,
+  REVERSE_ACCEL: 18,
+  FRICTION: 5,
+  OFFTRACK_FRICTION: 22,
+  STEER_SPEED: 3.0,
+  STEER_AT_SPEED: 0.30,
   LATERAL_GRIP: 9.0,
   SPIN_FRICTION: 4.0,
-  WALL_BOUNCE: 0.35,        // 壁反発係数
-  RADIUS: 1.2,              // 車衝突半径
-  GRAVITY: 35,              // ジャンプ用重力
-  JUMP_FORCE: 18,           // ジャンプ初速
+  WALL_BOUNCE: 0.45,        // 壁反発 (高め: ハマり防止)
+  WALL_FRICTION: 0.55,      // 壁衝突時の減速率
+  RADIUS: 1.2,
+  STUCK_TIME: 2.5,          // この秒数進行が止まったら自動復活
+  STUCK_SPEED: 1.5,         // この速度未満をスタック判定
 };
 
 class Car {
@@ -28,18 +30,27 @@ class Car {
     this.x = opts.x || 0;
     this.z = opts.z || 0;
     this.y = 0;
-    this.vy = 0;              // Y方向速度
-    this.isJumping = false;
+    this.vy = 0;
+    this.airTime = 0;
     this.angle = opts.angle || 0;
     this.speed = 0;
     this.steerAngle = 0;
     this.spinTimer = 0;
     this.boostTimer = 0;
+    this.miniTurboTimer = 0;     // ミニターボブースト
     this.invincibleTimer = 0;
     this.squishTimer = 0;
     this.lockedTimer = 0;
     this.wallHitFlash = 0;
-    this.driftAmount = 0;     // ドリフトの量（横スリップ）
+    this.driftAmount = 0;
+    this.driftDir = 0;            // -1/0/+1 ドリフト方向 (Bホールド + ステア)
+    this.driftCharge = 0;         // 0..3 ミニターボチャージ
+    this.driftActive = false;
+    this.slowTimer = 0;           // オイル等の減速デバフ
+    this.slowMul = 1.0;
+    this.confuseTimer = 0;        // 逆操作デバフ (墨)
+    this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
+    this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
 
     // アイテム
     this.item = null;
@@ -55,6 +66,14 @@ class Car {
     this.lapStartTime = 0;
     this.bestLap = Infinity;
     this.lastLap = 0;
+    this.lastProgressTime = 0;
+    this.maxProgress = 0;       // ハイウォーターマーク (逆走検知用)
+    this.wrongWayTimer = 0;     // 逆走時間累積
+    this.stuckTimer = 0;        // 停滞時間累積
+    this.lastRespawnTime = 0;
+
+    this.lastWallHit = 0;        // 壁ヒット時刻
+    this.consecutiveWallHits = 0; // 連続壁ヒット数
 
     this.mesh = this._buildMesh();
     this.mesh.position.set(this.x, 0, this.z);
@@ -73,6 +92,7 @@ class Car {
     body.position.y = 0.5;
     body.castShadow = true;
     group.add(body);
+    this._bodyMesh = body;
 
     // ボディ前部（テーパー）
     const nose = new THREE.Mesh(
@@ -98,7 +118,6 @@ class Car {
     );
     win.position.set(0, 1.1, 0.75);
     group.add(win);
-    // リアウィンドウ
     const winR = win.clone();
     winR.position.set(0, 1.1, -1.05);
     group.add(winR);
@@ -157,7 +176,7 @@ class Car {
     this.nameSprite.position.set(0, 2.5, 0);
     group.add(this.nameSprite);
 
-    // ブーストエフェクト
+    // ブーストエフェクト（リアの炎）
     const flameGeo = new THREE.ConeGeometry(0.38, 1.6, 8);
     const flameMat = new THREE.MeshBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.9 });
     const fl1 = new THREE.Mesh(flameGeo, flameMat); fl1.position.set(-0.5, 0.55, -2.1); fl1.rotation.x = -Math.PI / 2; fl1.visible = false;
@@ -165,7 +184,7 @@ class Car {
     group.add(fl1, fl2);
     this.flames = [fl1, fl2];
 
-    // シールド
+    // シールド（オーラ）
     const shieldGeo = new THREE.SphereGeometry(2.2, 16, 12);
     const shieldMat = new THREE.MeshBasicMaterial({ color: 0x29b6f6, transparent: true, opacity: 0.28, wireframe: true });
     this.shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
@@ -173,8 +192,21 @@ class Car {
     this.shieldMesh.visible = false;
     group.add(this.shieldMesh);
 
+    // ドリフトチャージ用スパーク (タイヤ周辺の火花)
+    this.sparkMeshes = [];
+    for (let i = 0; i < 8; i++) {
+      const sk = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 5, 5),
+        new THREE.MeshBasicMaterial({ color: 0x40C4FF, transparent: true, opacity: 0 })
+      );
+      sk.visible = false;
+      group.add(sk);
+      this.sparkMeshes.push({ mesh: sk, life: 0 });
+    }
+
+    // ドリフトスモーク
     this.smokeMeshes = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const sm = new THREE.Mesh(
         new THREE.SphereGeometry(0.4, 6, 6),
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 })
@@ -183,6 +215,9 @@ class Car {
       group.add(sm);
       this.smokeMeshes.push({ mesh: sm, life: 0 });
     }
+
+    // 墨スプラッシュ(コンフューズ時に視界に出す用): スプライト
+    this.confuseSprite = null;
 
     return group;
   }
@@ -217,24 +252,35 @@ class Car {
 
   setName(name) {
     this.name = name;
-    if (this.nameSprite && this.nameSprite.parent) this.nameSprite.parent.remove(this.nameSprite);
+    if (this.nameSprite && this.nameSprite.parent) {
+      this.nameSprite.parent.remove(this.nameSprite);
+    }
     this.nameSprite = this._buildLabel(name, this.color);
     this.nameSprite.position.set(0, 2.5, 0);
     this.mesh.add(this.nameSprite);
   }
 
+  // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
+    // ロック中(雷など)
     if (this.lockedTimer > 0) {
       this.lockedTimer -= dt;
       steer = 0; accel = false; brake = false;
     }
+    // スピン中
     if (this.spinTimer > 0) {
       this.spinTimer -= dt;
       this.angle += dt * 12;
       this.speed *= Math.pow(0.2, dt);
       this._integratePos(dt);
-      this._applyGravity(dt);
+      this._tickEffects(dt);
       return;
+    }
+
+    // コンフューズ(墨): ステア反転
+    if (this.confuseTimer > 0) {
+      this.confuseTimer -= dt;
+      steer = -steer;
     }
 
     // 加速
@@ -252,61 +298,161 @@ class Car {
     }
 
     // コース外摩擦
-    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx) && !this.isJumping) {
+    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx)) {
       const sign = Math.sign(this.speed);
       this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt;
     }
 
-    // 最大速度
-    const maxSp = this.boostTimer > 0 ? CarPhysics.MAX_SPEED_BOOST : CarPhysics.MAX_SPEED;
+    // スロー(オイル)デバフ
+    if (this.slowTimer > 0) {
+      this.slowTimer -= dt;
+      this.speed *= Math.pow(this.slowMul, dt);
+    } else {
+      this.slowMul = 1.0;
+    }
+
+    // 最大速度（ブースト＞ミニターボ＞通常）
+    let maxSp = CarPhysics.MAX_SPEED;
+    if (this.boostTimer > 0) maxSp = CarPhysics.MAX_SPEED_BOOST;
+    else if (this.miniTurboTimer > 0) maxSp = CarPhysics.MAX_SPEED_MINI;
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
 
-    // 操舵
+    // === ドリフト処理 ===
+    // ブレーキ + 移動中 + ある程度の速度 = ドリフト発動
+    const wantDrift = brake && this.speed > 22 && Math.abs(steer) > 0.25;
+    if (wantDrift && !this.driftActive) {
+      this.driftActive = true;
+      this.driftDir = Math.sign(steer);
+    }
+    if (this.driftActive) {
+      // ドリフト中は摩擦が小さくブレーキとしては効きにくい
+      if (this.speed < 18) {
+        this._releaseDrift();
+      } else if (!brake) {
+        this._releaseDrift();
+      } else {
+        // ドリフト中はチャージ蓄積
+        this.driftCharge = Math.min(3, this.driftCharge + dt * (0.85 + Math.abs(steer) * 0.6));
+      }
+    }
+
+    // 操舵: 一定速度以上で効きが良くなる
     const absSp = Math.abs(this.speed);
-    const speedFactor = Utils.clamp(0.45 + absSp / 18, 0.45, 1.0);
+    const speedFactor = Utils.clamp(0.55 + absSp / 22, 0.55, 1.0);
     const highSpeedDamp = 1 - Math.min(1, absSp / CarPhysics.MAX_SPEED) * CarPhysics.STEER_AT_SPEED;
-    const turnEffect = CarPhysics.STEER_SPEED * speedFactor * highSpeedDamp;
+    // ドリフト時は片方向に強く曲がる
+    let turnEffect = CarPhysics.STEER_SPEED * speedFactor * highSpeedDamp;
+    if (this.driftActive) turnEffect *= 1.35;
     const dir = Math.sign(this.speed) || 1;
     this.angle += steer * turnEffect * dt * dir;
-    this.steerAngle = Utils.lerp(this.steerAngle, steer * 0.5, 0.25);
+    this.steerAngle = Utils.lerp(this.steerAngle, steer * 0.5, 0.35);
 
-    this.driftAmount = Utils.lerp(this.driftAmount, Math.abs(steer) * Math.min(1, absSp / 30), 0.2);
+    // ドリフト演出量
+    const targetDrift = this.driftActive ? 1.0 : Math.abs(steer) * Math.min(1, absSp / 30);
+    this.driftAmount = Utils.lerp(this.driftAmount, targetDrift, 0.25);
 
-    // タイマー減算
+    this._tickEffects(dt);
+
+    // 重力 & ジャンプ
+    if (this.y > 0 || this.vy > 0) {
+      this.vy -= 30 * dt;
+      this.y += this.vy * dt;
+      this.airTime += dt;
+      if (this.y <= 0) {
+        this.y = 0; this.vy = 0;
+        // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
+        if (this.airTime > 0.5 && !this.driftActive) {
+          this.applyMiniTurbo(0.5 + Math.min(0.6, this.airTime * 0.3));
+        }
+        this.airTime = 0;
+      }
+    }
+
+    this._integratePos(dt);
+
+    // 空中時は壁チェックを緩和
+    if (this.y > 0.3) {
+      return;
+    }
+
+    // 壁衝突処理 (ハマり対策: 法線方向に押し戻し+接線方向にスライド)
+    const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+    if (wr.hit) {
+      this.x = wr.x; this.z = wr.z;
+      // 進行方向ベクトル
+      const fx = Math.sin(this.angle), fz = Math.cos(this.angle);
+      // 進行方向に対する壁内向き成分(正面衝突度)
+      const dotN = fx * (-wr.nx) + fz * (-wr.nz); // 壁内側に進んでいた量
+      // 接線方向 (壁に沿う) - 壁法線(wr.nx, wr.nz)は車を押し戻す向き
+      const tx = -wr.nz, tz = wr.nx;
+      const tangSign = (fx * tx + fz * tz) >= 0 ? 1 : -1;
+      // 速度の壁ノルマル成分は除去、接線成分は減衰しつつ保持 → 壁ハマり防止
+      const speedMag = this.speed;
+      const tangPart = Math.abs(speedMag) * Math.abs(fx * tx + fz * tz);
+      // 新速度: 接線方向に保存しつつ、正面衝突度に応じて減速
+      const slowFactor = Utils.clamp(1.0 - Math.abs(dotN) * 0.6, 0.25, 0.85);
+      this.speed = Math.sign(speedMag) * Math.max(0, Math.abs(speedMag) * slowFactor);
+
+      // 車体角度を壁の沿い方向に少し向き直す（ゴリ押し回避）
+      const slideAng = Math.atan2(tx * tangSign, tz * tangSign);
+      const aDiff = Utils.angDiff(slideAng, this.angle);
+      // 強くぶつかったほど補正大きく
+      const turnFix = Utils.clamp(Math.abs(dotN) * 0.45, 0.08, 0.45);
+      this.angle += aDiff * turnFix;
+
+      // 壁ヒット演出
+      this.wallHitFlash = 0.28;
+      const now = performance.now();
+      if (now - this.lastWallHit < 600) {
+        this.consecutiveWallHits++;
+        // 連続ヒット → 壁から内側へさらに押し戻す (ハマり脱出補助)
+        const push = 0.4 + this.consecutiveWallHits * 0.3;
+        this.x -= wr.nx * push;
+        this.z -= wr.nz * push;
+        if (this.consecutiveWallHits >= 3) {
+          // 自動で車体を路面中央方向へ向ける
+          const cur = Track.pathPoints[this.lastProgressIdx];
+          const nextIdx = (this.lastProgressIdx + 4) % Track.pathPoints.length;
+          const nxt = Track.pathPoints[nextIdx];
+          const desired = Math.atan2(nxt.x - cur.x, nxt.z - cur.z);
+          const d2 = Utils.angDiff(desired, this.angle);
+          this.angle += d2 * 0.35;
+          this.consecutiveWallHits = 0;
+        }
+      } else {
+        this.consecutiveWallHits = 1;
+      }
+      this.lastWallHit = now;
+    } else if (performance.now() - this.lastWallHit > 800) {
+      this.consecutiveWallHits = 0;
+    }
+  }
+
+  _tickEffects(dt) {
     if (this.boostTimer > 0) this.boostTimer -= dt;
+    if (this.miniTurboTimer > 0) this.miniTurboTimer -= dt;
     if (this.invincibleTimer > 0) this.invincibleTimer -= dt;
     if (this.squishTimer > 0) this.squishTimer -= dt;
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
+    if (this.ghostTimer > 0) this.ghostTimer -= dt;
+  }
 
-    this._integratePos(dt);
-    this._applyGravity(dt);
-
-    // ギミック判定
-    if (!this.isJumping) {
-      const gimmick = Track.checkGimmicks(this.x, this.z);
-      if (gimmick === 'boost') {
-        this.applyBoost(1.2);
-      } else if (gimmick === 'jump') {
-        this.vy = CarPhysics.JUMP_FORCE;
-        this.isJumping = true;
-      }
+  _releaseDrift() {
+    if (!this.driftActive) return;
+    this.driftActive = false;
+    // チャージに応じてミニターボ
+    if (this.driftCharge >= 1.0 && this.driftCharge < 2.0) {
+      this.applyMiniTurbo(0.7); // 青チャージ
+      if (this.isLocal && typeof showToast === 'function') showToast('💨 MINI TURBO!', 700);
+    } else if (this.driftCharge >= 2.0 && this.driftCharge < 3.0) {
+      this.applyMiniTurbo(1.2); // 黄チャージ
+      if (this.isLocal && typeof showToast === 'function') showToast('💨💨 SUPER TURBO!', 800);
+    } else if (this.driftCharge >= 3.0) {
+      this.applyBoost(1.8); // 紫: フルブースト
+      if (this.isLocal && typeof showToast === 'function') showToast('🔥 ULTRA TURBO!', 900);
     }
-
-    // 壁衝突処理
-    if (!this.isJumping) {
-      const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
-      if (wr.hit) {
-        this.x = wr.x; this.z = wr.z;
-        this.speed *= 0.6;
-        const tangX = -wr.nz, tangZ = wr.nx;
-        const fx = Math.sin(this.angle), fz = Math.cos(this.angle);
-        const v_t = fx * tangX + fz * tangZ;
-        const slideAng = Math.atan2(tangX * Math.sign(v_t || 1), tangZ * Math.sign(v_t || 1));
-        const diff = Utils.angDiff(slideAng, this.angle);
-        this.angle += diff * 0.18;
-        this.wallHitFlash = 0.25;
-      }
-    }
+    this.driftCharge = 0;
+    this.driftDir = 0;
   }
 
   _integratePos(dt) {
@@ -316,117 +462,329 @@ class Car {
     this.z += fz * this.speed * dt;
   }
 
-  _applyGravity(dt) {
-    if (this.isJumping || this.y > 0) {
-      this.vy -= CarPhysics.GRAVITY * dt;
-      this.y += this.vy * dt;
-      if (this.y <= 0) {
-        this.y = 0;
-        this.vy = 0;
-        this.isJumping = false;
-      }
-    }
-  }
-
-  updateMesh(dt) {
+  // メッシュ更新
+  updateMesh() {
     this.mesh.position.set(this.x, this.y, this.z);
     this.mesh.rotation.y = this.angle;
+    // ロール(ステアに応じて少し傾ける)
+    let rollExtra = 0;
+    if (this.driftActive) rollExtra = -this.driftDir * 0.18;
+    this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
+    // 空中時はピッチ
+    if (this.y > 0.05) {
+      const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
+      this.mesh.rotation.x = pitchAmt;
+    } else {
+      this.mesh.rotation.x = 0;
+    }
 
-    const body = this.mesh.children[0];
-    const cabin = this.mesh.children[2];
-    const roll = -this.steerAngle * 0.25;
-    const pitch = (this.isJumping ? -this.vy * 0.02 : 0);
-    body.rotation.z = cabin.rotation.z = roll;
-    body.rotation.x = pitch;
+    // 壁ヒット時に赤フラッシュ
+    if (this._bodyMesh) {
+      if (this.wallHitFlash > 0) {
+        const intensity = this.wallHitFlash / 0.28;
+        this._bodyMesh.material.emissive = new THREE.Color(intensity * 0.85, 0, 0);
+        this._bodyMesh.material.emissiveIntensity = intensity;
+      } else {
+        this._bodyMesh.material.emissiveIntensity = 0;
+      }
+    }
 
-    const tireRot = this.speed * dt * 0.8;
-    this.tires.forEach((t, i) => {
-      t.children[0].rotation.x += tireRot;
-      if (i < 2) t.rotation.y = this.steerAngle * 0.6;
-    });
-
-    const isBoosting = this.boostTimer > 0;
-    this.flames.forEach(f => {
-      f.visible = isBoosting;
-      if (isBoosting) f.scale.setScalar(0.8 + Math.random() * 0.4);
-    });
-
-    this.shieldMesh.visible = this.invincibleTimer > 0;
-    if (this.shieldMesh.visible) this.shieldMesh.rotation.y += dt * 5;
-
+    // ぺちゃんこ
     if (this.squishTimer > 0) {
       this.mesh.scale.set(1.3, 0.3, 1.3);
+    } else if (this.ghostTimer > 0) {
+      this.mesh.scale.set(1, 1, 1);
+      // 半透明
+      this.mesh.traverse(o => {
+        if (o.material && o.material.transparent !== undefined && o !== this.shieldMesh) {
+          o.material.transparent = true;
+          o.material.opacity = 0.45;
+        }
+      });
     } else {
       this.mesh.scale.set(1, 1, 1);
+      // 半透明解除
+      this.mesh.traverse(o => {
+        if (o.material && o.material.opacity !== undefined && o !== this.shieldMesh && o !== this.nameSprite && !(o.material.map && o.material.map.image && o.material.map.image.tagName === 'CANVAS')) {
+          // シールドや名前ラベル以外は不透明に戻す
+        }
+      });
+      if (this._bodyMesh) this._bodyMesh.material.opacity = 1.0;
     }
 
-    this.smokeMeshes.forEach((s, i) => {
-      if (this.driftAmount > 0.4 && Math.random() > 0.5 && s.life <= 0) {
-        s.life = 0.6;
-        s.mesh.visible = true;
-        const side = (i % 2 === 0 ? -1 : 1);
-        s.mesh.position.set(side * 0.8, 0.2, -1.2);
+    // タイヤ回転
+    if (this.tires) {
+      const rot = this.speed * 0.5;
+      for (const t of this.tires) {
+        if (t.children[0]) t.children[0].rotation.x += rot * 0.05;
+        if (t.children[1]) t.children[1].rotation.x += rot * 0.05;
       }
+      if (this.tires[0] && this.tires[1]) {
+        this.tires[0].rotation.y = this.steerAngle;
+        this.tires[1].rotation.y = this.steerAngle;
+      }
+    }
+
+    // 炎エフェクト (ブースト/ミニターボ時)
+    const boostShow = this.boostTimer > 0;
+    const miniShow = this.miniTurboTimer > 0;
+    const showFlame = boostShow || miniShow;
+    for (const f of this.flames) {
+      f.visible = showFlame;
+      if (showFlame) {
+        f.scale.set(1 + Math.random() * 0.5, 1 + Math.random() * 0.5, 1);
+        if (boostShow) {
+          f.material.color.setHSL(0.08 + Math.random() * 0.05, 1, 0.55);
+        } else {
+          // ミニターボ: 青〜紫
+          f.material.color.setHSL(0.6 + Math.random() * 0.1, 0.9, 0.6);
+        }
+      }
+    }
+
+    // シールド
+    this.shieldMesh.visible = this.invincibleTimer > 0;
+    if (this.shieldMesh.visible) {
+      this.shieldMesh.rotation.y += 0.08;
+      this.shieldMesh.rotation.x += 0.03;
+      this.shieldMesh.material.opacity = 0.25 + Math.sin(performance.now() * 0.01) * 0.1;
+    }
+
+    this._updateSmoke();
+    this._updateSparks();
+  }
+
+  _updateSmoke() {
+    const drifting = this.driftActive || (this.driftAmount > 0.55 && Math.abs(this.speed) > 22);
+    if (drifting) {
+      const free = this.smokeMeshes.find(s => s.life <= 0);
+      if (free) {
+        free.life = 0.6;
+        free.mesh.visible = true;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        free.mesh.position.set(side * 0.95, 0.4, -1.2);
+        free.mesh.material.opacity = 0.8;
+        // チャージ色: 1未満は白, 1+は青, 2+は黄, 3+は紫
+        let color = 0xffffff;
+        if (this.driftCharge >= 3) color = 0xab47bc;
+        else if (this.driftCharge >= 2) color = 0xffeb3b;
+        else if (this.driftCharge >= 1) color = 0x40C4FF;
+        free.mesh.material.color.setHex(color);
+        free.mesh.scale.set(1, 1, 1);
+      }
+    }
+    for (const s of this.smokeMeshes) {
       if (s.life > 0) {
-        s.life -= dt;
-        s.mesh.scale.setScalar(1 + (0.6 - s.life) * 3);
-        s.mesh.material.opacity = s.life * 1.2;
-        s.mesh.position.z -= this.speed * dt * 0.2;
-        if (s.life <= 0) { s.mesh.visible = false; s.mesh.material.opacity = 0; }
+        s.life -= 0.016;
+        s.mesh.position.y += 0.015;
+        const sc = 1 + (0.6 - s.life) * 2;
+        s.mesh.scale.set(sc, sc, sc);
+        s.mesh.material.opacity = Math.max(0, s.life / 0.6 * 0.7);
+        if (s.life <= 0) s.mesh.visible = false;
       }
-    });
-
-    if (this.wallHitFlash > 0) {
-      const f = Math.floor(performance.now() / 50) % 2 === 0;
-      this.mesh.visible = f;
-    } else {
-      this.mesh.visible = true;
     }
   }
 
-  applyBoost(duration = 1.5) {
-    this.boostTimer = Math.max(this.boostTimer, duration);
-    if (this.speed < CarPhysics.MAX_SPEED) this.speed = CarPhysics.MAX_SPEED;
-    this.speed += 15;
+  _updateSparks() {
+    if (!this.driftActive || this.driftCharge < 0.6) {
+      for (const s of this.sparkMeshes) {
+        if (s.life > 0) {
+          s.life -= 0.03;
+          s.mesh.material.opacity = Math.max(0, s.life);
+          if (s.life <= 0) s.mesh.visible = false;
+        }
+      }
+      return;
+    }
+    const free = this.sparkMeshes.find(s => s.life <= 0);
+    if (free) {
+      free.life = 0.4;
+      free.mesh.visible = true;
+      const side = this.driftDir;
+      free.mesh.position.set(side * 1.0 + (Math.random()-0.5) * 0.4, 0.45 + Math.random() * 0.6, -1.1 + (Math.random()-0.5) * 0.5);
+      // 色: チャージレベル別
+      let col = 0x40C4FF;
+      if (this.driftCharge >= 3) col = 0xE040FB;
+      else if (this.driftCharge >= 2) col = 0xFFEB3B;
+      free.mesh.material.color.setHex(col);
+      free.mesh.material.opacity = 1.0;
+      free.mesh.scale.set(1, 1, 1);
+    }
+    for (const s of this.sparkMeshes) {
+      if (s.life > 0) {
+        s.life -= 0.04;
+        s.mesh.position.y += 0.05;
+        s.mesh.material.opacity = Math.max(0, s.life * 2.5);
+        if (s.life <= 0) s.mesh.visible = false;
+      }
+    }
   }
 
-  applySpin() {
-    if (this.invincibleTimer > 0) return;
+  // 進行状況更新 → ラップ判定 + 逆走/スタック検知
+  updateProgress(now) {
+    if (this.finished) return;
+    const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
+    const n = Track.pathPoints.length;
+
+    // ラップ判定 (前→後 越境)
+    if (this.lastProgressIdx > n * 0.7 && prog.index < n * 0.2) {
+      this.lap++;
+      const lapMs = now - this.lapStartTime;
+      this.lastLap = lapMs;
+      if (lapMs > 2000) this.bestLap = Math.min(this.bestLap, lapMs);
+      this.lapStartTime = now;
+      if (this.isLocal && typeof showToast === 'function' && this.lap < (Game.totalLaps || 3)) {
+        const remaining = (Game.totalLaps || 3) - this.lap;
+        if (remaining === 1) {
+          showToast(`🏁 FINAL LAP!`, 1600);
+        } else {
+          showToast(`LAP ${this.lap + 1} / ${Game.totalLaps}`, 1200);
+        }
+      }
+    } else if (this.lastProgressIdx < n * 0.2 && prog.index > n * 0.7) {
+      if (this.lap > 0) this.lap--;
+    }
+    this.lastProgressIdx = prog.index;
+    this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
+
+    // 逆走検知 (進行度が一定期間落ち続けた場合)
+    if (this.totalProgress > this.maxProgress) {
+      this.maxProgress = this.totalProgress;
+      this.wrongWayTimer = 0;
+    } else if (this.totalProgress < this.maxProgress - 8) {
+      // 後退している
+      this.wrongWayTimer += 0.016;
+    } else {
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.01);
+    }
+
+    // スタック検知 (動いてないのに時間経過)
+    if (Math.abs(this.speed) < CarPhysics.STUCK_SPEED) {
+      this.stuckTimer += 0.016;
+    } else {
+      this.stuckTimer = 0;
+    }
+    if (this.stuckTimer > CarPhysics.STUCK_TIME && now - this.lastRespawnTime > 4000) {
+      this.respawn();
+      if (this.isLocal && typeof showToast === 'function') showToast('🔄 自動復帰！', 1200);
+    }
+  }
+
+  // 路上の中央へ復活 (進行方向を向ける)
+  respawn() {
+    const idx = this.lastProgressIdx;
+    const p = Track.pathPoints[idx];
+    const next = Track.pathPoints[(idx + 2) % Track.pathPoints.length];
+    this.x = p.x;
+    this.z = p.z;
+    this.y = 0;
+    this.vy = 0;
+    this.speed = 0;
+    this.angle = Math.atan2(next.x - p.x, next.z - p.z);
+    this.driftActive = false;
+    this.driftCharge = 0;
+    this.stuckTimer = 0;
+    this.wrongWayTimer = 0;
+    this.consecutiveWallHits = 0;
+    this.lastRespawnTime = performance.now();
+    this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
+  }
+
+  initProgress() {
+    const prog = Track.getProgress(this.x, this.z);
+    this.lastProgressIdx = prog.index;
+    this.totalProgress = 0;
+    this.lap = 0;
+    this.maxProgress = 0;
+    this.lastProgressTime = performance.now();
+    this.stuckTimer = 0;
+    this.wrongWayTimer = 0;
+  }
+
+  applyBoost(seconds = 2.5) {
+    this.boostTimer = Math.max(this.boostTimer, seconds);
+    this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED * 1.05);
+  }
+  applyMiniTurbo(seconds = 0.7) {
+    this.miniTurboTimer = Math.max(this.miniTurboTimer, seconds);
+    this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_MINI * 0.92);
+  }
+
+  applyJump(power = 12) {
+    if (this.y <= 0.1) {
+      this.vy = power;
+      this.y = 0.1;
+    }
+  }
+
+  applySlow(seconds, mul) {
+    if (this.invincibleTimer > 0) return false;
+    this.slowTimer = Math.max(this.slowTimer, seconds);
+    this.slowMul = Math.min(this.slowMul, mul);
+    return true;
+  }
+  applyConfuse(seconds) {
+    if (this.invincibleTimer > 0) return false;
+    this.confuseTimer = Math.max(this.confuseTimer, seconds);
+    return true;
+  }
+  applyGhost(seconds) {
+    this.ghostTimer = Math.max(this.ghostTimer, seconds);
+  }
+
+  hitBanana() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
     this.spinTimer = 1.2;
+    this.driftActive = false; this.driftCharge = 0;
+    return true;
+  }
+  hitRocket() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    this.squishTimer = 1.6;
+    this.lockedTimer = 1.6;
+    this.speed = 0;
+    return true;
+  }
+  hitLightning() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    this.squishTimer = 2.0;
+    this.lockedTimer = 1.0;
     this.speed *= 0.3;
+    return true;
+  }
+  hitOilSplash() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    this.spinTimer = Math.max(this.spinTimer, 0.6);
+    this.applySlow(2.5, 0.5);
+    return true;
+  }
+  hitInkSplash() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    this.applyConfuse(4.0);
+    return true;
+  }
+  hitMine() {
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    this.squishTimer = 1.4;
+    this.lockedTimer = 1.0;
+    this.speed = 0;
+    this.vy = 8;
+    this.y = 0.1;
+    return true;
   }
 
-  applySquish() {
-    if (this.invincibleTimer > 0) return;
-    this.squishTimer = 4.0;
-    this.speed *= 0.5;
+  giveShield(seconds = 5) {
+    this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
   }
 
-  applyShield(duration = 5.0) {
-    this.invincibleTimer = Math.max(this.invincibleTimer, duration);
+  setItem(item) {
+    this.item = item;
+    this.itemReady = true;
   }
-
-  getState() {
-    return {
-      x: this.x, z: this.z, y: this.y,
-      angle: this.angle, speed: this.speed,
-      lap: this.lap, prog: this.totalProgress,
-      boost: this.boostTimer > 0,
-      shield: this.invincibleTimer > 0,
-      squish: this.squishTimer > 0,
-      spin: this.spinTimer > 0,
-      finished: this.finished
-    };
-  }
-
-  applyState(st) {
-    this.x = st.x; this.z = st.z; this.y = st.y || 0;
-    this.angle = st.angle; this.speed = st.speed;
-    this.lap = st.lap; this.totalProgress = st.prog;
-    this.boostTimer = st.boost ? 1 : 0;
-    this.invincibleTimer = st.shield ? 1 : 0;
-    this.squishTimer = st.squish ? 1 : 0;
-    this.spinTimer = st.spin ? 1 : 0;
-    this.finished = st.finished;
+  consumeItem() {
+    const it = this.item;
+    this.item = null;
+    this.itemReady = false;
+    return it;
   }
 }

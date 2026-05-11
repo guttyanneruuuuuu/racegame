@@ -71,14 +71,52 @@ const AIDriver = {
     if (car.item && st.itemCooldown <= 0) {
       const itm = car.item;
       let use = false;
-      if (itm === 'boost' || itm === 'shield') use = true;
-      else if (itm === 'banana') use = car.totalProgress < this._leaderProgress(allCars) || Math.random() < 0.4;
-      else if (itm === 'rocket' || itm === 'lightning') use = true;
+      // 攻撃系/ブースト系は即使用
+      if (itm === 'boost' || itm === 'tripleBoost' || itm === 'shield' ||
+          itm === 'rocket' || itm === 'tripleRocket' || itm === 'lightning' ||
+          itm === 'ghost' || itm === 'magnet') {
+        use = true;
+      }
+      // 設置系: 後ろから迫られている / 自分より遅い場合に撒く
+      else if (itm === 'banana' || itm === 'oil' || itm === 'mine') {
+        const threat = this._threatBehind(car, allCars);
+        use = threat || car.totalProgress < this._leaderProgress(allCars) || Math.random() < 0.35;
+      }
+      // インクは前にライバルがいる時に使う
+      else if (itm === 'ink') {
+        use = this._hasRivalAhead(car, allCars) || Math.random() < 0.4;
+      }
       if (use) {
         Game.useItem(car, allCars);
-        st.itemCooldown = 3 + Math.random() * 3;
+        st.itemCooldown = 2.5 + Math.random() * 2.5;
       }
     }
+  },
+
+  // 後方近距離に追跡してくる車がいるか?
+  _threatBehind(car, allCars) {
+    const fx = Math.sin(car.angle), fz = Math.cos(car.angle);
+    for (const o of allCars) {
+      if (o.id === car.id) continue;
+      const dx = o.x - car.x, dz = o.z - car.z;
+      const fwd = dx * fx + dz * fz; // 負=後方
+      const d2 = dx*dx + dz*dz;
+      if (fwd < -1 && d2 < 14*14) return true;
+    }
+    return false;
+  },
+
+  // 前方近距離にライバルがいるか?
+  _hasRivalAhead(car, allCars) {
+    const fx = Math.sin(car.angle), fz = Math.cos(car.angle);
+    for (const o of allCars) {
+      if (o.id === car.id) continue;
+      const dx = o.x - car.x, dz = o.z - car.z;
+      const fwd = dx * fx + dz * fz;
+      const d2 = dx*dx + dz*dz;
+      if (fwd > 1 && d2 < 22*22) return true;
+    }
+    return false;
   },
 
   _leaderProgress(allCars) {

@@ -269,48 +269,56 @@ input { font-family: inherit; outline: none; }
 .hud-top {
   position: absolute;
   top: 8px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 10px;
-  background: rgba(255,255,255,0.94);
-  padding: 8px 16px;
-  border-radius: 14px;
+  display: flex; gap: 12px;
+  background: rgba(25, 35, 55, 0.78);
+  padding: 8px 18px;
+  border-radius: 16px;
   font-weight: 900;
   font-size: 14px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  color: #1f2733;
-  border: 2px solid #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.15);
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .hud-top > div { white-space: nowrap; }
-.hud-lap span, .hud-pos span { color: #C62828; }
-.hud-time { font-family: 'Courier New', monospace; color: #1565C0; }
-.hud-best { font-family: 'Courier New', monospace; color: #2E7D32; font-size: 12px; }
+.hud-lap span, .hud-pos span { color: #FFD54F; }
+.hud-time { font-family: 'Courier New', monospace; color: #80D8FF; }
+.hud-best { font-family: 'Courier New', monospace; color: #A5D6A7; font-size: 12px; }
 
 .hud-speed {
   position: absolute;
-  right: 14px; bottom: 14px;
-  background: rgba(255,255,255,0.94);
+  right: 14px; bottom: 100px;
+  background: rgba(25, 35, 55, 0.78);
   padding: 8px 18px;
-  border-radius: 14px;
+  border-radius: 16px;
   text-align: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  border: 2px solid #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #fff;
 }
-.speed-val { font-size: 34px; font-weight: 900; color: #C62828; line-height: 1; font-family: 'Courier New', monospace; text-shadow: 0 2px 0 rgba(0,0,0,0.06); }
-.speed-unit { font-size: 11px; color: #555; font-weight: 800; }
+.speed-val { font-size: 36px; font-weight: 900; color: #FFEB3B; line-height: 1; font-family: 'Courier New', monospace; text-shadow: 0 2px 0 rgba(0,0,0,0.4), 0 0 12px rgba(255,235,59,0.5); }
+.speed-unit { font-size: 11px; color: #B0BEC5; font-weight: 800; letter-spacing: 1px; }
 
 .hud-item {
   position: absolute;
-  top: 8px; right: 14px;
+  top: 12px; right: 14px;
 }
 .item-box {
-  width: 60px; height: 60px;
-  background: linear-gradient(135deg, #FFEB3B, #FBC02D);
+  width: 62px; height: 62px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255,255,255,0.55), transparent 55%),
+    conic-gradient(from 0deg, #FF5252, #FFD740, #69F0AE, #40C4FF, #E040FB, #FFAB40, #FF5252);
   border: 3px solid #fff;
-  border-radius: 14px;
+  border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
   font-size: 30px; font-weight: 900;
   color: #fff;
-  text-shadow: 0 2px 0 rgba(0,0,0,0.35);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.45), 0 0 8px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 -6px 0 rgba(0,0,0,0.2);
+  position: relative;
 }
 .item-box.has-item {
   animation: itemPulse 0.55s infinite alternate;
@@ -323,27 +331,32 @@ input { font-family: inherit; outline: none; }
 .hud-mini {
   position: absolute;
   top: 8px; left: 14px;
-  width: 110px; height: 110px;
-  background: rgba(255,255,255,0.85);
-  border: 2px solid #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  width: 120px; height: 120px;
+  background: rgba(25, 35, 55, 0.7);
+  border: 2px solid rgba(255,255,255,0.9);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.15);
   overflow: hidden;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .hud-standings {
   position: absolute;
-  top: 126px; left: 14px;
-  width: 160px;
-  background: rgba(255,255,255,0.92);
+  top: 138px; left: 14px;
+  width: 168px;
+  background: rgba(25, 35, 55, 0.75);
   border-radius: 12px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-size: 12px;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-  color: #1f2733;
-  border: 2px solid #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12);
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
+.standings-row.you { color: #FFEB3B !important; background: rgba(255,87,34,0.35) !important; }
 .standings-row {
   display: flex; align-items: center; gap: 5px;
   padding: 2px 0;
@@ -392,13 +405,13 @@ input { font-family: inherit; outline: none; }
 }
 .ctrl-btn {
   padding: 0;
-  width: 100px; height: 80px;
-  border-radius: 20px;
-  font-size: 14px;
+  width: 92px; height: 76px;
+  border-radius: 16px;
+  font-size: 13px;
   font-weight: 900;
   color: white;
   letter-spacing: 1px;
-  box-shadow: 0 6px 0 rgba(0,0,0,0.35), 0 10px 20px rgba(0,0,0,0.3);
+  box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 8px 16px rgba(0,0,0,0.3);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -409,35 +422,42 @@ input { font-family: inherit; outline: none; }
   transform: translateY(3px);
   box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 4px 8px rgba(0,0,0,0.3);
 }
-.ctrl-accel { 
-  background: linear-gradient(180deg, #66BB6A, #2E7D32); 
-  width: 130px; height: 100px;
-  font-size: 18px;
-}
+.ctrl-accel { background: linear-gradient(180deg, #66BB6A, #2E7D32); }
 .ctrl-brake { background: linear-gradient(180deg, #EF5350, #C62828); }
 .ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 76px; height: 76px; }
-.btn-recalibrate {
+
+/* 設定ボタン (右上、アイテムの下に縦並び) */
+.settings-stack {
   position: absolute;
-  top: 80px; right: 14px;
-  z-index: 10;
-  background: rgba(255,255,255,0.85);
-  border: 2px solid #fff;
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  font-weight: 800;
-  font-size: 20px;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
-  color: #1f2733;
+  top: 78px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 11;
   pointer-events: auto;
 }
+.btn-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.92);
+  color: #1f2733;
+  font-size: 18px;
+  font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  border: 2px solid #fff;
+  transition: transform 0.1s, background 0.15s;
+}
+.btn-icon:active { transform: scale(0.92); background: #FFEB3B; }
+
 .sensitivity-ctrl {
   position: absolute;
-  bottom: 130px; left: 14px;
+  top: 78px; right: 60px;
   display: none;
   gap: 8px; align-items: center;
-  background: rgba(255,255,255,0.92);
-  padding: 4px 10px;
+  background: rgba(255,255,255,0.94);
+  padding: 6px 12px;
   border-radius: 14px;
   z-index: 11;
   pointer-events: auto;
@@ -451,8 +471,8 @@ input { font-family: inherit; outline: none; }
 
 .steer-indicator {
   position: absolute;
-  top: 60px; left: 50%; transform: translateX(-50%);
-  width: 160px; height: 6px;
+  bottom: 100px; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 10px;
   background: rgba(255,255,255,0.55);
   border: 2px solid rgba(255,255,255,0.85);
   border-radius: 6px;
@@ -607,14 +627,144 @@ input { font-family: inherit; outline: none; }
   body.in-game #rotate-hint { display: flex; }
 }
 
+/* ============= 追加: ドリフトチャージ ============= */
+.drift-charge {
+  position: absolute;
+  bottom: 130px; left: 50%; transform: translateX(-50%);
+  display: none;
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  letter-spacing: 1px;
+  pointer-events: none;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  z-index: 6;
+}
+.drift-charge.show { display: block; animation: driftPulse 0.4s infinite alternate; }
+.drift-charge.tier-blue   { background: linear-gradient(180deg, #40C4FF, #0288D1); }
+.drift-charge.tier-yellow { background: linear-gradient(180deg, #FFEB3B, #F57C00); color: #5D2C00; text-shadow: 0 2px 0 rgba(255,255,255,0.3); }
+.drift-charge.tier-purple { background: linear-gradient(180deg, #E040FB, #6A1B9A); }
+@keyframes driftPulse {
+  from { transform: translateX(-50%) scale(1); }
+  to { transform: translateX(-50%) scale(1.08); }
+}
+
+/* ============= 追加: 逆走警告 ============= */
+.wrong-way {
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: none;
+  padding: 12px 28px;
+  background: rgba(198, 40, 40, 0.92);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border-radius: 14px;
+  border: 3px solid #FFEB3B;
+  box-shadow: 0 6px 20px rgba(198,40,40,0.6), 0 0 30px rgba(255,235,59,0.6);
+  text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  z-index: 6;
+  pointer-events: none;
+}
+.wrong-way.show { display: block; animation: wwBlink 0.45s steps(2) infinite; }
+@keyframes wwBlink {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* ============= 追加: インクスプラッシュ ============= */
+.ink-splat {
+  position: fixed; inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 1.5s;
+}
+.ink-splat svg { width: 100%; height: 100%; }
+.ink-splat.fade { opacity: 0; }
+
+/* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
+.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 60px; height: 60px; font-size: 22px; }
+.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 60px; height: 60px; font-size: 20px; }
+
+/* ============= 追加: アイテムスロットロール演出 ============= */
+.hud-item.rolling .item-box {
+  animation: itemRoll 0.55s ease-out;
+}
+@keyframes itemRoll {
+  0%   { transform: rotateY(0deg) scale(0.7); filter: brightness(2); }
+  50%  { transform: rotateY(540deg) scale(1.25); filter: brightness(1.6); }
+  100% { transform: rotateY(720deg) scale(1); filter: brightness(1); }
+}
+
+/* ============= 追加: ブースト時スピードライン強調 ============= */
+.speed-lines.boost {
+  background:
+    repeating-radial-gradient(circle at 50% 60%,
+      transparent 0px, transparent 14%,
+      rgba(255,200,80,0.0) 14%, rgba(255,200,80,0.45) 14.3%,
+      transparent 15%, transparent 100%);
+  animation: speedLinesFast 0.18s linear infinite;
+}
+@keyframes speedLinesFast {
+  from { transform: scale(1); }
+  to { transform: scale(1.25); }
+}
+
+/* ============= 追加: 順位カラム / ベストラップ表示 ============= */
+.standings-lap { font-size: 10px; color: #B0BEC5; margin-left: auto; }
+.final-lap { color: #FFCDD2 !important; animation: finalLapBlink 0.7s infinite alternate; }
+@keyframes finalLapBlink {
+  from { text-shadow: 0 0 0 transparent; }
+  to   { text-shadow: 0 0 10px #FF5252, 0 0 18px #FFEB3B; }
+}
+.result-best {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #2E7D32;
+  font-weight: 800;
+  margin-left: 6px;
+}
+
+/* ============= 追加: ロビープレイヤー数 ============= */
+.lobby-count {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1565C0;
+  margin-bottom: 10px;
+}
+#player-count {
+  font-family: 'Courier New', monospace;
+  color: #C62828;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+/* ============= 追加: 反転チェック ============= */
+.sensitivity-ctrl .invert-lbl {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800; color: #1f2733;
+  padding-left: 6px; border-left: 1px solid rgba(0,0,0,0.2);
+}
+.sensitivity-ctrl .invert-lbl input { transform: scale(1.1); }
+
 /* スマホ最適化 */
 @media (max-height: 480px) {
   .ctrl-btn { width: 84px; height: 66px; font-size: 12px; }
   .ctrl-item { width: 66px; height: 66px; font-size: 12px; }
+  .ctrl-look, .ctrl-respawn { width: 54px; height: 54px; font-size: 18px; }
   .hud-mini { width: 96px; height: 96px; }
   .hud-speed { padding: 6px 14px; }
   .speed-val { font-size: 28px; }
   .hud-standings { top: 112px; width: 140px; font-size: 11px; }
-  .btn-recalibrate { bottom: 90px; }
   .steer-indicator { bottom: 92px; width: 170px; }
+  .settings-stack { top: 72px; }
+  .btn-icon { width: 34px; height: 34px; font-size: 15px; }
+  .wrong-way { font-size: 18px; padding: 10px 22px; }
+  .drift-charge { bottom: 110px; font-size: 12px; padding: 3px 12px; }
 }

@@ -171,7 +171,7 @@ const Input = {
     // 非線形カーブ(中央付近マイルド、外側強力)
     const norm = Utils.clamp(diff / this.sensitivity, -1.2, 1.2);
     const curved = Math.sign(norm) * Math.pow(Math.min(1, Math.abs(norm)), 1.35);
-    // 以前の設定から向きを反転
+    // 右傾きで右へ曲がる方向に統一（従来の逆向き設定から変更）
     this.steer = Utils.clamp(curved, -1, 1);
   },
 

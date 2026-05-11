@@ -223,7 +223,7 @@ const Input = {
     const normAngle = ((angle % 360) + 360) % 360;
     const orientationType = (screen.orientation && screen.orientation.type) ? screen.orientation.type : '';
     const fallbackLandscape = normAngle !== 90 && normAngle !== 270 &&
-      (orientationType.includes('landscape') || window.innerWidth > window.innerHeight);
+      (orientationType.startsWith('landscape') || window.innerWidth > window.innerHeight);
 
     // 横向き時はbetaが左右ハンドル, 縦向きはgamma
     let val;
@@ -232,7 +232,8 @@ const Input = {
     } else if (normAngle === 270) {
       val = -b;
     } else if (fallbackLandscape) {
-      // 一部端末でangleが0固定でも、横向き表示ならbeta系を使って左寄りドリフトを防ぐ
+      // 一部端末でangleが0固定でも、横向き表示ならbeta系を使う
+      // gammaの符号で端末の左右向きを推定し、betaの向きを合わせて左寄りドリフトを防ぐ
       val = g >= 0 ? b : -b;
     } else {
       val = g;

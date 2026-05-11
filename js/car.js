@@ -15,6 +15,8 @@ const CarPhysics = {
   RADIUS: 1.2,              // 車衝突半径
   GRAVITY: 35,              // ジャンプ用重力
   JUMP_FORCE: 18,           // ジャンプ初速
+  BOOST_PAD_COOLDOWN: 0.45,
+  JUMP_PAD_COOLDOWN: 0.8,
 };
 
 class Car {
@@ -288,11 +290,11 @@ class Car {
       const gimmick = Track.checkGimmicks(this.x, this.z);
       if (gimmick === 'boost') {
         this.applyBoost(1.2);
-        this.gimmickCooldown = 0.45;
+        this.gimmickCooldown = CarPhysics.BOOST_PAD_COOLDOWN;
       } else if (gimmick === 'jump') {
         this.vy = CarPhysics.JUMP_FORCE;
         this.isJumping = true;
-        this.gimmickCooldown = 0.8;
+        this.gimmickCooldown = CarPhysics.JUMP_PAD_COOLDOWN;
       }
     }
 

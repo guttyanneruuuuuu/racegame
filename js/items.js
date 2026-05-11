@@ -65,15 +65,16 @@ const ItemSystem = {
     const rx = owner.x + Math.sin(angle) * 3.0;
     const rz = owner.z + Math.cos(angle) * 3.0;
     let vx, vz;
+    const rocketSpeed = 75;
     if (target) {
       const dx = target.x - rx;
       const dz = target.z - rz;
       const d = Math.hypot(dx, dz) || 1;
-      vx = (dx / d) * 70;
-      vz = (dz / d) * 70;
+      vx = (dx / d) * rocketSpeed;
+      vz = (dz / d) * rocketSpeed;
     } else {
-      vx = Math.sin(angle) * 80;
-      vz = Math.cos(angle) * 80;
+      vx = Math.sin(angle) * rocketSpeed;
+      vz = Math.cos(angle) * rocketSpeed;
     }
     const mesh = this._mkRocket();
     mesh.position.set(rx, 0.8, rz);
@@ -81,8 +82,8 @@ const ItemSystem = {
     this.scene.add(mesh);
     this.projectiles.push({
       kind: 'rocket', x: rx, z: rz, vx, vz,
-      ownerId: owner.id, life: 4, mesh,
-      radius: 1.5, target,
+      ownerId: owner.id, life: 4.5, mesh,
+      radius: 1.6, target,
     });
   },
 
@@ -151,7 +152,7 @@ const ItemSystem = {
       // 衝突判定
       let consumed = false;
       for (const c of allCars) {
-        if (c.id === p.ownerId && p.life > 4.5) continue; // 自分の発射直後は当たらない
+        if (c.id === p.ownerId && p.life > 4.2) continue; // 自分の発射直後は当たらない
         if (c.finished) continue;
         const d = Utils.dist2(p.x, p.z, c.x, c.z);
         if (d < (p.radius + 1.2)) {
@@ -160,7 +161,11 @@ const ItemSystem = {
           } else if (p.kind === 'rocket') {
             if (c.hitRocket()) consumed = true;
           }
-          if (consumed) break;
+          if (consumed) {
+            // 爆発エフェクト
+            if (p.kind === 'rocket') this._spawnExplosion(p.x, p.z);
+            break;
+          }
         }
       }
 
@@ -170,6 +175,31 @@ const ItemSystem = {
         this.projectiles.splice(i, 1);
       }
     }
+
+    // 爆発を更新
+    if (this._explosions) {
+      for (let i = this._explosions.length - 1; i >= 0; i--) {
+        const ex = this._explosions[i];
+        ex.life -= dt;
+        const t = 1 - (ex.life / ex.dur);
+        ex.mesh.scale.setScalar(0.5 + t * 4);
+        ex.mesh.material.opacity = Math.max(0, 1 - t);
+        if (ex.life <= 0) {
+          this.scene.remove(ex.mesh);
+          this._explosions.splice(i, 1);
+        }
+      }
+    }
+  },
+
+  _spawnExplosion(x, z) {
+    this._explosions = this._explosions || [];
+    const geo = new THREE.SphereGeometry(1.2, 12, 10);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffa726, transparent: true, opacity: 0.9 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 1, z);
+    this.scene.add(mesh);
+    this._explosions.push({ mesh, life: 0.5, dur: 0.5 });
   },
 
   reset() {
@@ -177,5 +207,11 @@ const ItemSystem = {
       if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
     }
     this.projectiles = [];
+    if (this._explosions) {
+      for (const ex of this._explosions) {
+        if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
+      }
+      this._explosions = [];
+    }
   },
 };

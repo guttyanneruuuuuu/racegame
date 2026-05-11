@@ -1,6 +1,6 @@
 // ============= UI 管理 =============
 const GameUI = {
-  selectedColor: '#FF3B3B',
+  selectedColor: '#E53935',
 
   init() {
     // 色選択
@@ -36,12 +36,42 @@ const GameUI = {
     document.getElementById('btn-enable-gyro').addEventListener('click', () => this._onEnableGyro());
     document.getElementById('btn-skip-gyro').addEventListener('click', () => this._onSkipGyro());
 
-    // 再キャリブレーション
+    // 再キャリブレーション (長押しで感度スライダー表示)
     const recBtn = document.getElementById('btn-recalibrate');
     if (recBtn) {
-      recBtn.addEventListener('click', () => {
-        Input.recalibrate();
-        showToast('ジャイロを再設定しました', 1200);
+      let pressTimer = null;
+      const startPress = () => {
+        pressTimer = setTimeout(() => {
+          const sc = document.getElementById('sensitivity-ctrl');
+          if (sc) sc.classList.toggle('show');
+          pressTimer = null;
+        }, 600);
+      };
+      const endPress = (e) => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+          Input.recalibrate();
+          showToast('ジャイロを再設定しました', 1200);
+        }
+      };
+      recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startPress(); });
+      recBtn.addEventListener('touchend', endPress);
+      recBtn.addEventListener('mousedown', startPress);
+      recBtn.addEventListener('mouseup', endPress);
+      recBtn.addEventListener('mouseleave', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+    }
+
+    // 感度スライダー
+    const sensSlider = document.getElementById('sens-slider');
+    const sensVal = document.getElementById('sens-val');
+    if (sensSlider) {
+      sensSlider.value = Input.sensitivity;
+      sensVal.textContent = Input.sensitivity + '°';
+      sensSlider.addEventListener('input', () => {
+        const v = parseFloat(sensSlider.value);
+        Input.setSensitivity(v);
+        sensVal.textContent = v + '°';
       });
     }
 
@@ -49,6 +79,24 @@ const GameUI = {
     const nameEl = document.getElementById('player-name');
     const saved = localStorage.getItem('gyrorush-name');
     if (saved) nameEl.value = saved;
+
+    // スピードライン更新ループ
+    this._startSpeedLineLoop();
+  },
+
+  _startSpeedLineLoop() {
+    const lines = document.getElementById('speed-lines');
+    setInterval(() => {
+      if (!lines) return;
+      const c = Game.localCar;
+      if (!c) { lines.classList.remove('show'); return; }
+      const sp = Math.abs(c.speed);
+      if (sp > 45 || c.boostTimer > 0) {
+        lines.classList.add('show');
+      } else {
+        lines.classList.remove('show');
+      }
+    }, 200);
   },
 
   showScreen(id) {
@@ -105,23 +153,21 @@ const GameUI = {
     const players = [
       { id: localId, name: info.name, color: info.color, isAI: false },
     ];
-    // AI 5体追加
     const aiNames = ['ターボ', 'ジェット', 'ロケット', 'ボルト', 'スピード'];
-    const aiColors = ['#2EA8FF', '#FFD23F', '#3DDB7E', '#B265FF', '#FF8AC4'];
+    const palette = ['#1E88E5', '#FDD835', '#43A047', '#8E24AA', '#FB8C00', '#E53935', '#26C6DA'];
+    const aiColors = palette.filter(c => c !== info.color).slice(0, 5);
     for (let i = 0; i < 5; i++) {
-      players.push({ id: 'ai-' + i, name: aiNames[i], color: aiColors[i], isAI: true });
+      players.push({ id: 'ai-' + i, name: aiNames[i], color: aiColors[i] || '#888', isAI: true });
     }
     await this._beginRace(players, localId, 'solo');
   },
 
   async _beginRace(players, localId, mode) {
-    // ジャイロ許可
     if (this._isMobile() && !Input.gyroEnabled) {
       await this._askGyro();
     }
     this.showScreen('screen-game');
     Game.setupRace(players, localId, mode);
-    // ローカルカウントダウン
     Game.startCountdown(Date.now() + 3500);
   },
 
@@ -184,7 +230,6 @@ const GameUI = {
     list.innerHTML = '';
     document.getElementById('room-code-show').textContent = Net.roomCode || '------';
 
-    // ホストのみ "開始" ボタン
     document.getElementById('btn-start-race').style.display = Net.isHost ? '' : 'none';
 
     for (const p of players) {
@@ -203,7 +248,6 @@ const GameUI = {
       list.appendChild(row);
     }
 
-    // ホストでない場合の表示
     if (!Net.isHost) {
       const note = document.createElement('p');
       note.className = 'hint';
@@ -218,7 +262,7 @@ const GameUI = {
     if (!item) {
       box.textContent = '?';
       box.classList.remove('has-item');
-      box.style.background = 'linear-gradient(135deg, #FFEB3B, #FFC107)';
+      box.style.background = 'linear-gradient(135deg, #FFEB3B, #FBC02D)';
     } else {
       const d = ItemSystem.getDisplay(item);
       box.textContent = d.emoji;
@@ -233,7 +277,6 @@ const GameUI = {
     const startCount = () => {
       el.textContent = String(count);
       el.classList.remove('show');
-      // reflow
       void el.offsetWidth;
       el.classList.add('show');
       if (count === 0) {
@@ -270,7 +313,6 @@ const GameUI = {
     const list = document.getElementById('finish-results');
     list.innerHTML = '';
 
-    // ゴール済みは finishTime 順、未完走は totalProgress の高い順で後ろに
     const finished = cars.filter(c => c.finished).sort((a, b) => a.finishTime - b.finishTime);
     const unfinished = cars.filter(c => !c.finished).sort((a, b) => b.totalProgress - a.totalProgress);
     const ranking = [...finished, ...unfinished];
@@ -279,7 +321,9 @@ const GameUI = {
       const row = document.createElement('div');
       row.className = 'result-row';
       if (c.isLocal) row.classList.add('you');
-      const rank = document.createElement('div'); rank.className = 'result-rank'; rank.textContent = `${i+1}位`;
+      const rank = document.createElement('div'); rank.className = 'result-rank';
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}位`;
+      rank.textContent = medal;
       const chip = document.createElement('div'); chip.className = 'player-chip'; chip.style.background = c.color;
       const name = document.createElement('div'); name.className = 'result-name'; name.textContent = c.name;
       const time = document.createElement('div'); time.className = 'result-time';
@@ -288,13 +332,12 @@ const GameUI = {
       list.appendChild(row);
     });
 
-    // 自分の順位タイトル
     const myRank = ranking.findIndex(c => c.isLocal) + 1;
     const title = document.getElementById('finish-title');
     if (myRank === 1) title.textContent = '🏆 優勝！';
-    else if (myRank === 2) title.textContent = '🥈 2位';
-    else if (myRank === 3) title.textContent = '🥉 3位';
-    else title.textContent = `${myRank}位でゴール`;
+    else if (myRank === 2) title.textContent = '🥈 2位！';
+    else if (myRank === 3) title.textContent = '🥉 3位！';
+    else title.textContent = `${myRank}位 でゴール`;
 
     overlay.classList.add('show');
   },

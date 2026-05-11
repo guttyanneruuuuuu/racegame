@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#FFB347" />
+  <meta name="theme-color" content="#E53935" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <!-- 縦画面警告（スマホで縦の時） -->
+  <!-- 縦画面警告（ゲーム中のみ） -->
   <div id="rotate-hint">
     <div class="rotate-icon">📱↻</div>
     <h2>スマホを横向きにしてね！</h2>
@@ -23,10 +23,11 @@
   <!-- ===================== タイトル画面 ===================== -->
   <div id="screen-title" class="screen active">
     <div class="title-bg"></div>
+    <div class="title-checker"></div>
     <div class="title-content">
       <h1 class="game-title">
         <span class="title-main">GYRO RUSH</span>
-        <span class="title-sub">ジャイロでぶっちぎれ！</span>
+        <span class="title-sub">🏁 ジャイロでぶっちぎれ！ 🏁</span>
       </h1>
       <div class="name-input-wrap">
         <label>プレイヤー名</label>
@@ -35,18 +36,18 @@
       <div class="car-select">
         <label>マシンを選ぼう</label>
         <div class="car-options" id="car-options">
-          <div class="car-option active" data-color="#FF3B3B" style="--c:#FF3B3B"></div>
-          <div class="car-option" data-color="#2EA8FF" style="--c:#2EA8FF"></div>
-          <div class="car-option" data-color="#FFD23F" style="--c:#FFD23F"></div>
-          <div class="car-option" data-color="#3DDB7E" style="--c:#3DDB7E"></div>
-          <div class="car-option" data-color="#B265FF" style="--c:#B265FF"></div>
-          <div class="car-option" data-color="#FF8AC4" style="--c:#FF8AC4"></div>
+          <div class="car-option active" data-color="#E53935" style="--c:#E53935"></div>
+          <div class="car-option" data-color="#1E88E5" style="--c:#1E88E5"></div>
+          <div class="car-option" data-color="#FDD835" style="--c:#FDD835"></div>
+          <div class="car-option" data-color="#43A047" style="--c:#43A047"></div>
+          <div class="car-option" data-color="#8E24AA" style="--c:#8E24AA"></div>
+          <div class="car-option" data-color="#FB8C00" style="--c:#FB8C00"></div>
         </div>
       </div>
       <div class="title-buttons">
-        <button class="btn btn-primary" id="btn-create-room">部屋を作る</button>
-        <button class="btn btn-secondary" id="btn-join-room">部屋に入る</button>
-        <button class="btn btn-ghost" id="btn-solo">ひとりで練習</button>
+        <button class="btn btn-primary" id="btn-create-room">🏠 部屋を作る</button>
+        <button class="btn btn-secondary" id="btn-join-room">🔑 部屋に入る</button>
+        <button class="btn btn-ghost" id="btn-solo">🤖 ひとりで練習</button>
       </div>
       <p class="hint">スマホ横向き + ジャイロでハンドル操作！</p>
     </div>
@@ -55,7 +56,7 @@
   <!-- ===================== ルームコード入力 ===================== -->
   <div id="screen-join" class="screen">
     <div class="panel">
-      <h2>部屋コードを入力</h2>
+      <h2>🔑 部屋コードを入力</h2>
       <input type="text" id="room-code-input" placeholder="例: ABC123" maxlength="6" />
       <div class="row">
         <button class="btn btn-primary" id="btn-do-join">入る</button>
@@ -68,14 +69,14 @@
   <!-- ===================== ロビー ===================== -->
   <div id="screen-lobby" class="screen">
     <div class="panel lobby-panel">
-      <h2>ロビー</h2>
+      <h2>🏁 ロビー</h2>
       <div class="room-code-display">
         部屋コード: <span id="room-code-show">------</span>
-        <button class="btn-mini" id="btn-copy-code">コピー</button>
+        <button class="btn-mini" id="btn-copy-code">📋 コピー</button>
       </div>
       <div id="player-list" class="player-list"></div>
       <div class="lobby-actions">
-        <button class="btn btn-primary" id="btn-start-race">レース開始！</button>
+        <button class="btn btn-primary" id="btn-start-race">🏎️ レース開始！</button>
         <button class="btn btn-ghost" id="btn-leave-room">退出</button>
       </div>
       <p class="hint">最大6人まで参加できます。ホストが「レース開始！」を押すとスタート。</p>
@@ -86,12 +87,16 @@
   <div id="screen-game" class="screen">
     <canvas id="game-canvas"></canvas>
 
+    <!-- ドラッグハンドル用オーバーレイ(透明) -->
+    <div id="steer-overlay"></div>
+
     <!-- HUD -->
     <div id="hud">
       <div class="hud-top">
         <div class="hud-lap">LAP <span id="hud-lap">1/3</span></div>
-        <div class="hud-pos">順位 <span id="hud-pos">1/1</span></div>
+        <div class="hud-pos">POS <span id="hud-pos">1/1</span></div>
         <div class="hud-time" id="hud-time">00:00.00</div>
+        <div class="hud-best" id="hud-best" style="display:none">BEST --:--.--</div>
       </div>
       <div class="hud-speed">
         <div class="speed-val" id="hud-speed">0</div>
@@ -102,17 +107,29 @@
       </div>
       <div class="hud-mini" id="hud-minimap"></div>
       <div class="hud-standings" id="hud-standings"></div>
+
+      <!-- スピードライン (ブースト演出) -->
+      <div class="speed-lines" id="speed-lines"></div>
     </div>
 
     <!-- 操作ボタン -->
     <div class="touch-controls">
       <button class="ctrl-btn ctrl-brake" id="ctrl-brake">◀ BRAKE</button>
-      <button class="ctrl-btn ctrl-item" id="ctrl-item">★ アイテム</button>
+    </div>
+    <div class="touch-controls-right">
+      <button class="ctrl-btn ctrl-item" id="ctrl-item">★<br>USE</button>
       <button class="ctrl-btn ctrl-accel" id="ctrl-accel">ACCEL ▶</button>
     </div>
 
     <!-- ジャイロキャリブレーション -->
     <button class="btn-recalibrate" id="btn-recalibrate">⟲ ジャイロ再設定</button>
+
+    <!-- 感度スライダー -->
+    <div class="sensitivity-ctrl" id="sensitivity-ctrl">
+      <label>感度</label>
+      <input type="range" id="sens-slider" min="8" max="35" step="1" value="18" />
+      <span id="sens-val">18°</span>
+    </div>
 
     <!-- ステアインジケーター -->
     <div class="steer-indicator" id="steer-indicator">
@@ -127,7 +144,7 @@
       <div class="finish-card">
         <h2 id="finish-title">FINISH!</h2>
         <div id="finish-results" class="finish-results"></div>
-        <button class="btn btn-primary" id="btn-back-lobby">ロビーに戻る</button>
+        <button class="btn btn-primary" id="btn-back-lobby">🏠 ロビーに戻る</button>
       </div>
     </div>
 
@@ -138,7 +155,7 @@
   <!-- ジャイロ許可ボタン（iOS用） -->
   <div id="gyro-permission" class="gyro-perm">
     <div class="panel">
-      <h2>ジャイロを有効にする</h2>
+      <h2>🎮 ジャイロを有効にする</h2>
       <p>スマホを傾けて操作するため、モーションセンサーへのアクセス許可が必要です。</p>
       <button class="btn btn-primary" id="btn-enable-gyro">許可する</button>
       <button class="btn btn-ghost" id="btn-skip-gyro">スキップ（タッチで操作）</button>

@@ -1,7 +1,6 @@
 // ============= AI ドライバー =============
 // 経路追従型シンプルAI: 次のチェックポイントを目指して走る
 const AIDriver = {
-  // 各AIごとの状態を持たせる
   states: new Map(),
 
   init(carId) {
@@ -9,6 +8,8 @@ const AIDriver = {
       targetIdx: 0,
       itemCooldown: 2 + Math.random() * 3,
       lastSeenObstacle: 0,
+      skill: 0.7 + Math.random() * 0.3,    // 0.7..1.0 のスキル係数
+      laneOffset: (Math.random() - 0.5) * 0.6, // -0.3..0.3 (内/外寄り)
     });
   },
 
@@ -16,58 +17,64 @@ const AIDriver = {
     if (!this.states.has(car.id)) this.init(car.id);
     const st = this.states.get(car.id);
 
-    // 現在地点に最も近いパス上の点を見つけて、その先 lookahead 個先を目標とする
     const n = Track.pathPoints.length;
-    const cur = Track.getProgress(car.x, car.z);
-    const lookahead = 4;
+    const cur = Track.getProgress(car.x, car.z, car.lastProgressIdx);
+    // 速度が高いほど先を見る
+    const lookahead = Math.max(3, Math.min(10, Math.floor(Math.abs(car.speed) * 0.15) + 3));
     st.targetIdx = (cur.index + lookahead) % n;
     const tgt = Track.pathPoints[st.targetIdx];
 
-    // ターゲット方向への角度
-    const dx = tgt.x - car.x;
-    const dz = tgt.z - car.z;
+    // ライン取り: コース幅の少し内 or 外を狙う
+    const { nx, nz } = Track._segNorm[st.targetIdx];
+    const lateralOff = st.laneOffset * Track.width;
+    const tgtX = tgt.x + nx * lateralOff;
+    const tgtZ = tgt.z + nz * lateralOff;
+
+    const dx = tgtX - car.x;
+    const dz = tgtZ - car.z;
     const targetAng = Math.atan2(dx, dz);
     let diff = Utils.angDiff(targetAng, car.angle);
 
     // ステア
-    const steer = Utils.clamp(diff * 1.6, -1, 1);
+    const steer = Utils.clamp(diff * 1.8, -1, 1);
 
-    // 障害物（バナナや他車）回避: 前方近くに敵がいたら少し避ける
+    // 障害物（バナナや他車）回避
     let avoid = 0;
     for (const o of allCars) {
       if (o.id === car.id) continue;
       const od = Utils.dist2(car.x, car.z, o.x, o.z);
-      if (od < 4.5) {
-        // 自分の前方判定
+      if (od < 5) {
         const fx = Math.sin(car.angle), fz = Math.cos(car.angle);
         const rx = o.x - car.x, rz = o.z - car.z;
         const fwd = rx * fx + rz * fz;
         if (fwd > 0) {
-          // 左右どちらが近いか
-          const side = rx * fz - rz * fx; // 外積
+          const side = rx * fz - rz * fx;
           avoid += side > 0 ? -0.6 : 0.6;
         }
       }
     }
     const finalSteer = Utils.clamp(steer + avoid, -1, 1);
 
-    // アクセル/ブレーキ: 曲がりがきつい時はブレーキ
-    const accel = Math.abs(diff) < 1.0;
-    const brake = Math.abs(diff) > 1.6 && car.speed > 25;
+    // アクセル/ブレーキ
+    const turnSharp = Math.abs(diff);
+    const accel = turnSharp < 1.1;
+    const brake = turnSharp > 1.5 && car.speed > 28;
 
-    car.applyInput(finalSteer, accel, brake, dt);
+    // スキル係数: アクセル抜きで差をつける
+    let effAccel = accel;
+    if (Math.random() > st.skill * 0.99) effAccel = false; // ごくたまにミス
+
+    car.applyInput(finalSteer, effAccel, brake, dt);
 
     // アイテム使用
     st.itemCooldown -= dt;
     if (car.item && st.itemCooldown <= 0) {
-      // 先頭でなければ前方の敵に攻撃, シールド/バナナは適宜
       const itm = car.item;
       let use = false;
       if (itm === 'boost' || itm === 'shield') use = true;
       else if (itm === 'banana') use = car.totalProgress < this._leaderProgress(allCars) || Math.random() < 0.4;
       else if (itm === 'rocket' || itm === 'lightning') use = true;
       if (use) {
-        // 実際の効果適用は Game側で
         Game.useItem(car, allCars);
         st.itemCooldown = 3 + Math.random() * 3;
       }

@@ -7,26 +7,39 @@ const Input = {
 
   gyroEnabled: false,
   gyroCalibrated: false,
-  gyroBaseGamma: 0,
+  gyroBase: 0,
+  gyroRaw: 0,
+
+  // ジャイロ感度設定 (ローカルストレージ保存)
+  // sensitivity: 最大角度 (deg) → ±この角度で steer ±1
+  sensitivity: 18,
+  deadzone: 1.2,    // 小さな揺らぎを無視 (deg)
+
+  _keys: {},
+  _touchSteer: 0,   // タッチハンドルからの入力
 
   init() {
+    // 保存された感度を復元
+    const saved = parseFloat(localStorage.getItem('gyrorush-sensitivity'));
+    if (!isNaN(saved) && saved > 5 && saved < 60) this.sensitivity = saved;
+
     this._bindKeys();
     this._bindTouch();
   },
 
   _bindKeys() {
-    const keys = {};
     window.addEventListener('keydown', (e) => {
-      keys[e.key.toLowerCase()] = true;
-      this._updateFromKeys(keys);
+      this._keys[e.key.toLowerCase()] = true;
+      this._updateFromKeys();
       if (e.key === ' ' || e.key.toLowerCase() === 'x') { this.useItem = true; }
     });
     window.addEventListener('keyup', (e) => {
-      keys[e.key.toLowerCase()] = false;
-      this._updateFromKeys(keys);
+      this._keys[e.key.toLowerCase()] = false;
+      this._updateFromKeys();
     });
   },
-  _updateFromKeys(keys) {
+  _updateFromKeys() {
+    const keys = this._keys;
     if (!this.gyroEnabled) {
       this.steer = (keys['arrowright'] || keys['d'] ? 1 : 0) + (keys['arrowleft'] || keys['a'] ? -1 : 0);
     }
@@ -52,7 +65,6 @@ const Input = {
     setBtn(accelBtn, 'accel');
     setBtn(brakeBtn, 'brake');
 
-    // アイテムボタンは押した瞬間にフラグ立てるだけ
     const itemOn = (e) => {
       e.preventDefault();
       this.useItem = true;
@@ -61,10 +73,50 @@ const Input = {
     };
     itemBtn.addEventListener('touchstart', itemOn, { passive: false });
     itemBtn.addEventListener('mousedown', itemOn);
+
+    // タッチハンドル (画面左右ドラッグでも舵を切れるバックアップ)
+    this._bindSteerOverlay();
+  },
+
+  // 画面左右をドラッグでステアできるオーバーレイ (ジャイロが効かないPC等のバックアップ)
+  _bindSteerOverlay() {
+    const overlay = document.getElementById('steer-overlay');
+    if (!overlay) return;
+    let active = false;
+    let startX = 0;
+    const setSteer = (sx, cx) => {
+      const dx = cx - sx;
+      const max = Math.min(220, window.innerWidth * 0.25);
+      this._touchSteer = Utils.clamp(dx / max, -1, 1);
+      if (!this.gyroEnabled) this.steer = this._touchSteer;
+    };
+    const onStart = (e) => {
+      const t = e.touches ? e.touches[0] : e;
+      startX = t.clientX;
+      active = true;
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!active) return;
+      const t = e.touches ? e.touches[0] : e;
+      setSteer(startX, t.clientX);
+      e.preventDefault();
+    };
+    const onEnd = (e) => {
+      active = false;
+      this._touchSteer = 0;
+      if (!this.gyroEnabled) this.steer = 0;
+    };
+    overlay.addEventListener('touchstart', onStart, { passive: false });
+    overlay.addEventListener('touchmove', onMove, { passive: false });
+    overlay.addEventListener('touchend', onEnd);
+    overlay.addEventListener('touchcancel', onEnd);
+    overlay.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
   },
 
   async enableGyro() {
-    // iOS 13+ では明示的に許可を取る必要がある
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
@@ -82,38 +134,46 @@ const Input = {
   },
 
   _onOrient(e) {
-    // 横画面想定: gamma は -90..90 (端末の左右の傾き)
-    // 横画面では beta が左右ハンドルに対応する場合もある（OS/向きで変わる）
     let g = e.gamma || 0;  // 左右の傾き
     let b = e.beta || 0;   // 前後の傾き
 
-    // 横向き状態判定: screen.orientation.angle で 90 or -90 のとき横
-    const angle = (screen.orientation && screen.orientation.angle) ||
-                  window.orientation || 0;
+    // 横向き判定
+    let angle = 0;
+    if (screen.orientation && typeof screen.orientation.angle === 'number') {
+      angle = screen.orientation.angle;
+    } else {
+      angle = window.orientation || 0;
+    }
 
+    // 横向き時はbetaが左右ハンドルに対応
+    // 縦向きはgamma
     let val;
     if (angle === 90) {
-      // 横向き(時計回り90度): betaが左右の傾きに対応
       val = b;
     } else if (angle === -90 || angle === 270) {
       val = -b;
     } else {
-      // 縦向き保険: gamma使用
       val = g;
     }
 
+    this.gyroRaw = val;
+
     if (!this.gyroCalibrated) {
-      this.gyroBaseGamma = val;
+      this.gyroBase = val;
       this.gyroCalibrated = true;
     }
 
-    // ±25度を最大ハンドルとする
-    const diff = val - this.gyroBaseGamma;
-    const max = 25;
-    this.steer = Utils.clamp(diff / max, -1, 1);
+    let diff = val - this.gyroBase;
+    // デッドゾーン
+    if (Math.abs(diff) < this.deadzone) diff = 0;
+    else diff -= Math.sign(diff) * this.deadzone;
+
+    // 非線形カーブ(中央付近マイルド、外側強力)
+    const norm = Utils.clamp(diff / this.sensitivity, -1.2, 1.2);
+    const curved = Math.sign(norm) * Math.pow(Math.min(1, Math.abs(norm)), 1.35);
+    this.steer = Utils.clamp(curved, -1, 1);
   },
 
-  // 毎フレーム呼ぶ：useItemフラグをconsume
   consumeItemUse() {
     const v = this.useItem;
     this.useItem = false;
@@ -122,5 +182,10 @@ const Input = {
 
   recalibrate() {
     this.gyroCalibrated = false;
+  },
+
+  setSensitivity(deg) {
+    this.sensitivity = Utils.clamp(deg, 6, 50);
+    localStorage.setItem('gyrorush-sensitivity', String(this.sensitivity));
   },
 };

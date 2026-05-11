@@ -7,13 +7,13 @@ const Game = {
   clock: null,
 
   // 状態
-  cars: [],            // すべての車（ローカル + リモート + AI）
+  cars: [],
   localCar: null,
-  state: 'idle',       // idle | countdown | racing | finished
+  state: 'idle',
   raceStartTime: 0,
   totalLaps: 3,
   lastSendTime: 0,
-  netSendInterval: 50, // ms (20Hz)
+  netSendInterval: 50,
 
   // ミニマップ
   miniCtx: null,
@@ -21,6 +21,10 @@ const Game = {
 
   // モード: 'multi' | 'solo'
   mode: 'multi',
+
+  // カメラの状態 (動的)
+  _camShakeTime: 0,
+  _camShakeAmp: 0,
 
   init() {
     this._initThree();
@@ -37,20 +41,23 @@ const Game = {
     this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 800);
-    this.camera.position.set(0, 8, -14);
-    this.camera.lookAt(0, 0, 0);
+    // 視野狭め (低めFOV)、車のすぐ後ろからの低い視点
+    this.camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.3, 900);
+    this.camera.position.set(0, 3, -7);
+    this.camera.lookAt(0, 1, 0);
 
     // 光源
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x66aa55, 0.85);
+    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 0.95);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.7);
-    dir.position.set(80, 120, 60);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+    dir.position.set(100, 150, 80);
     this.scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xa9d8ff, 0.25);
+    fill.position.set(-80, 60, -50);
+    this.scene.add(fill);
 
     this.clock = new THREE.Clock();
 
-    // トラック生成
     Track.generate(this.scene);
     ItemSystem.init(this.scene);
   },
@@ -74,12 +81,10 @@ const Game = {
   // ===================== レース準備 =====================
   setupRace(playersList, localId, mode) {
     this.mode = mode || 'multi';
-    // 既存の車を削除
     for (const c of this.cars) this.scene.remove(c.mesh);
     this.cars = [];
     ItemSystem.reset();
 
-    // スタート位置取得
     const numCars = playersList.length;
     const positions = Track.getStartPositions(numCars);
 
@@ -101,7 +106,6 @@ const Game = {
       if (p.isAI) AIDriver.init(p.id);
     }
 
-    // カメラを自車後ろに
     if (this.localCar) {
       this._updateCamera(0, true);
     }
@@ -111,7 +115,6 @@ const Game = {
   },
 
   startCountdown(startTime) {
-    // startTime は Date.now() ベース
     const wait = Math.max(0, startTime - Date.now());
     GameUI.runCountdown(wait, () => {
       this.state = 'racing';
@@ -135,7 +138,6 @@ const Game = {
       this._checkPickups(now);
       for (const c of this.cars) c.updateMesh();
     } else if (this.state === 'countdown') {
-      // カウント中: 入力無視、メッシュ更新のみ
       for (const c of this.cars) c.updateMesh();
     }
 
@@ -150,16 +152,18 @@ const Game = {
   _updateLocal(dt) {
     if (!this.localCar) return;
     if (this.localCar.finished) {
-      // 慣性で残す
       this.localCar.applyInput(0, false, true, dt);
     } else {
       this.localCar.applyInput(Input.steer, Input.accel, Input.brake, dt);
       this.localCar.updateProgress(performance.now());
-      // アイテム使用
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
-      // ゴール判定
+      // 壁ヒットでカメラ揺れ
+      if (this.localCar.wallHitFlash > 0.2) {
+        this._camShakeTime = 0.3;
+        this._camShakeAmp = 0.4;
+      }
       if (this.localCar.lap >= this.totalLaps && !this.localCar.finished) {
         this.localCar.finished = true;
         this.localCar.finishTime = performance.now() - this.raceStartTime;
@@ -192,7 +196,7 @@ const Game = {
         const a = cars[i], b = cars[j];
         const dx = b.x - a.x, dz = b.z - a.z;
         const d = Math.hypot(dx, dz);
-        const minD = 2.6;
+        const minD = 2.5;
         if (d < minD && d > 0.001) {
           const overlap = (minD - d) / 2;
           const nx = dx / d, nz = dz / d;
@@ -200,11 +204,10 @@ const Game = {
           a.z -= nz * overlap;
           b.x += nx * overlap;
           b.z += nz * overlap;
-          // 速度の交換(軽く)
           const ra = a.speed * 0.7;
           const rb = b.speed * 0.7;
-          a.speed = ra * 0.5 + rb * 0.5;
-          b.speed = ra * 0.5 + rb * 0.5;
+          a.speed = ra * 0.55 + rb * 0.45;
+          b.speed = ra * 0.45 + rb * 0.55;
         }
       }
     }
@@ -226,14 +229,11 @@ const Game = {
     });
   },
 
-  // リモート車の状態を反映
   applyRemoteState(id, state) {
     const car = this.cars.find(c => c.id === id);
     if (!car || car.isLocal) return;
-    // 単純補間
     car.x = Utils.lerp(car.x, state.x, 0.5);
     car.z = Utils.lerp(car.z, state.z, 0.5);
-    // 角度は最短経路で
     const diff = Utils.angDiff(state.angle, car.angle);
     car.angle += diff * 0.5;
     car.speed = state.speed;
@@ -244,7 +244,6 @@ const Game = {
     car.squishTimer = state.squish ? 0.2 : 0;
   },
 
-  // リモートのアクション(アイテム使用)
   applyRemoteAction(action) {
     const car = this.cars.find(c => c.id === action.by);
     if (!car) return;
@@ -253,7 +252,6 @@ const Game = {
       const tgt = this._findRocketTarget(car);
       ItemSystem.spawnRocket(car, tgt);
     } else if (action.kind === 'lightning') {
-      // 雷は全車に効果（ローカル含めて適用、発射者は除外）
       for (const c of this.cars) {
         if (c.id === action.by) continue;
         if (c.invincibleTimer > 0) continue;
@@ -267,11 +265,10 @@ const Game = {
     }
   },
 
-  // ローカルでアイテム使用
   useItem(car, allCars) {
     if (!car.item) return;
     const item = car.consumeItem();
-    GameUI.updateItem(null);
+    if (car.isLocal) GameUI.updateItem(null);
     if (item === 'boost') {
       car.applyBoost(2.5);
       Net.sendAction({ kind: 'boost' });
@@ -289,22 +286,21 @@ const Game = {
       ItemSystem.triggerLightning(car, allCars);
       Net.sendAction({ kind: 'lightning' });
     }
-    showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label}!`, 1000);
+    if (car.isLocal) {
+      showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label}!`, 1000);
+    }
   },
 
   _findRocketTarget(car) {
-    // 自分より前方にいる、最も近い車を探す
     let best = null;
     let bestD = Infinity;
     for (const c of this.cars) {
       if (c.id === car.id) continue;
       if (c.finished) continue;
-      // 自分より前進度が高い車のみ
       if (c.totalProgress <= car.totalProgress) continue;
       const d = Utils.dist2(car.x, car.z, c.x, c.z);
       if (d < bestD) { bestD = d; best = c; }
     }
-    // いなければ近い敵
     if (!best) {
       for (const c of this.cars) {
         if (c.id === car.id) continue;
@@ -320,8 +316,7 @@ const Game = {
     for (const c of this.cars) {
       if (c.finished) continue;
       if (!c.item) {
-        if (Track.collectItemBox(c.x, c.z, 1.8)) {
-          // 順位を計算してアイテム決定
+        if (Track.collectItemBox(c.x, c.z, 2.0)) {
           const rank = this._getRank(c);
           const item = ItemSystem.weightedRoll(rank, this.cars.length);
           c.setItem(item);
@@ -340,14 +335,11 @@ const Game = {
   },
 
   _checkRaceEnd() {
-    // 自分がゴール済みかつ全員ゴールなら結果表示
     const allDone = this.cars.every(c => c.finished);
     if (allDone && this.state !== 'finished') {
       this.state = 'finished';
       setTimeout(() => GameUI.showResults(this.cars), 1500);
     } else if (this.localCar && this.localCar.finished && this.state !== 'finished') {
-      // ローカルだけ先にゴール→結果を一定時間後表示
-      // 他を待つ最大時間
       this._waitTimer = setTimeout(() => {
         this.state = 'finished';
         GameUI.showResults(this.cars);
@@ -356,36 +348,70 @@ const Game = {
   },
 
   forceFinish() {
-    // 他プレイヤーのfinish通知を受けたとき、全員ゴール確認
     this._checkRaceEnd();
   },
 
   // ===================== カメラ =====================
+  // 車の真後ろ・低い視点・狭い視野 - 緊張感ある画作り
   _updateCamera(dt, snap = false) {
     if (!this.localCar) return;
     const c = this.localCar;
-    // 後方距離
-    const back = 9;
-    const up = 4.5;
-    const tx = c.x - Math.sin(c.angle) * back;
-    const tz = c.z - Math.cos(c.angle) * back;
+    const absSpeed = Math.abs(c.speed);
+
+    // 後方距離・高さ (速度に応じて低めに、後ろに引かない)
+    // 低速時はやや高く、高速時に低く近く
+    const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
+    const back = Utils.lerp(5.6, 6.4, speedT);    // 真後ろの距離(短い)
+    const up   = Utils.lerp(2.3, 1.8, speedT);    // 高さ(低い)
+    const lookFwd = Utils.lerp(7, 14, speedT);    // 視点先
+
+    // バック時は前方にカメラを置く
+    let backDir = 1;
+    if (c.speed < -1) backDir = -1;
+
+    const tx = c.x - Math.sin(c.angle) * back * backDir;
+    const tz = c.z - Math.cos(c.angle) * back * backDir;
     const ty = up;
+
     if (snap) {
       this.camera.position.set(tx, ty, tz);
     } else {
-      this.camera.position.x = Utils.lerp(this.camera.position.x, tx, 0.12);
-      this.camera.position.y = Utils.lerp(this.camera.position.y, ty, 0.12);
-      this.camera.position.z = Utils.lerp(this.camera.position.z, tz, 0.12);
+      // 追従の追従度を速度に応じて(高速ほどタイト)
+      const followStrength = Utils.lerp(0.18, 0.28, speedT);
+      this.camera.position.x = Utils.lerp(this.camera.position.x, tx, followStrength);
+      this.camera.position.y = Utils.lerp(this.camera.position.y, ty, 0.22);
+      this.camera.position.z = Utils.lerp(this.camera.position.z, tz, followStrength);
     }
-    // 視点は車の前方を見る
-    const lx = c.x + Math.sin(c.angle) * 5;
-    const lz = c.z + Math.cos(c.angle) * 5;
-    this.camera.lookAt(lx, 1.2, lz);
 
-    // FOV: ブースト時は広く、速度に応じて少し動的に
-    const baseFov = 70;
-    const targetFov = c.boostTimer > 0 ? 90 : baseFov + Math.min(15, Math.abs(c.speed) * 0.18);
-    this.camera.fov = Utils.lerp(this.camera.fov, targetFov, 0.08);
+    // 視点: 車の前方
+    const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
+    const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
+    const ly = 1.0;
+
+    // カメラシェイク
+    let shakeX = 0, shakeY = 0;
+    if (this._camShakeTime > 0) {
+      this._camShakeTime -= dt;
+      const amp = this._camShakeAmp * (this._camShakeTime / 0.3);
+      shakeX = (Math.random() - 0.5) * amp;
+      shakeY = (Math.random() - 0.5) * amp;
+    }
+    // ブースト時の振動
+    if (c.boostTimer > 0) {
+      shakeX += (Math.random() - 0.5) * 0.08;
+      shakeY += (Math.random() - 0.5) * 0.08;
+    }
+
+    this.camera.position.x += shakeX;
+    this.camera.position.y += shakeY;
+
+    this.camera.lookAt(lx, ly, lz);
+
+    // FOV: 狭めの基本値、ブースト時に広く(スピード感)
+    const baseFov = 58;
+    const speedFovAdd = Math.min(14, absSpeed * 0.22);
+    const targetFov = c.boostTimer > 0 ? 78 : baseFov + speedFovAdd;
+    this.camera.fov = Utils.lerp(this.camera.fov, targetFov, 0.1);
     this.camera.updateProjectionMatrix();
   },
 
@@ -400,19 +426,29 @@ const Game = {
     document.getElementById('hud-lap').textContent = `${lapDisp}/${this.totalLaps}`;
     const rank = this._getRank(this.localCar);
     document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
-    const sp = Math.abs(this.localCar.speed) * 3.6; // m/s→km/h
+    const sp = Math.abs(this.localCar.speed) * 3.6;
     document.getElementById('hud-speed').textContent = Math.floor(sp);
+
+    // ベストラップ表示
+    const bestEl = document.getElementById('hud-best');
+    if (bestEl) {
+      if (isFinite(this.localCar.bestLap)) {
+        bestEl.textContent = 'BEST ' + Utils.formatTime(this.localCar.bestLap);
+        bestEl.style.display = '';
+      } else {
+        bestEl.style.display = 'none';
+      }
+    }
 
     // ステアインジケーター
     const fill = document.getElementById('steer-fill');
     if (fill) {
       const s = Input.steer;
-      const w = Math.abs(s) * 50; // 半幅50%
+      const w = Math.abs(s) * 50;
       fill.style.width = w + '%';
       fill.style.transform = s >= 0 ? 'translateX(0)' : `translateX(-100%)`;
     }
 
-    // スタンディング（順位リスト）
     this._updateStandings();
   },
 
@@ -448,14 +484,13 @@ const Game = {
     const W = this.miniCanvas.width;
     const H = this.miniCanvas.height;
     ctx.clearRect(0, 0, W, H);
-    // 全パス点から境界計算
     if (!this._miniBounds) {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const p of Track.pathPoints) {
         if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
         if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
       }
-      const pad = 20;
+      const pad = 30;
       this._miniBounds = { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
     }
     const b = this._miniBounds;
@@ -465,8 +500,8 @@ const Game = {
     const toZ = (z) => H - (z - b.minZ) * sz;
 
     // パス
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 11;
+    ctx.strokeStyle = '#666';
     ctx.beginPath();
     Track.pathPoints.forEach((p, i) => {
       const x = toX(p.x), y = toZ(p.z);
@@ -474,9 +509,12 @@ const Game = {
     });
     ctx.closePath();
     ctx.stroke();
-
+    // 路面
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#bbb';
+    ctx.stroke();
     // 中央線
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeStyle = '#fff';
     ctx.setLineDash([4, 4]);
     ctx.stroke();
@@ -486,7 +524,7 @@ const Game = {
     const sp = Track.pathPoints[0];
     ctx.fillStyle = '#C62828';
     ctx.beginPath();
-    ctx.arc(toX(sp.x), toZ(sp.z), 4, 0, Math.PI * 2);
+    ctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
     ctx.fill();
 
     // 車
@@ -495,7 +533,7 @@ const Game = {
       ctx.fillStyle = c.color;
       ctx.strokeStyle = c.isLocal ? '#000' : '#fff';
       ctx.lineWidth = c.isLocal ? 2 : 1;
-      ctx.arc(toX(c.x), toZ(c.z), c.isLocal ? 5 : 4, 0, Math.PI * 2);
+      ctx.arc(toX(c.x), toZ(c.z), c.isLocal ? 6 : 4.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }

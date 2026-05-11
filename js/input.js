@@ -171,7 +171,8 @@ const Input = {
     // 非線形カーブ(中央付近マイルド、外側強力)
     const norm = Utils.clamp(diff / this.sensitivity, -1.2, 1.2);
     const curved = Math.sign(norm) * Math.pow(Math.min(1, Math.abs(norm)), 1.35);
-    this.steer = Utils.clamp(curved, -1, 1);
+    // ジャイロの向きを反転 (ユーザー要望)
+    this.steer = Utils.clamp(-curved, -1, 1);
   },
 
   consumeItemUse() {

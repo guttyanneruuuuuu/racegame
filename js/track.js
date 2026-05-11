@@ -520,8 +520,8 @@ const Track = {
     const dz = z - p.z;
     const s = Math.sin(p.angle);
     const c = Math.cos(p.angle);
-    const localFwd = dx * s + dz * c;
-    const localSide = dx * c - dz * s;
-    return Math.abs(localFwd) <= p.length * 0.5 && Math.abs(localSide) <= p.width * 0.5;
+    const localLongitudinal = dx * s + dz * c;
+    const localLateral = dx * c - dz * s;
+    return Math.abs(localLongitudinal) <= p.length * 0.5 && Math.abs(localLateral) <= p.width * 0.5;
   },
 };

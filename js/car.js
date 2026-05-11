@@ -15,8 +15,8 @@ const CarPhysics = {
   RADIUS: 1.2,              // 車衝突半径
   GRAVITY: 35,              // ジャンプ用重力
   JUMP_FORCE: 18,           // ジャンプ初速
-  BOOST_PAD_COOLDOWN: 0.45,
-  JUMP_PAD_COOLDOWN: 0.8,
+  BOOST_PAD_COOLDOWN: 0.45, // seconds
+  JUMP_PAD_COOLDOWN: 0.8,   // seconds
 };
 
 class Car {

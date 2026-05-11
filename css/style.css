@@ -768,3 +768,306 @@ input { font-family: inherit; outline: none; }
   .wrong-way { font-size: 18px; padding: 10px 22px; }
   .drift-charge { bottom: 110px; font-size: 12px; padding: 3px 12px; }
 }
+
+/* ============= 拡張UI: タイトルの追加ボタン ============= */
+.title-extras {
+  display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap;
+}
+.ext-btn {
+  background: rgba(255,255,255,0.92);
+  border: 2px solid #1f2733;
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-weight: 800;
+  font-size: 13px;
+  color: #1f2733;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #1f2733;
+  transition: transform 0.1s;
+}
+.ext-btn:active { transform: translateY(2px); box-shadow: 0 0 0 #1f2733; }
+
+/* ============= 拡張オーバーレイ (チュートリアル/アイテム図鑑/設定/プロフィール) ============= */
+.ext-overlay {
+  position: fixed; inset: 0;
+  background: rgba(20, 30, 40, 0.78);
+  backdrop-filter: blur(6px);
+  display: none;
+  justify-content: center; align-items: center;
+  z-index: 9000;
+  padding: 20px;
+}
+.ext-overlay.show { display: flex; }
+.ext-panel {
+  background: linear-gradient(180deg, #fff, #f5f5f5);
+  border: 3px solid #1f2733;
+  border-radius: 18px;
+  padding: 22px 24px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 0 #1f2733, 0 18px 40px rgba(0,0,0,0.4);
+}
+.ext-panel h2 {
+  margin: 0 0 12px;
+  color: #C62828;
+  font-size: 22px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+.ext-panel h3 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  color: #1f2733;
+  border-left: 4px solid #E53935;
+  padding-left: 8px;
+}
+.ext-panel .close-row {
+  display: flex; justify-content: center; margin-top: 14px;
+}
+
+/* チュートリアル */
+.tut-page { display: none; min-height: 200px; }
+.tut-page.active { display: block; }
+.tut-page p { font-size: 14px; line-height: 1.6; color: #2c3440; margin: 6px 0; }
+.tut-page .tut-img {
+  background: linear-gradient(135deg, #E53935, #FB8C00);
+  color: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  font-size: 28px;
+  margin: 10px 0;
+}
+.tut-nav {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 14px;
+}
+.tut-dots { display: flex; gap: 6px; }
+.tut-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(0,0,0,0.25);
+}
+.tut-dot.active { background: #E53935; }
+
+/* アイテム図鑑 */
+.itemdex-list { display: flex; flex-direction: column; gap: 6px; }
+.itemdex-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.65);
+  border: 2px solid rgba(31, 39, 51, 0.25);
+  border-radius: 10px;
+}
+.itemdex-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  background: linear-gradient(135deg, #ffd54f, #ff9800);
+  border: 2px solid #1f2733;
+  flex-shrink: 0;
+}
+.itemdex-name { font-weight: 800; font-size: 14px; color: #1f2733; }
+.itemdex-desc { font-size: 11px; color: #555; }
+.itemdex-rarity {
+  font-size: 10px;
+  background: #1f2733; color: #fff;
+  padding: 2px 6px; border-radius: 6px;
+  margin-left: auto; flex-shrink: 0;
+}
+
+/* 設定 */
+.settings-group {
+  display: flex; flex-direction: column; gap: 8px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 2px solid rgba(31, 39, 51, 0.2);
+}
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: #1f2733;
+}
+.settings-row label { font-weight: 700; }
+.settings-row input[type="range"] { flex: 1; max-width: 180px; }
+.settings-row select, .settings-row input[type="number"] {
+  padding: 4px 8px; border-radius: 6px; border: 2px solid #1f2733;
+  background: #fff; font-weight: 700;
+}
+
+/* プロフィール */
+.prof-row {
+  display: flex; justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.prof-row b { color: #C62828; }
+.prof-colors {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+}
+.prof-color {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid #1f2733;
+  position: relative;
+}
+.prof-color.locked { opacity: 0.35; }
+.prof-color.locked::after {
+  content: '🔒';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+
+/* ============= ロビーチャット ============= */
+.lobby-chat {
+  margin-top: 14px;
+  background: rgba(255,255,255,0.85);
+  border: 2px solid rgba(31, 39, 51, 0.4);
+  border-radius: 12px;
+  padding: 8px;
+}
+.lobby-chat h3 {
+  margin: 0 0 6px; font-size: 12px; color: #1f2733;
+  text-align: left; padding-left: 4px;
+}
+.chat-log {
+  height: 90px; overflow-y: auto;
+  background: rgba(0,0,0,0.06);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.chat-row { margin: 2px 0; word-wrap: break-word; }
+.chat-row .name { color: #C62828; font-weight: 800; }
+.chat-row.you .name { color: #1E88E5; }
+.chat-row.sys { color: #888; font-style: italic; font-size: 11px; }
+.chat-input-row {
+  display: flex; gap: 6px; margin-top: 6px;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 2px solid #1f2733;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.chat-input-row button {
+  background: #E53935; color: #fff;
+  border: none; border-radius: 8px;
+  font-weight: 800; padding: 6px 12px;
+  cursor: pointer;
+}
+
+/* ============= フォグオーバーレイ ============= */
+.fog-overlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at center, rgba(220,220,220,0) 0%, rgba(200,200,200,0.55) 50%, rgba(160,160,160,0.85) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 200;
+}
+.fog-overlay.show { opacity: 0.7; }
+
+/* ============= リザルト拡張 ============= */
+.finish-extra {
+  margin-top: 12px;
+  text-align: left;
+}
+.award-section {
+  background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.15));
+  border: 2px solid #FFD700;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.award-section h3 {
+  margin: 0 0 6px; font-size: 14px;
+  color: #B8860B;
+  text-align: center;
+}
+.award-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 8px;
+  margin: 4px 0;
+  font-size: 12px;
+}
+.award-row .award-icon { font-size: 18px; }
+.award-row .award-name { font-weight: 800; flex: 1; }
+.xp-tag { color: #C62828; font-weight: 800; }
+
+.xp-total {
+  display: flex; justify-content: space-between;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  color: #1f2733;
+}
+.xp-bar {
+  width: 100%; height: 8px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.xp-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, #43A047, #FDD835);
+  transition: width 0.6s;
+}
+.lvl-up {
+  background: linear-gradient(135deg, #FFD700, #FB8C00);
+  color: #fff;
+  font-weight: 900;
+  text-align: center;
+  padding: 8px;
+  border-radius: 10px;
+  margin-top: 8px;
+  font-size: 14px;
+  animation: lvlPulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes lvlPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.04); }
+}
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 11px;
+}
+.stats-grid > div {
+  background: rgba(255,255,255,0.5);
+  padding: 4px 6px;
+  border-radius: 6px;
+  display: flex; justify-content: space-between;
+}
+.stats-grid b { color: #C62828; }
+
+/* HUD ヘルプ */
+.hud-help {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 60;
+}
+
+/* カメラモードボタン (settings-stack に追加) */
+.settings-stack .btn-icon.cam-btn { background: rgba(255,235,205,0.95); }

@@ -4,6 +4,29 @@ window.addEventListener('load', () => {
   GameUI.init();
   // ゲーム初期化（Three.js含む）
   Game.init();
+
+  // ===== 拡張モジュールの導入 (既存を破壊せず monkey-patch) =====
+  try {
+    if (typeof Awards !== 'undefined' && Awards.init) Awards.init();
+    if (typeof ItemExt !== 'undefined' && ItemExt.install) ItemExt.install();
+    if (typeof AIExt !== 'undefined' && AIExt.install) AIExt.install();
+    if (typeof CameraExt !== 'undefined' && CameraExt.install) CameraExt.install();
+    if (typeof NetExt !== 'undefined' && NetExt.install) NetExt.install();
+    if (typeof GameExt !== 'undefined' && GameExt.install) GameExt.install();
+    if (typeof UIExt !== 'undefined' && UIExt.install) UIExt.install();
+    if (typeof ItemExt !== 'undefined' && ItemExt.hookGameUseItem) ItemExt.hookGameUseItem();
+    // BGM は SFX の AudioContext が初期化されるのを待つ
+    const initBgm = () => {
+      if (typeof BGM !== 'undefined' && BGM.init && SFX && SFX.ctx) {
+        BGM.init(SFX.ctx);
+        BGM.play('menu');
+      } else {
+        setTimeout(initBgm, 400);
+      }
+    };
+    setTimeout(initBgm, 800);
+  } catch (e) { console.warn('extension install error', e); }
+
   // メインループ開始
   Game.loop();
 
@@ -48,6 +71,16 @@ window.addEventListener('load', () => {
     }
     Game.forceFinish();
   });
+  // チャット受信 (NetExt) → UI に表示
+  if (typeof NetExt !== 'undefined' && NetExt.onChat) {
+    NetExt.onChat((msg) => {
+      if (msg.from === Net.myId) return; // 自分のメッセージは既に表示済み
+      if (typeof UIExt !== 'undefined' && UIExt.appendChat) {
+        if (msg.sys) UIExt.appendChat('system', msg.text, false);
+        else UIExt.appendChat(msg.name || 'guest', msg.text, false);
+      }
+    });
+  }
   Net.on('playerLeft', (id) => {
     // ゲーム中ならその車を消す
     const idx = Game.cars.findIndex(c => c.id === id);

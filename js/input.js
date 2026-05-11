@@ -39,6 +39,8 @@ const Input = {
   autoCalibrateOnStart() {
     this.gyroCalibrated = false;
     this.gyroSamples = [];
+    this.gyroLastSampleTime = 0;
+    this._smoothed = 0;
   },
 
   _setupAutoCalibrate() {
@@ -48,12 +50,16 @@ const Input = {
         screen.orientation.addEventListener('change', () => {
           this.gyroCalibrated = false;
           this.gyroSamples = [];
+          this.gyroLastSampleTime = 0;
+          this._smoothed = 0;
         });
       } catch (_) {}
     }
     window.addEventListener('orientationchange', () => {
       this.gyroCalibrated = false;
       this.gyroSamples = [];
+      this.gyroLastSampleTime = 0;
+      this._smoothed = 0;
     });
   },
 
@@ -199,6 +205,8 @@ const Input = {
     this.gyroEnabled = true;
     this.gyroCalibrated = false;
     this.gyroSamples = [];
+    this.gyroLastSampleTime = 0;
+    this._smoothed = 0;
     return true;
   },
 
@@ -212,13 +220,22 @@ const Input = {
     } else {
       angle = window.orientation || 0;
     }
+    const normAngle = ((angle % 360) + 360) % 360;
+    const orientationType = (screen.orientation && screen.orientation.type) ? screen.orientation.type : '';
+    const fallbackLandscape = normAngle !== 90 && normAngle !== 270 &&
+      ((orientationType && orientationType.startsWith('landscape')) || window.innerWidth > window.innerHeight);
 
     // 横向き時はbetaが左右ハンドル, 縦向きはgamma
     let val;
-    if (angle === 90) {
+    if (normAngle === 90) {
       val = b;
-    } else if (angle === -90 || angle === 270) {
+    } else if (normAngle === 270) {
       val = -b;
+    } else if (fallbackLandscape) {
+      // 一部端末でangleが0固定でも、横向き表示ならbeta系を使う
+      // 横向き時のgammaは概ね +90/-90 になりやすいので、その符号で端末の左右向きを推定
+      // その向きに合わせてbetaの符号を反転し、デフォルト姿勢での片寄りドリフトを防ぐ
+      val = g >= 0 ? b : -b;
     } else {
       val = g;
     }
@@ -269,6 +286,8 @@ const Input = {
   recalibrate() {
     this.gyroCalibrated = false;
     this.gyroSamples = [];
+    this.gyroLastSampleTime = 0;
+    this._smoothed = 0;
   },
 
   setSensitivity(deg) {

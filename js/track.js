@@ -4,7 +4,8 @@ const Track = {
   pathPoints: [],
   pathLength: 0,
   cumLen: [],
-  width: 24,        // コース幅 - 広めにして操作しやすく
+  width: 22,        // 基本コース幅 (セクターごとに変化)
+  widthArray: [],   // 各セグメントごとの幅 (動的に算出)
   wallHeight: 2.8,
 
   group: null,
@@ -25,33 +26,75 @@ const Track = {
     this.group = new THREE.Group();
     scene.add(this.group);
 
-    // 制御点（複雑な閉ループ：S字, ヘアピン, シケイン入り）
+    // 制御点（大幅拡張: 5つのテーマセクターを持つ大型サーキット）
+    // セクター1: スタート→高速ストレート→大ロングコーナー (北東)
+    // セクター2: テクニカルS字シケイン (東)
+    // セクター3: 急角度ヘアピン×複数 (南東)
+    // セクター4: 8の字風クロス領域 + 高速バンク (南西)
+    // セクター5: 山岳ワインディング → スタジアム帰還 (北西)
     this.controlPoints = [
-      { x:    0, z:  170 },
-      { x:   60, z:  175 },
-      { x:  120, z:  160 },
-      { x:  180, z:  120 },
-      { x:  220, z:   50 },
-      { x:  230, z:  -30 },
-      { x:  200, z: -100 },
-      { x:  140, z: -140 },
-      { x:   70, z: -120 },
-      { x:   20, z:  -80 },
-      { x:  -20, z: -100 },
-      { x:  -70, z: -160 },
-      { x: -140, z: -170 },
-      { x: -200, z: -110 },
-      { x: -220, z:  -30 },
-      { x: -210, z:   50 },
-      { x: -160, z:  100 },
-      { x: -120, z:   80 },
-      { x:  -80, z:  120 },
-      { x:  -40, z:  150 },
+      // --- セクター1: スタート → 北東ロング ---
+      { x:    0, z:  280 },
+      { x:   50, z:  300 },
+      { x:  120, z:  310 },
+      { x:  200, z:  295 },
+      { x:  280, z:  260 },
+      { x:  340, z:  210 },
+      { x:  380, z:  150 },
+      { x:  410, z:   80 },
+      { x:  420, z:    0 },
+      // --- セクター2: 東テクニカルS字 ---
+      { x:  400, z:  -70 },
+      { x:  350, z:  -90 },
+      { x:  300, z:  -60 },
+      { x:  280, z:  -10 },
+      { x:  300, z:   40 },
+      { x:  280, z:   90 },
+      { x:  230, z:  100 },
+      { x:  190, z:   60 },
+      { x:  210, z:   10 },
+      { x:  200, z:  -50 },
+      { x:  160, z: -100 },
+      // --- セクター3: 南東ヘアピン地帯 ---
+      { x:  120, z: -150 },
+      { x:  170, z: -210 },
+      { x:  230, z: -250 },
+      { x:  280, z: -290 },
+      { x:  240, z: -340 },
+      { x:  160, z: -360 },
+      { x:   80, z: -340 },
+      { x:   20, z: -300 },
+      { x:  -10, z: -240 },
+      { x:  -50, z: -210 },
+      // --- セクター4: 南西高速バンク + クロス橋下 ---
+      { x: -120, z: -240 },
+      { x: -200, z: -270 },
+      { x: -280, z: -250 },
+      { x: -340, z: -200 },
+      { x: -380, z: -130 },
+      { x: -400, z:  -50 },
+      { x: -390, z:   30 },
+      { x: -360, z:   90 },
+      // --- セクター5: 北西山岳ワインディング ---
+      { x: -300, z:  130 },
+      { x: -240, z:  170 },
+      { x: -200, z:  230 },
+      { x: -150, z:  270 },
+      { x: -100, z:  240 },
+      { x:  -70, z:  200 },
+      { x:  -90, z:  160 },
+      { x: -130, z:  140 },
+      { x: -110, z:   90 },
+      { x:  -60, z:   80 },
+      { x:  -30, z:  130 },
+      { x:  -50, z:  190 },
+      { x:  -30, z:  240 },
     ];
 
-    this.pathPoints = this._catmullRomLoop(this.controlPoints, 16);
+    this.pathPoints = this._catmullRomLoop(this.controlPoints, 14);
     this._buildCumLen();
     this._buildSegmentDirs();
+    this._buildWidthArray();
 
     this._buildGround(scene);
     this._buildSkybox(scene);
@@ -125,6 +168,48 @@ const Track = {
     }
   },
 
+  // セクターごとに幅を変化させる: 高速直線は広く、テクニカル区間は狭く
+  _buildWidthArray() {
+    const n = this.pathPoints.length;
+    this.widthArray = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const t = i / n;            // 0..1 でループ
+      let w = this.width;
+      // セクター1 (0..0.18) 高速ストレート: 広い
+      if (t < 0.18)        w = 28;
+      // セクター2 (0.18..0.30) テクニカルS字: 狭い
+      else if (t < 0.30)   w = 18;
+      // セクター3 (0.30..0.50) ヘアピン: 中
+      else if (t < 0.50)   w = 22;
+      // セクター4 (0.50..0.72) 高速バンク: 広い
+      else if (t < 0.72)   w = 30;
+      // セクター5 (0.72..1.0) 山岳ワインディング: 狭い
+      else                 w = 19;
+
+      // 隣接セグメントとの曲率に応じて少し補正 (急カーブは僅かに広げる)
+      const prev = (i - 1 + n) % n;
+      const nxt  = (i + 1) % n;
+      const a = this._segDir[prev], b = this._segDir[nxt];
+      const dot = a.ux * b.ux + a.uz * b.uz;
+      const curveSharp = 1 - Math.max(-1, Math.min(1, dot));
+      w += curveSharp * 1.4;
+      this.widthArray[i] = w;
+    }
+    // 平滑化 (急な幅変化を緩める)
+    const smoothed = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      for (let k = -3; k <= 3; k++) s += this.widthArray[((i + k) % n + n) % n];
+      smoothed[i] = s / 7;
+    }
+    this.widthArray = smoothed;
+  },
+
+  widthAt(i) {
+    if (!this.widthArray || this.widthArray.length === 0) return this.width;
+    return this.widthArray[((i % this.widthArray.length) + this.widthArray.length) % this.widthArray.length];
+  },
+
   _buildTrack() {
     const verts = [];
     const uvs = [];
@@ -137,14 +222,15 @@ const Track = {
     for (let i = 0; i < n; i++) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
 
-      verts.push(cur.x + nx * this.width, 0.02, cur.z + nz * this.width);
-      verts.push(cur.x - nx * this.width, 0.02, cur.z - nz * this.width);
+      verts.push(cur.x + nx * w, 0.02, cur.z + nz * w);
+      verts.push(cur.x - nx * w, 0.02, cur.z - nz * w);
       uvs.push(0, i * 0.4);
       uvs.push(1, i * 0.4);
 
-      this.wallSegmentsOuter.push({ x: cur.x + nx * this.width, z: cur.z + nz * this.width });
-      this.wallSegmentsInner.push({ x: cur.x - nx * this.width, z: cur.z - nz * this.width });
+      this.wallSegmentsOuter.push({ x: cur.x + nx * w, z: cur.z + nz * w });
+      this.wallSegmentsInner.push({ x: cur.x - nx * w, z: cur.z - nz * w });
     }
 
     for (let i = 0; i < n; i++) {
@@ -218,8 +304,9 @@ const Track = {
       for (let i = 0; i < n; i++) {
         const cur = this.pathPoints[i];
         const { nx, nz } = this._segNorm[i];
-        const inner = side * this.width;
-        const outer = side * (this.width + curbWidth);
+        const w = this.widthAt(i);
+        const inner = side * w;
+        const outer = side * (w + curbWidth);
         verts.push(cur.x + nx * inner, 0.05, cur.z + nz * inner);
         verts.push(cur.x + nx * outer, curbHeight, cur.z + nz * outer);
         const isRed = (Math.floor(i / 2) % 2 === 0);
@@ -260,12 +347,13 @@ const Track = {
       const verts = [];
       const colors = [];
       const idx = [];
-      const wallOff1 = side * (this.width + curbWidth);
-      const wallOff2 = side * (this.width + curbWidth + wallThickness);
 
       for (let i = 0; i < n; i++) {
         const cur = this.pathPoints[i];
         const { nx, nz } = this._segNorm[i];
+        const w = this.widthAt(i);
+        const wallOff1 = side * (w + curbWidth);
+        const wallOff2 = side * (w + curbWidth + wallThickness);
         const xi1 = cur.x + nx * wallOff1, zi1 = cur.z + nz * wallOff1;
         const xi2 = cur.x + nx * wallOff2, zi2 = cur.z + nz * wallOff2;
         verts.push(xi1, 0.15, zi1);
@@ -300,7 +388,7 @@ const Track = {
         const idx2 = i % n;
         const cur = this.pathPoints[idx2];
         const { nx, nz } = this._segNorm[idx2];
-        const off = side * (this.width + 1.4 + 0.6);
+        const off = side * (this.widthAt(idx2) + 1.4 + 0.6);
         pts.push(new THREE.Vector3(cur.x + nx * off, wallHeight + 0.05, cur.z + nz * off));
       }
       const geo = new THREE.BufferGeometry().setFromPoints(pts);
@@ -312,7 +400,7 @@ const Track = {
     for (let i = 0; i < n; i++) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
-      const off = this.width;
+      const off = this.widthAt(i);
       this.wallSegmentsOuter.push({ x: cur.x + nx * off, z: cur.z + nz * off });
       this.wallSegmentsInner.push({ x: cur.x - nx * off, z: cur.z - nz * off });
     }
@@ -336,7 +424,8 @@ const Track = {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(this.width * 0.6, 0.5);
 
-    const geo = new THREE.PlaneGeometry(this.width * 2, 3.5);
+    const startW = this.widthAt(0);
+    const geo = new THREE.PlaneGeometry(startW * 2, 3.5);
     const mat = new THREE.MeshBasicMaterial({ map: tex });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
@@ -345,7 +434,7 @@ const Track = {
     m.rotation.z = angle;
     this.group.add(m);
 
-    this._buildArch(p.x, p.z, angle);
+    this._buildArch(p.x, p.z, angle, startW);
 
     this.startAngle = angle;
     this.startX = p.x;
@@ -356,15 +445,16 @@ const Track = {
     this.startNZ = nz;
   },
 
-  _buildArch(x, z, angle) {
+  _buildArch(x, z, angle, w) {
+    const archW = w || this.width;
     const archMat = new THREE.MeshLambertMaterial({ color: 0xe53935 });
     const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 7, 10), archMat);
     const post2 = post1.clone();
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(this.width * 2.4, 0.8, 0.8), archMat);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(archW * 2.4, 0.8, 0.8), archMat);
 
     const grp = new THREE.Group();
-    post1.position.set(-this.width - 1, 3.5, 0);
-    post2.position.set(this.width + 1, 3.5, 0);
+    post1.position.set(-archW - 1, 3.5, 0);
+    post2.position.set(archW + 1, 3.5, 0);
     beam.position.set(0, 7, 0);
     grp.add(post1, post2, beam);
 
@@ -378,10 +468,10 @@ const Track = {
     ctx.fillStyle = '#c62828';
     ctx.font = 'bold 80px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🏁  START / FINISH  🏁', 512, 64);
+    ctx.fillText('🏁  GRAND CIRCUIT  🏁', 512, 64);
     const bannerTex = new THREE.CanvasTexture(c);
     const banner = new THREE.Mesh(
-      new THREE.BoxGeometry(this.width * 2.1, 1.6, 0.3),
+      new THREE.BoxGeometry(archW * 2.1, 1.6, 0.3),
       new THREE.MeshBasicMaterial({ map: bannerTex })
     );
     banner.position.set(0, 8.1, 0);
@@ -408,15 +498,85 @@ const Track = {
     }
     const grassTex = new THREE.CanvasTexture(c);
     grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.repeat.set(40, 40);
+    grassTex.repeat.set(80, 80);
 
-    const geo = new THREE.PlaneGeometry(1200, 1200, 1, 1);
+    // 大型化: 2400x2400m に拡大
+    const geo = new THREE.PlaneGeometry(2400, 2400, 1, 1);
     const mat = new THREE.MeshLambertMaterial({ map: grassTex });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
     m.position.y = -0.05;
     m.receiveShadow = true;
     scene.add(m);
+
+    // 遠景の山々 (4方向)
+    this._buildMountains(scene);
+    // 砂エリア (色違いの地面区画)
+    this._buildSandPatches(scene);
+  },
+
+  _buildMountains(scene) {
+    const mountainMat = new THREE.MeshLambertMaterial({ color: 0x6b8e7f });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+    const positions = [
+      { x:    0, z:  900, s: 1.0 },
+      { x:  900, z:    0, s: 1.2 },
+      { x:    0, z: -900, s: 1.1 },
+      { x: -900, z:    0, s: 1.0 },
+      { x:  650, z:  650, s: 0.8 },
+      { x: -650, z: -650, s: 0.9 },
+      { x: -700, z:  700, s: 0.85 },
+      { x:  700, z: -700, s: 0.95 },
+    ];
+    for (const p of positions) {
+      const grp = new THREE.Group();
+      const peaks = 3 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < peaks; k++) {
+        const h = (60 + Math.random() * 80) * p.s;
+        const r = (50 + Math.random() * 50) * p.s;
+        const mountain = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), mountainMat);
+        mountain.position.set((Math.random() - 0.5) * 200, h / 2 - 5, (Math.random() - 0.5) * 200);
+        grp.add(mountain);
+        if (h > 100) {
+          const snow = new THREE.Mesh(new THREE.ConeGeometry(r * 0.35, h * 0.3, 8), snowMat);
+          snow.position.set(mountain.position.x, mountain.position.y + h * 0.4, mountain.position.z);
+          grp.add(snow);
+        }
+      }
+      grp.position.set(p.x, 0, p.z);
+      scene.add(grp);
+    }
+  },
+
+  _buildSandPatches(scene) {
+    // 視覚的に多彩にするための砂・畑風パッチ
+    const sandTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#e6d5a3'; ctx.fillRect(0, 0, 128, 128);
+      for (let i = 0; i < 600; i++) {
+        ctx.fillStyle = `rgba(${180 + Math.random()*40},${160 + Math.random()*30},${110 + Math.random()*30},${Math.random() * 0.6})`;
+        ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(6, 6);
+      return t;
+    })();
+    const patches = [
+      { x:  500, z:  300, w: 200, h: 150 },
+      { x: -500, z: -350, w: 250, h: 180 },
+      { x:  200, z: -500, w: 180, h: 220 },
+      { x: -300, z:  500, w: 200, h: 160 },
+    ];
+    const mat = new THREE.MeshLambertMaterial({ map: sandTex });
+    for (const p of patches) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(p.x, -0.02, p.z);
+      scene.add(m);
+    }
   },
 
   _buildSkybox(scene) {
@@ -441,17 +601,19 @@ const Track = {
       ctx.fill();
     }
     const tex = new THREE.CanvasTexture(c);
-    const skyGeo = new THREE.SphereGeometry(600, 32, 16);
+    const skyGeo = new THREE.SphereGeometry(1100, 32, 16);
     const skyMat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false });
     const sky = new THREE.Mesh(skyGeo, skyMat);
     scene.add(sky);
     scene.background = new THREE.Color(0x90caf9);
-    scene.fog = new THREE.Fog(0xcfe6ff, 250, 700);
+    // 広大化に合わせフォグも遠くまで
+    scene.fog = new THREE.Fog(0xcfe6ff, 450, 1100);
   },
 
   _buildItemBoxes() {
     const n = this.pathPoints.length;
-    const step = Math.floor(n / 8);
+    // 多くの周回距離になるためアイテムボックスを増やす (8→14グループ)
+    const step = Math.max(4, Math.floor(n / 14));
 
     const colors = ['#FF5252', '#FFD740', '#69F0AE', '#40C4FF', '#E040FB', '#FFAB40'];
     const makeFace = (color) => {
@@ -481,8 +643,9 @@ const Track = {
     for (let i = 4; i < n; i += step) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
 
-      const offsets = [-this.width * 0.55, 0, this.width * 0.55];
+      const offsets = [-w * 0.55, 0, w * 0.55];
       offsets.forEach(off => {
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
@@ -512,7 +675,8 @@ const Track = {
 
   _buildBoostPads() {
     const n = this.pathPoints.length;
-    const positions = [0.06, 0.20, 0.34, 0.48, 0.62, 0.78, 0.92];
+    // 多くの直線部分にブーストパッドを配置 (7→13箇所)
+    const positions = [0.04, 0.10, 0.16, 0.24, 0.36, 0.44, 0.54, 0.60, 0.66, 0.74, 0.82, 0.90, 0.96];
     const padTex = this._makeBoostPadTexture();
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -522,8 +686,9 @@ const Track = {
       const dx = next.x - cur.x, dz = next.z - cur.z;
       const len = Math.hypot(dx, dz) || 1;
       const dirX = dx / len, dirZ = dz / len;
+      const w = this.widthAt(idx);
 
-      for (const off of [-this.width * 0.35, this.width * 0.35]) {
+      for (const off of [-w * 0.35, w * 0.35]) {
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
         const geo = new THREE.PlaneGeometry(6, 8);
@@ -582,7 +747,8 @@ const Track = {
   // ===== ジャンプ盤 (大型化、両側にスロープ感) =====
   _buildJumpPads() {
     const n = this.pathPoints.length;
-    const positions = [0.18, 0.45, 0.72];
+    // 大型コースに合わせジャンプ盤も増設 (3→6箇所)
+    const positions = [0.12, 0.28, 0.42, 0.56, 0.70, 0.86];
     const padTex = this._makeJumpPadTexture();
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -665,20 +831,24 @@ const Track = {
 
   // ===== ショートカット (内側を攻めるとアスファルト化された近道) =====
   _buildShortcuts() {
-    // ヘアピン内側に短い直線ショートカット（弱めに減速かつアスファルト的扱い）
-    // 簡易実装: 2箇所の特定セグメントで内側 path 上に shortcut zone を定義
+    // ヘアピン内側に複数の戦略的ショートカット
     const n = this.pathPoints.length;
     const shortcuts = [
-      // {fromIdx, toIdx} : 内側を斜めに突っ切る (進行方向)
-      { from: Math.floor(n * 0.08), to: Math.floor(n * 0.16) },
-      { from: Math.floor(n * 0.40), to: Math.floor(n * 0.50) },
+      // セクター2 S字の内側
+      { from: Math.floor(n * 0.22), to: Math.floor(n * 0.30) },
+      // セクター3 ヘアピン
+      { from: Math.floor(n * 0.42), to: Math.floor(n * 0.52) },
+      // セクター4 バンク内側
+      { from: Math.floor(n * 0.62), to: Math.floor(n * 0.68) },
+      // セクター5 山岳ループ内側
+      { from: Math.floor(n * 0.82), to: Math.floor(n * 0.90) },
     ];
     for (const sc of shortcuts) {
       const a = this.pathPoints[sc.from];
       const b = this.pathPoints[sc.to];
       const an = this._segNorm[sc.from];
       const bn = this._segNorm[sc.to];
-      const off = -this.width * 1.05; // 内側に少し外
+      const off = -this.widthAt(sc.from) * 1.05; // 内側に少し外
       const ax = a.x + an.nx * off, az = a.z + an.nz * off;
       const bx = b.x + bn.nx * off, bz = b.z + bn.nz * off;
       const cx = (ax + bx) / 2, cz = (az + bz) / 2;
@@ -741,10 +911,11 @@ const Track = {
     for (let i = 0; i < n; i += 2) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
 
       for (let side of [1, -1]) {
         if (Math.random() > 0.55) continue;
-        const off = (this.width + 12 + Math.random() * 40) * side;
+        const off = (w + 12 + Math.random() * 60) * side;
         const px = cur.x + nx * off + Utils.rand(-3, 3);
         const pz = cur.z + nz * off + Utils.rand(-3, 3);
         const trunk = new THREE.Mesh(trunkGeo, treeMat2);
@@ -757,14 +928,21 @@ const Track = {
       }
     }
 
+    // ===== セクターサインボード (大型) =====
+    this._buildSectorSigns();
+    // ===== コースゲート/トンネル風アーチ (進行を盛り上げる) =====
+    this._buildGates();
+    // ===== 街灯ポール (高速ストレート区間) =====
+    this._buildStreetLamps();
+
     const p = this.pathPoints[0];
     const standColors = [0xffffff, 0xe53935, 0x1976d2, 0xfbc02d];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const mat = new THREE.MeshLambertMaterial({ color: standColors[i % standColors.length] });
       const stand = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 3), mat);
       const { nx, nz } = this._segNorm[0];
-      const off = this.width + 12;
-      stand.position.set(p.x + nx * off + (i - 2.5) * 11, 2, p.z + nz * off);
+      const off = this.widthAt(0) + 12;
+      stand.position.set(p.x + nx * off + (i - 4.5) * 11, 2, p.z + nz * off);
       stand.rotation.y = this.startAngle;
       this.group.add(stand);
 
@@ -792,9 +970,10 @@ const Track = {
     for (let i = 0; i < n; i += 8) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
       for (const side of [1, -1]) {
         if (Math.random() > 0.5) continue;
-        const off = (this.width + 4) * side;
+        const off = (w + 4) * side;
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
         const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 5, 6);
@@ -811,6 +990,136 @@ const Track = {
         flag.position.set(px + 1.1 * (side === 1 ? 1 : -1), 4.3, pz);
         flag.rotation.y = Math.PI / 2;
         this.group.add(flag);
+      }
+    }
+  },
+
+  // セクター名サイン
+  _buildSectorSigns() {
+    const n = this.pathPoints.length;
+    const signs = [
+      { t: 0.18, text: 'SECTOR 2  S-CURVES',  color: '#1976d2' },
+      { t: 0.36, text: 'SECTOR 3  HAIRPINS',  color: '#e53935' },
+      { t: 0.55, text: 'SECTOR 4  HIGH BANK', color: '#7b1fa2' },
+      { t: 0.78, text: 'SECTOR 5  MOUNTAIN',  color: '#2e7d32' },
+    ];
+    for (const s of signs) {
+      const i = Math.floor(s.t * n);
+      const cur = this.pathPoints[i];
+      const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = s.color; ctx.fillRect(0, 0, 512, 128);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, 496, 112);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 48px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(s.text, 256, 64);
+      const tex = new THREE.CanvasTexture(c);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), mat);
+      const off = w + 9;
+      sign.position.set(cur.x + nx * off, 5.5, cur.z + nz * off);
+      sign.rotation.y = Math.atan2(nx, nz) + Math.PI / 2;
+      this.group.add(sign);
+      // ポール
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x666 });
+      for (const pOff of [-7, 7]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 7, 8), poleMat);
+        pole.position.set(cur.x + nx * off + pOff * Math.cos(Math.atan2(nx, nz)), 3.5, cur.z + nz * off + pOff * Math.sin(Math.atan2(nx, nz)));
+        // 単純化: ポールはサインの真下付近に2本
+        pole.position.x = cur.x + nx * off;
+        pole.position.z = cur.z + nz * off;
+        pole.position.y = 3.5;
+        this.group.add(pole);
+        break;
+      }
+    }
+  },
+
+  // 進行を盛り上げるゲート/アーチ (装飾的な「くぐる門」)
+  _buildGates() {
+    const n = this.pathPoints.length;
+    const positions = [0.14, 0.32, 0.50, 0.68, 0.85];
+    const colors = [0x42a5f5, 0xff7043, 0xab47bc, 0x66bb6a, 0xffa726];
+    for (let k = 0; k < positions.length; k++) {
+      const t = positions[k];
+      const i = Math.floor(t * n);
+      const cur = this.pathPoints[i];
+      const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
+      const angle = Math.atan2(this._segDir[i].ux, this._segDir[i].uz);
+
+      const grp = new THREE.Group();
+      const archMat = new THREE.MeshLambertMaterial({ color: colors[k] });
+      // 2本の柱
+      const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 9, 10), archMat);
+      const post2 = post1.clone();
+      post1.position.set(-w - 1.5, 4.5, 0);
+      post2.position.set(w + 1.5, 4.5, 0);
+      // 上部ビーム
+      const beam = new THREE.Mesh(new THREE.BoxGeometry((w + 1.5) * 2 + 0.8, 0.9, 0.9), archMat);
+      beam.position.set(0, 9, 0);
+      // 装飾の小さなトロフィー風球
+      const ballMat = new THREE.MeshLambertMaterial({ color: 0xffd54f });
+      const ball1 = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 8), ballMat);
+      const ball2 = ball1.clone();
+      ball1.position.set(-w - 1.5, 9.5, 0);
+      ball2.position.set(w + 1.5, 9.5, 0);
+      grp.add(post1, post2, beam, ball1, ball2);
+
+      // 番号バナー
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 128;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, 128);
+      g.addColorStop(0, '#fff8e1'); g.addColorStop(1, '#ffca28');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 512, 128);
+      ctx.fillStyle = '#b71c1c';
+      ctx.font = 'bold 80px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(`CHECKPOINT ${k + 1}`, 256, 64);
+      const bTex = new THREE.CanvasTexture(c);
+      const banner = new THREE.Mesh(
+        new THREE.BoxGeometry((w + 1.5) * 2, 1.6, 0.3),
+        new THREE.MeshBasicMaterial({ map: bTex })
+      );
+      banner.position.set(0, 10.2, 0);
+      grp.add(banner);
+
+      grp.position.set(cur.x, 0, cur.z);
+      grp.rotation.y = angle - Math.PI / 2;
+      this.group.add(grp);
+    }
+  },
+
+  // ストレート区間の街灯
+  _buildStreetLamps() {
+    const n = this.pathPoints.length;
+    for (let i = 0; i < n; i += 6) {
+      const cur = this.pathPoints[i];
+      const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
+      for (const side of [1, -1]) {
+        const off = (w + 2.5) * side;
+        const px = cur.x + nx * off;
+        const pz = cur.z + nz * off;
+        const poleMat = new THREE.MeshLambertMaterial({ color: 0x37474f });
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.5, 8), poleMat);
+        pole.position.set(px, 2.75, pz);
+        this.group.add(pole);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0xffee58 }));
+        head.position.set(px - nx * 0.6 * side, 5.4, pz - nz * 0.6 * side);
+        this.group.add(head);
+        // 横アーム
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), poleMat);
+        arm.position.set(px - nx * 0.3 * side, 5.4, pz - nz * 0.3 * side);
+        arm.rotation.y = Math.atan2(nx, nz) + Math.PI / 2;
+        this.group.add(arm);
       }
     }
   },
@@ -857,8 +1166,9 @@ const Track = {
   },
 
   isOffTrack(x, z, hintIdx = -1) {
-    const { dist } = this.getProgress(x, z, hintIdx);
-    if (dist <= this.width) return false;
+    const prog = this.getProgress(x, z, hintIdx);
+    const w = this.widthAt(prog.index);
+    if (prog.dist <= w) return false;
     if (this.isOnShortcut(x, z)) return false; // ショートカットはOK
     return true;
   },
@@ -870,7 +1180,8 @@ const Track = {
     const { nx, nz } = this._segNorm[prog.index];
     const rx = x - cur.x, rz = z - cur.z;
     const lateral = rx * nx + rz * nz;
-    const limit = this.width - radius;
+    const w = this.widthAt(prog.index);
+    const limit = w - radius;
     if (Math.abs(lateral) > limit) {
       // ショートカット上ならスキップ
       if (this.isOnShortcut(x, z)) {

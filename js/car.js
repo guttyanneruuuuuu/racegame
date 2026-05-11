@@ -626,8 +626,8 @@ class Car {
     const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
     const n = Track.pathPoints.length;
 
-    // ラップ判定 (前→後 越境)
-    if (this.lastProgressIdx > n * 0.7 && prog.index < n * 0.2) {
+    // ラップ判定 (前→後 越境) - コース大型化に伴い境界をやや緩く
+    if (this.lastProgressIdx > n * 0.75 && prog.index < n * 0.15) {
       this.lap++;
       const lapMs = now - this.lapStartTime;
       this.lastLap = lapMs;
@@ -641,7 +641,7 @@ class Car {
           showToast(`LAP ${this.lap + 1} / ${Game.totalLaps}`, 1200);
         }
       }
-    } else if (this.lastProgressIdx < n * 0.2 && prog.index > n * 0.7) {
+    } else if (this.lastProgressIdx < n * 0.15 && prog.index > n * 0.75) {
       if (this.lap > 0) this.lap--;
     }
     this.lastProgressIdx = prog.index;

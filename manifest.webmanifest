@@ -1,0 +1,13 @@
+{
+  "name": "GyroRush - スマホジャイロレース",
+  "short_name": "GyroRush",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#FFB347",
+  "theme_color": "#FF7043",
+  "description": "ジャイロセンサーで操作する3Dマルチプレイヤーレースゲーム",
+  "icons": [
+    { "src": "favicon.png", "sizes": "16x16", "type": "image/png" }
+  ]
+}

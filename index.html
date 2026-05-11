@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFB347" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>GyroRush - スマホジャイロレース</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 縦画面警告（スマホで縦の時） -->
+  <div id="rotate-hint">
+    <div class="rotate-icon">📱↻</div>
+    <h2>スマホを横向きにしてね！</h2>
+    <p>横向きでプレイしてください</p>
+  </div>
+
+  <!-- ===================== タイトル画面 ===================== -->
+  <div id="screen-title" class="screen active">
+    <div class="title-bg"></div>
+    <div class="title-content">
+      <h1 class="game-title">
+        <span class="title-main">GYRO RUSH</span>
+        <span class="title-sub">ジャイロでぶっちぎれ！</span>
+      </h1>
+      <div class="name-input-wrap">
+        <label>プレイヤー名</label>
+        <input type="text" id="player-name" maxlength="10" placeholder="名前を入れてね" />
+      </div>
+      <div class="car-select">
+        <label>マシンを選ぼう</label>
+        <div class="car-options" id="car-options">
+          <div class="car-option active" data-color="#FF3B3B" style="--c:#FF3B3B"></div>
+          <div class="car-option" data-color="#2EA8FF" style="--c:#2EA8FF"></div>
+          <div class="car-option" data-color="#FFD23F" style="--c:#FFD23F"></div>
+          <div class="car-option" data-color="#3DDB7E" style="--c:#3DDB7E"></div>
+          <div class="car-option" data-color="#B265FF" style="--c:#B265FF"></div>
+          <div class="car-option" data-color="#FF8AC4" style="--c:#FF8AC4"></div>
+        </div>
+      </div>
+      <div class="title-buttons">
+        <button class="btn btn-primary" id="btn-create-room">部屋を作る</button>
+        <button class="btn btn-secondary" id="btn-join-room">部屋に入る</button>
+        <button class="btn btn-ghost" id="btn-solo">ひとりで練習</button>
+      </div>
+      <p class="hint">スマホ横向き + ジャイロでハンドル操作！</p>
+    </div>
+  </div>
+
+  <!-- ===================== ルームコード入力 ===================== -->
+  <div id="screen-join" class="screen">
+    <div class="panel">
+      <h2>部屋コードを入力</h2>
+      <input type="text" id="room-code-input" placeholder="例: ABC123" maxlength="6" />
+      <div class="row">
+        <button class="btn btn-primary" id="btn-do-join">入る</button>
+        <button class="btn btn-ghost" id="btn-join-back">戻る</button>
+      </div>
+      <p id="join-error" class="error-text"></p>
+    </div>
+  </div>
+
+  <!-- ===================== ロビー ===================== -->
+  <div id="screen-lobby" class="screen">
+    <div class="panel lobby-panel">
+      <h2>ロビー</h2>
+      <div class="room-code-display">
+        部屋コード: <span id="room-code-show">------</span>
+        <button class="btn-mini" id="btn-copy-code">コピー</button>
+      </div>
+      <div id="player-list" class="player-list"></div>
+      <div class="lobby-actions">
+        <button class="btn btn-primary" id="btn-start-race">レース開始！</button>
+        <button class="btn btn-ghost" id="btn-leave-room">退出</button>
+      </div>
+      <p class="hint">最大6人まで参加できます。ホストが「レース開始！」を押すとスタート。</p>
+    </div>
+  </div>
+
+  <!-- ===================== ゲーム画面 ===================== -->
+  <div id="screen-game" class="screen">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div class="hud-top">
+        <div class="hud-lap">LAP <span id="hud-lap">1/3</span></div>
+        <div class="hud-pos">順位 <span id="hud-pos">1/1</span></div>
+        <div class="hud-time" id="hud-time">00:00.00</div>
+      </div>
+      <div class="hud-speed">
+        <div class="speed-val" id="hud-speed">0</div>
+        <div class="speed-unit">km/h</div>
+      </div>
+      <div class="hud-item" id="hud-item-slot">
+        <div class="item-box">?</div>
+      </div>
+      <div class="hud-mini" id="hud-minimap"></div>
+      <div class="hud-standings" id="hud-standings"></div>
+    </div>
+
+    <!-- 操作ボタン -->
+    <div class="touch-controls">
+      <button class="ctrl-btn ctrl-brake" id="ctrl-brake">◀ BRAKE</button>
+      <button class="ctrl-btn ctrl-item" id="ctrl-item">★ アイテム</button>
+      <button class="ctrl-btn ctrl-accel" id="ctrl-accel">ACCEL ▶</button>
+    </div>
+
+    <!-- ジャイロキャリブレーション -->
+    <button class="btn-recalibrate" id="btn-recalibrate">⟲ ジャイロ再設定</button>
+
+    <!-- ステアインジケーター -->
+    <div class="steer-indicator" id="steer-indicator">
+      <div class="steer-bar"><div class="steer-fill" id="steer-fill"></div></div>
+    </div>
+
+    <!-- カウントダウン -->
+    <div id="countdown" class="countdown"></div>
+
+    <!-- フィニッシュ -->
+    <div id="finish-overlay" class="finish-overlay">
+      <div class="finish-card">
+        <h2 id="finish-title">FINISH!</h2>
+        <div id="finish-results" class="finish-results"></div>
+        <button class="btn btn-primary" id="btn-back-lobby">ロビーに戻る</button>
+      </div>
+    </div>
+
+    <!-- 通知 -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <!-- ジャイロ許可ボタン（iOS用） -->
+  <div id="gyro-permission" class="gyro-perm">
+    <div class="panel">
+      <h2>ジャイロを有効にする</h2>
+      <p>スマホを傾けて操作するため、モーションセンサーへのアクセス許可が必要です。</p>
+      <button class="btn btn-primary" id="btn-enable-gyro">許可する</button>
+      <button class="btn btn-ghost" id="btn-skip-gyro">スキップ（タッチで操作）</button>
+    </div>
+  </div>
+
+  <!-- ライブラリ -->
+  <script src="vendor/three.min.js"></script>
+  <script src="vendor/peerjs.min.js"></script>
+
+  <!-- ゲームスクリプト -->
+  <script src="js/utils.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/track.js"></script>
+  <script src="js/car.js"></script>
+  <script src="js/items.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

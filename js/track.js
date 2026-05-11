@@ -30,18 +30,22 @@ const Track = {
 
     // 制御点（より複雑な形状へ変更）
     this.controlPoints = [
-      { x:    0, z:  200 },
-      { x:  120, z:  180 },
-      { x:  220, z:   60 },
-      { x:  180, z:  -40 },
-      { x:  250, z: -120 }, // 張り出し
-      { x:  100, z: -220 },
-      { x:    0, z: -150 }, // くびれ
-      { x: -100, z: -250 },
-      { x: -220, z: -100 },
-      { x: -180, z:    0 },
-      { x: -260, z:  100 }, // 張り出し
-      { x: -120, z:  220 },
+      { x:    0, z:  230 },
+      { x:  105, z:  220 },
+      { x:  190, z:  135 },
+      { x:  250, z:   35 },
+      { x:  210, z:  -40 },  // S字入口
+      { x:  275, z: -120 },
+      { x:  165, z: -215 },
+      { x:   50, z: -180 },  // 中央くびれ
+      { x:  -40, z: -265 },
+      { x: -145, z: -225 },
+      { x: -250, z: -120 },
+      { x: -195, z:  -20 },  // イン側ヘアピン
+      { x: -280, z:   85 },
+      { x: -180, z:  170 },
+      { x: -105, z:  255 },
+      { x:   10, z:  250 },
     ];
 
     // Catmull-Rom補間で滑らかパス生成
@@ -503,11 +507,21 @@ const Track = {
 
   checkGimmicks(x, z) {
     for (const p of this.boostPads) {
-      if (Math.abs(x - p.x) < p.width / 2 && Math.abs(z - p.z) < p.length / 2) return 'boost';
+      if (this._isPointInPad(x, z, p)) return 'boost';
     }
     for (const p of this.jumpPads) {
-      if (Math.abs(x - p.x) < p.width / 2 && Math.abs(z - p.z) < p.length / 2) return 'jump';
+      if (this._isPointInPad(x, z, p)) return 'jump';
     }
     return null;
-  }
+  },
+
+  _isPointInPad(x, z, p) {
+    const dx = x - p.x;
+    const dz = z - p.z;
+    const s = Math.sin(p.angle);
+    const c = Math.cos(p.angle);
+    const localFwd = dx * s + dz * c;
+    const localSide = dx * c - dz * s;
+    return Math.abs(localFwd) <= p.length * 0.5 && Math.abs(localSide) <= p.width * 0.5;
+  },
 };

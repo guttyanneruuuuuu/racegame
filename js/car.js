@@ -40,6 +40,7 @@ class Car {
     this.lockedTimer = 0;
     this.wallHitFlash = 0;
     this.driftAmount = 0;     // ドリフトの量（横スリップ）
+    this.gimmickCooldown = 0;
 
     // アイテム
     this.item = null;
@@ -277,18 +278,21 @@ class Car {
     if (this.invincibleTimer > 0) this.invincibleTimer -= dt;
     if (this.squishTimer > 0) this.squishTimer -= dt;
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
+    if (this.gimmickCooldown > 0) this.gimmickCooldown -= dt;
 
     this._integratePos(dt);
     this._applyGravity(dt);
 
     // ギミック判定
-    if (!this.isJumping) {
+    if (!this.isJumping && this.gimmickCooldown <= 0) {
       const gimmick = Track.checkGimmicks(this.x, this.z);
       if (gimmick === 'boost') {
         this.applyBoost(1.2);
+        this.gimmickCooldown = 0.45;
       } else if (gimmick === 'jump') {
         this.vy = CarPhysics.JUMP_FORCE;
         this.isJumping = true;
+        this.gimmickCooldown = 0.8;
       }
     }
 

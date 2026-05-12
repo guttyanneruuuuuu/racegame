@@ -1,3 +1,38 @@
+// ============= ゲート向き補正 (Track.generate 前に実行) =============
+// track.js 内のゲートはローカルX軸がゲートの横幅なので、rotation.y は
+// 進行方向 angle そのものにする。angle - PI/2 だと道路と平行に立つ。
+(function fixGateOrientationBeforeInit() {
+  if (!window.Track || Track._gateOrientationFixed) return;
+  Track._gateOrientationFixed = true;
+
+  if (typeof Track._buildArch === 'function') {
+    const originalBuildArch = Track._buildArch.bind(Track);
+    Track._buildArch = function (x, z, angle, w) {
+      originalBuildArch(x, z, angle, w);
+      const grp = this.group && this.group.children[this.group.children.length - 1];
+      if (grp && grp.isGroup) grp.rotation.y = angle;
+    };
+  }
+
+  if (typeof Track._buildGates === 'function') {
+    const originalBuildGates = Track._buildGates.bind(Track);
+    Track._buildGates = function () {
+      const before = this.group ? this.group.children.length : 0;
+      originalBuildGates();
+      if (!this.group || !this.pathPoints || !this._segDir) return;
+
+      const positions = [0.14, 0.32, 0.50, 0.68, 0.85];
+      for (let k = 0; k < positions.length; k++) {
+        const gate = this.group.children[before + k];
+        if (!gate || !gate.isGroup) continue;
+        const i = Math.floor(positions[k] * this.pathPoints.length);
+        const dir = this._segDir[i];
+        if (dir) gate.rotation.y = Math.atan2(dir.ux, dir.uz);
+      }
+    };
+  }
+})();
+
 // ============= エントリポイント =============
 window.addEventListener('load', () => {
   // UI初期化
@@ -15,6 +50,22 @@ window.addEventListener('load', () => {
     if (typeof GameExt !== 'undefined' && GameExt.install) GameExt.install();
     if (typeof UIExt !== 'undefined' && UIExt.install) UIExt.install();
     if (typeof ItemExt !== 'undefined' && ItemExt.hookGameUseItem) ItemExt.hookGameUseItem();
+
+    // PartyExt は後付けファイルとして読み込み、6人プレイ向けの
+    // パーティゲート/追加アイテム/エモート/ジャイロ補助HUDを差し込む。
+    const installPartyExt = () => {
+      if (typeof PartyExt !== 'undefined' && PartyExt.install) PartyExt.install();
+    };
+    if (typeof PartyExt !== 'undefined') {
+      installPartyExt();
+    } else {
+      const partyScript = document.createElement('script');
+      partyScript.src = 'js/party_ext.js';
+      partyScript.onload = installPartyExt;
+      partyScript.onerror = () => console.warn('party_ext.js load failed');
+      document.body.appendChild(partyScript);
+    }
+
     // BGM は SFX の AudioContext が初期化されるのを待つ
     const initBgm = () => {
       if (typeof BGM !== 'undefined' && BGM.init && SFX && SFX.ctx) {
@@ -49,7 +100,7 @@ window.addEventListener('load', () => {
   });
   Net.on('startRace', async (seed, startTime) => {
     const players = Array.from(Net.players.values()).map(p => ({
-      id: p.id, name: p.name, color: p.color, isAI: false,
+      id: p.id, name: p.name, color: p.color, carType: p.carType, isAI: false,
     }));
     await GameUI._beginRace(players, Net.myId, 'multi');
     // ネットワーク同期カウントダウン

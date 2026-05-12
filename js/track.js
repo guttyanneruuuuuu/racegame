@@ -1189,8 +1189,9 @@ const Track = {
       }
       const sign = Math.sign(lateral);
       const excess = Math.abs(lateral) - limit;
-      const newX = x - sign * nx * excess;
-      const newZ = z - sign * nz * excess;
+      const inset = 0.06;
+      const newX = x - sign * nx * (excess + inset);
+      const newZ = z - sign * nz * (excess + inset);
       // 壁外向き法線 (車の押し戻す向きは内側 = -sign*n)
       return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral };
     }

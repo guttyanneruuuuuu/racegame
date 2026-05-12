@@ -13,6 +13,8 @@ const Input = {
   gyroLastSampleTime: 0,
   gyroSamples: [],     // 自動キャリブレーション用に最初の数サンプルを記録
   _smoothed: 0,        // ローパスフィルタ後
+  _gyroOrientHandler: null,
+  _fallbackLandscapeSign: 1,
 
   // ジャイロ感度設定
   sensitivity: 18,
@@ -42,6 +44,7 @@ const Input = {
     this.gyroSamples = [];
     this.gyroLastSampleTime = 0;
     this._smoothed = 0;
+    this._fallbackLandscapeSign = 1;
   },
 
   _setupAutoCalibrate() {
@@ -53,6 +56,7 @@ const Input = {
           this.gyroSamples = [];
           this.gyroLastSampleTime = 0;
           this._smoothed = 0;
+          this._fallbackLandscapeSign = 1;
         });
       } catch (_) {}
     }
@@ -61,6 +65,7 @@ const Input = {
       this.gyroSamples = [];
       this.gyroLastSampleTime = 0;
       this._smoothed = 0;
+      this._fallbackLandscapeSign = 1;
     });
   },
 
@@ -208,12 +213,15 @@ const Input = {
         return false;
       }
     }
-    window.addEventListener('deviceorientation', this._onOrient.bind(this));
+    if (!this._gyroOrientHandler) this._gyroOrientHandler = this._onOrient.bind(this);
+    window.removeEventListener('deviceorientation', this._gyroOrientHandler);
+    window.addEventListener('deviceorientation', this._gyroOrientHandler);
     this.gyroEnabled = true;
     this.gyroCalibrated = false;
     this.gyroSamples = [];
     this.gyroLastSampleTime = 0;
     this._smoothed = 0;
+    this._fallbackLandscapeSign = 1;
     return true;
   },
 
@@ -240,9 +248,11 @@ const Input = {
       val = -b;
     } else if (fallbackLandscape) {
       // 一部端末でangleが0固定でも、横向き表示ならbeta系を使う
-      // 横向き時のgammaは概ね +90/-90 になりやすいので、その符号で端末の左右向きを推定
-      // その向きに合わせてbetaの符号を反転し、デフォルト姿勢での片寄りドリフトを防ぐ
-      val = g >= 0 ? b : -b;
+      // 符号はイベントごとに反転させず、向き推定結果を固定して急反転を防ぐ
+      if (orientationType.includes('secondary')) this._fallbackLandscapeSign = -1;
+      else if (orientationType.includes('primary')) this._fallbackLandscapeSign = 1;
+      else if (Math.abs(g) > 8) this._fallbackLandscapeSign = g >= 0 ? 1 : -1;
+      val = b * this._fallbackLandscapeSign;
     } else {
       val = g;
     }
@@ -264,6 +274,11 @@ const Input = {
     }
 
     let diff = val - this.gyroBase;
+    // ゆっくり基準を追従して、長時間プレイ時のドリフトを抑える
+    if (this.gyroCalibrated && Math.abs(diff) < this.deadzone * 2.5) {
+      this.gyroBase = Utils.lerp(this.gyroBase, val, 0.015);
+      diff = val - this.gyroBase;
+    }
     // デッドゾーン
     if (Math.abs(diff) < this.deadzone) diff = 0;
     else diff -= Math.sign(diff) * this.deadzone;
@@ -295,6 +310,7 @@ const Input = {
     this.gyroSamples = [];
     this.gyroLastSampleTime = 0;
     this._smoothed = 0;
+    this._fallbackLandscapeSign = 1;
   },
 
   setSensitivity(deg) {

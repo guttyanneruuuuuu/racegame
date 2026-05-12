@@ -163,8 +163,15 @@ const Input = {
     let active = false;
     const setSteer = (cx) => {
       const dx = cx - window.innerWidth * 0.5;
-      const max = Math.min(200, window.innerWidth * 0.2);
-      this._touchSteer = Utils.clamp(dx / max, -1, 1);
+      const max = Math.min(260, window.innerWidth * 0.28);
+      const raw = Utils.clamp(dx / max, -1, 1);
+      const deadzone = 0.06;
+      if (Math.abs(raw) <= deadzone) {
+        this._touchSteer = 0;
+        return;
+      }
+      const eased = (Math.abs(raw) - deadzone) / (1 - deadzone);
+      this._touchSteer = Math.sign(raw) * Math.pow(eased, 0.85);
     };
     const onStart = (e) => {
       const t = e.touches ? e.touches[0] : e;
@@ -196,8 +203,8 @@ const Input = {
   update(dt) {
     if (this.gyroEnabled) return;
     const target = this._touchSteerActive ? this._touchSteer : this._keySteer;
-    const response = target === 0 ? 14 : 10;
-    const alpha = Utils.clamp(dt * response, 0.18, 0.65);
+    const response = target === 0 ? 18 : 13;
+    const alpha = Utils.clamp(dt * response, 0.22, 0.72);
     this.steer = Utils.lerp(this.steer, target, alpha);
     if (Math.abs(this.steer) < 0.001 && target === 0) this.steer = 0;
   },

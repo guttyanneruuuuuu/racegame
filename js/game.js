@@ -20,6 +20,7 @@ const Game = {
 
   _camShakeTime: 0,
   _camShakeAmp: 0,
+  _lastWallShakeTime: 0,
 
   // 順位変動通知用
   _prevRanks: new Map(),
@@ -163,9 +164,12 @@ const Game = {
       // 壁ヒットでカメラ揺れ
       const wallImpact = this.localCar.consumeWallImpact();
       if (wallImpact > 0) {
-        this._camShakeTime = 0.12 + wallImpact * 0.35;
-        this._camShakeAmp = wallImpact;
-        if (window.SFX) SFX.play('wall');
+        if (now - this._lastWallShakeTime > 180) {
+          this._camShakeTime = 0.04 + wallImpact * 0.12;
+          this._camShakeAmp = wallImpact * 0.3;
+          this._lastWallShakeTime = now;
+          if (window.SFX) SFX.play('wall');
+        }
       }
       // 逆走警告
       if (this.localCar.wrongWayTimer > 1.0) {

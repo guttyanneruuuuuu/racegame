@@ -390,44 +390,48 @@ class Car {
     const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
     if (wr.hit) {
       this.x = wr.x; this.z = wr.z;
-      // 進行方向ベクトル
       const fx = Math.sin(this.angle), fz = Math.cos(this.angle);
-      // 進行方向に対する壁内向き成分(正面衝突度)
-      const dotN = fx * (-wr.nx) + fz * (-wr.nz); // 壁内側に進んでいた量
-      // 接線方向 (壁に沿う) - 壁法線(wr.nx, wr.nz)は車を押し戻す向き
-      const tx = -wr.nz, tz = wr.nx;
-      const tangDot = fx * tx + fz * tz;
-      const tangSign = tangDot >= 0 ? 1 : -1;
-      // 速度の壁ノルマル成分は除去、接線成分は減衰しつつ保持 → 壁ハマり防止
-      const speedMag = this.speed;
-      const tangSpeed = speedMag * tangDot;
-      const tangPart = Math.abs(tangSpeed);
-      // 新速度: 接線方向に保存しつつ、正面衝突度に応じて減速
-      const slowFactor = Utils.clamp(1.0 - Math.abs(dotN) * 0.6, 0.25, 0.85);
-      const slideFactor = Utils.clamp(0.92 - Math.abs(dotN) * 0.28, 0.55, 0.92);
-      const fallbackSlide = tangSign * Math.min(Math.abs(speedMag) * 0.28, 7);
-      const nextSpeed = tangPart > 0.7 ? tangSpeed * slideFactor : fallbackSlide * slowFactor;
-      const minEscapeSlide = (2.2 + Math.abs(dotN) * 2.4) * tangSign;
-      this.speed = Math.abs(speedMag) < 0.75 ? minEscapeSlide : nextSpeed;
-      if (Math.abs(this.speed) < 1.8) this.speed = minEscapeSlide;
-      // 接線方向へ少し流して、壁際で止まり続ける状態を回避
-      const slideNudge = 0.04 + Math.min(0.18, tangPart * 0.01);
-      this.x += tx * tangSign * slideNudge;
-      this.z += tz * tangSign * slideNudge;
+      const dotN = Math.max(0, fx * (-wr.nx) + fz * (-wr.nz));
+      const segDir = Track._segDir[wr.index] || { ux: -wr.nz, uz: wr.nx };
+      let slideUx = segDir.ux;
+      let slideUz = segDir.uz;
+      if (fx * slideUx + fz * slideUz < 0) {
+        slideUx = -slideUx;
+        slideUz = -slideUz;
+      }
 
-      // 車体角度を壁の沿い方向に少し向き直す（ゴリ押し回避）
-      const slideAng = Math.atan2(tx * tangSign, tz * tangSign);
+      const slideAng = Math.atan2(slideUx, slideUz);
       const aDiff = Utils.angDiff(slideAng, this.angle);
-      // 強くぶつかったほど補正大きく
-      const turnFix = Utils.clamp(0.18 + Math.abs(dotN) * 0.55, 0.18, 0.72);
+      const entrySpeed = Math.abs(this.speed);
+      const keepSpeed = entrySpeed * Utils.clamp(0.84 - dotN * 0.22, 0.48, 0.84);
+      const wantsReverseSlide = this.speed < -0.5 || (brake && !accel && this.speed < 0);
+      let slideSpeed = wantsReverseSlide ? -keepSpeed : keepSpeed;
+      if (!wantsReverseSlide) {
+        if (accel) slideSpeed = Math.max(slideSpeed, 8.5 + dotN * 4.5);
+        else if (!brake) slideSpeed = Math.max(slideSpeed, 4.5);
+      } else {
+        slideSpeed = -Math.max(Math.abs(slideSpeed), 5.5);
+      }
+      this.speed = Utils.clamp(slideSpeed, -CarPhysics.MAX_SPEED * 0.35, CarPhysics.MAX_SPEED * 0.6);
+
+      const inwardPush = 0.16 + Math.min(0.32, entrySpeed * 0.01) + dotN * 0.08;
+      this.x += wr.nx * inwardPush;
+      this.z += wr.nz * inwardPush;
+
+      const turnFix = Utils.clamp(0.22 + dotN * 0.32, 0.22, 0.48);
       this.angle += aDiff * turnFix;
-      this.wallRecoverTimer = 0.22;
-      this.wallRecoverSteer = Utils.clamp(Math.sign(aDiff || tangSign) * 0.85, -1, 1);
-      this.wallImpactStrength = Math.max(this.wallImpactStrength, Utils.clamp(Math.abs(dotN) * 0.45 + tangPart * 0.015, 0.18, 0.45));
+      this.wallRecoverTimer = 0.12;
+      this.wallRecoverSteer = Utils.clamp(Math.sign(aDiff || 1) * 0.4, -0.4, 0.4);
 
       // 壁ヒット演出
       this.wallHitFlash = 0.28;
       const now = performance.now();
+      if (now - this.lastWallHit > 120 || dotN > 0.55) {
+        this.wallImpactStrength = Math.max(
+          this.wallImpactStrength,
+          Utils.clamp(0.08 + dotN * 0.24 + entrySpeed * 0.003, 0.08, 0.22)
+        );
+      }
       if (now - this.lastWallHit < 600) {
         this.consecutiveWallHits++;
         // 連続ヒット → 壁から内側へさらに押し戻す (ハマり脱出補助)

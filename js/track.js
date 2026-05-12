@@ -6,7 +6,7 @@ const Track = {
   cumLen: [],
   width: 22,        // 基本コース幅 (セクターごとに変化)
   widthArray: [],   // 各セグメントごとの幅 (動的に算出)
-  wallHeight: 2.8,
+  wallHeight: 4.5,
 
   group: null,
   trackMesh: null,
@@ -107,6 +107,8 @@ const Track = {
     this._buildJumpPads();
     this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
     this._buildDecorations();
+    this._buildDirectionArrows();
+    this._buildDirectionArrows();
 
     return this;
   },
@@ -291,6 +293,92 @@ const Track = {
     const line = new THREE.Line(geo, mat);
     line.computeLineDistances();
     this.group.add(line);
+  },
+  _buildDirectionArrows() {
+    const n = this.pathPoints.length;
+    const arrowSpacing = 20;
+    const arrowScale = 3.5;
+    const arrowHeight = 0.1;
+    
+    for (let i = 0; i < n; i += arrowSpacing) {
+      const cur = this.pathPoints[i];
+      const next = this.pathPoints[(i + 5) % n];
+      
+      const dx = next.x - cur.x;
+      const dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const ux = dx / len;
+      const uz = dz / len;
+      
+      const px = -uz;
+      const pz = ux;
+      
+      const arrowVerts = [
+        cur.x + ux * arrowScale, arrowHeight, cur.z + uz * arrowScale,
+        cur.x - px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z - pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+        cur.x + px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z + pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+      ];
+      
+      const arrowIdx = [0, 1, 2];
+      
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(arrowVerts, 3));
+      geo.setIndex(arrowIdx);
+      geo.computeVertexNormals();
+      
+      const mat = new THREE.MeshBasicMaterial({ 
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 0.6,
+        side: THREE.DoubleSide
+      });
+      
+      const mesh = new THREE.Mesh(geo, mat);
+      this.group.add(mesh);
+    }
+  },
+  _buildDirectionArrows() {
+    const n = this.pathPoints.length;
+    const arrowSpacing = 20;
+    const arrowScale = 3.5;
+    const arrowHeight = 0.1;
+    
+    for (let i = 0; i < n; i += arrowSpacing) {
+      const cur = this.pathPoints[i];
+      const next = this.pathPoints[(i + 5) % n];
+      
+      const dx = next.x - cur.x;
+      const dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const ux = dx / len;
+      const uz = dz / len;
+      
+      const px = -uz;
+      const pz = ux;
+      
+      const arrowVerts = [
+        cur.x + ux * arrowScale, arrowHeight, cur.z + uz * arrowScale,
+        cur.x - px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z - pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+        cur.x + px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z + pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+      ];
+      
+      const arrowIdx = [0, 1, 2];
+      
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(arrowVerts, 3));
+      geo.setIndex(arrowIdx);
+      geo.computeVertexNormals();
+      
+      const mat = new THREE.MeshBasicMaterial({ 
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 0.6,
+        side: THREE.DoubleSide
+      });
+      
+      const mesh = new THREE.Mesh(geo, mat);
+      this.group.add(mesh);
+    }
   },
 
   _buildCurbs() {

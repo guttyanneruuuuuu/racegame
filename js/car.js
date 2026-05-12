@@ -8,12 +8,12 @@ const CarPhysics = {
   REVERSE_ACCEL: 18,
   FRICTION: 5,
   OFFTRACK_FRICTION: 22,
-  STEER_SPEED: 3.0,
+  STEER_SPEED: 3.5,
   STEER_AT_SPEED: 0.30,
-  LATERAL_GRIP: 9.0,
+  LATERAL_GRIP: 10.5,
   SPIN_FRICTION: 4.0,
-  WALL_BOUNCE: 0.45,        // 壁反発 (高め: ハマり防止)
-  WALL_FRICTION: 0.55,      // 壁衝突時の減速率
+  WALL_BOUNCE: 0.50,        // 壁反発 (高め: ハマり防止)
+  WALL_FRICTION: 0.50,      // 壁衝突時の減速率
   RADIUS: 1.2,
   STUCK_TIME: 2.5,          // この秒数進行が止まったら自動復活
   STUCK_SPEED: 1.5,         // この速度未満をスタック判定

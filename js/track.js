@@ -7,6 +7,7 @@ const Track = {
   width: 22,        // 基本コース幅 (セクターごとに変化)
   widthArray: [],   // 各セグメントごとの幅 (動的に算出)
   wallHeight: 2.8,
+  WALL_COLLISION_INSET: 0.06,
 
   group: null,
   trackMesh: null,
@@ -1189,9 +1190,8 @@ const Track = {
       }
       const sign = Math.sign(lateral);
       const excess = Math.abs(lateral) - limit;
-      const inset = 0.06;
-      const newX = x - sign * nx * (excess + inset);
-      const newZ = z - sign * nz * (excess + inset);
+      const newX = x - sign * nx * (excess + this.WALL_COLLISION_INSET);
+      const newZ = z - sign * nz * (excess + this.WALL_COLLISION_INSET);
       // 壁外向き法線 (車の押し戻す向きは内側 = -sign*n)
       return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral };
     }

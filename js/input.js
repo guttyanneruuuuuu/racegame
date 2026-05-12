@@ -275,8 +275,10 @@ const Input = {
 
     let diff = val - this.gyroBase;
     // ゆっくり基準を追従して、長時間プレイ時のドリフトを抑える
-    if (this.gyroCalibrated && Math.abs(diff) < this.deadzone * 2.5) {
-      this.gyroBase = Utils.lerp(this.gyroBase, val, 0.015);
+    const DRIFT_COMPENSATION_THRESHOLD_FACTOR = 2.5;
+    const BASELINE_DRIFT_COMPENSATION_RATE = 0.015;
+    if (this.gyroCalibrated && Math.abs(diff) < this.deadzone * DRIFT_COMPENSATION_THRESHOLD_FACTOR) {
+      this.gyroBase = Utils.lerp(this.gyroBase, val, BASELINE_DRIFT_COMPENSATION_RATE);
       diff = val - this.gyroBase;
     }
     // デッドゾーン

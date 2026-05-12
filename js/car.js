@@ -407,11 +407,17 @@ class Car {
       const slideFactor = Utils.clamp(0.92 - Math.abs(dotN) * 0.28, 0.55, 0.92);
       const fallbackSlide = tangSign * Math.min(Math.abs(speedMag) * 0.28, 7);
       const nextSpeed = tangPart > 0.7 ? tangSpeed * slideFactor : fallbackSlide * slowFactor;
-      const minEscapeSlide = (2.2 + Math.abs(dotN) * 2.4) * tangSign;
+      const ESCAPE_SLIDE_BASE = 2.2;
+      const ESCAPE_SLIDE_IMPACT_GAIN = 2.4;
+      const MIN_ESCAPE_SPEED_THRESHOLD = 1.8;
+      const SLIDE_NUDGE_BASE = 0.04;
+      const SLIDE_NUDGE_MAX = 0.18;
+      const SLIDE_NUDGE_TANGENT_SCALE = 0.01;
+      const minEscapeSlide = (ESCAPE_SLIDE_BASE + Math.abs(dotN) * ESCAPE_SLIDE_IMPACT_GAIN) * tangSign;
       this.speed = Math.abs(speedMag) < 0.75 ? minEscapeSlide : nextSpeed;
-      if (Math.abs(this.speed) < 1.8) this.speed = minEscapeSlide;
+      if (Math.abs(this.speed) < MIN_ESCAPE_SPEED_THRESHOLD) this.speed = minEscapeSlide;
       // 接線方向へ少し流して、壁際で止まり続ける状態を回避
-      const slideNudge = 0.04 + Math.min(0.18, tangPart * 0.01);
+      const slideNudge = SLIDE_NUDGE_BASE + Math.min(SLIDE_NUDGE_MAX, tangPart * SLIDE_NUDGE_TANGENT_SCALE);
       this.x += tx * tangSign * slideNudge;
       this.z += tz * tangSign * slideNudge;
 

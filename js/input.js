@@ -203,8 +203,9 @@ const Input = {
   update(dt) {
     if (this.gyroEnabled) return;
     const target = this._touchSteerActive ? this._touchSteer : this._keySteer;
-    const response = target === 0 ? 18 : 13;
-    const alpha = Utils.clamp(dt * response, 0.22, 0.72);
+    // 戻し: 速く中央へ / 切り込み: 適度に追従 (応答性アップ)
+    const response = target === 0 ? 22 : 18;
+    const alpha = Utils.clamp(dt * response, 0.28, 0.85);
     this.steer = Utils.lerp(this.steer, target, alpha);
     if (Math.abs(this.steer) < 0.001 && target === 0) this.steer = 0;
   },

@@ -307,6 +307,25 @@ const GameUI = {
     }
   },
 
+  // コイン枚数表示更新 (10枚で最大、speedボーナス % も表示)
+  updateCoins(count) {
+    let el = document.getElementById('hud-coins');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'hud-coins';
+      el.className = 'hud-coins';
+      const hud = document.getElementById('hud') || document.body;
+      hud.appendChild(el);
+    }
+    const c = Math.max(0, Math.min(10, count || 0));
+    const pct = c * 2;
+    el.innerHTML = `<span class="coin-icon">🪙</span><span class="coin-num">${c}/10</span><span class="coin-bonus">+${pct}%</span>`;
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+    if (c >= 10) el.classList.add('max'); else el.classList.remove('max');
+  },
+
   runCountdown(waitMs, onFinish) {
     const el = document.getElementById('countdown');
     let count = 3;
@@ -346,23 +365,35 @@ const GameUI = {
     setTimeout(() => el.remove(), duration + 50);
   },
 
-  // 墨スプラッシュ (画面全体に黒い染み)
+  // 墨スプラッシュ (弱体化版: 中央視界を残し、効果時間も短く)
   flashInk() {
+    // 既存の墨があれば差し替え (重ね掛け防止)
+    const old = document.querySelector('.ink-splat');
+    if (old) old.remove();
     const el = document.createElement('div');
     el.className = 'ink-splat';
+    // 周辺だけ汚す控えめなレイアウト + 中央透過
     el.innerHTML = `<svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
-      <defs><filter id="ink-blur"><feGaussianBlur stdDeviation="8"/></filter></defs>
-      <g filter="url(#ink-blur)" fill="#0a0a1a">
-        <circle cx="280" cy="220" r="160"/>
-        <circle cx="500" cy="320" r="180"/>
-        <circle cx="380" cy="400" r="120"/>
-        <circle cx="600" cy="180" r="80"/>
-        <circle cx="160" cy="380" r="100"/>
+      <defs>
+        <filter id="ink-blur"><feGaussianBlur stdDeviation="10"/></filter>
+        <radialGradient id="ink-grad" cx="50%" cy="55%" r="55%">
+          <stop offset="0%"  stop-color="#000" stop-opacity="0"/>
+          <stop offset="55%" stop-color="#000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000" stop-opacity="1"/>
+        </radialGradient>
+        <mask id="ink-mask"><rect width="800" height="600" fill="url(#ink-grad)"/></mask>
+      </defs>
+      <g filter="url(#ink-blur)" fill="#1a1a2e" mask="url(#ink-mask)">
+        <circle cx="120" cy="120" r="110"/>
+        <circle cx="680" cy="140" r="120"/>
+        <circle cx="90"  cy="460" r="100"/>
+        <circle cx="720" cy="460" r="110"/>
       </g>
     </svg>`;
     document.body.appendChild(el);
-    setTimeout(() => el.classList.add('fade'), 2200);
-    setTimeout(() => el.remove(), 3800);
+    // 短時間でフェード開始 (2.2s → 1.0s)、合計1.8sで完全消去
+    setTimeout(() => el.classList.add('fade'), 1000);
+    setTimeout(() => el.remove(), 1900);
   },
 
   showResults(cars) {

@@ -35,24 +35,30 @@ const Game = {
 
   _initThree() {
     const canvas = document.getElementById('game-canvas');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // 軽量化: アンチエイリアスは画面サイズに応じて切替、ピクセル比は1.5に制限
+    const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+    const aa = !isMobile;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas, antialias: aa, powerPreference: 'high-performance',
+      stencil: false, depth: true,
+    });
+    const pr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+    this.renderer.setPixelRatio(pr);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
+    // 描画距離をやや短く (フォグも同調)
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.4, 700);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
-    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 0.95);
+    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 1.0);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(100, 150, 80);
     this.scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xa9d8ff, 0.25);
-    fill.position.set(-80, 60, -50);
-    this.scene.add(fill);
+    // fill light を削減 (軽量化)
 
     this.clock = new THREE.Clock();
 
@@ -153,11 +159,12 @@ const Game = {
   _updateLocal(dt) {
     if (!this.localCar) return;
     Input.update(dt);
+    const now = performance.now();
     if (this.localCar.finished) {
       this.localCar.applyInput(0, false, true, dt);
     } else {
       this.localCar.applyInput(Input.steer, Input.accel, Input.brake, dt);
-      this.localCar.updateProgress(performance.now());
+      this.localCar.updateProgress(now);
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
@@ -451,9 +458,11 @@ const Game = {
         }
       }
       if (r.jump) {
-        c.applyJump(16);
+        c.applyJump(18);
+        // ジャンプ盤ではグライダーを展開
+        c.deployGlider(3.5);
         if (c.isLocal) {
-          showToast('🚀 JUMP!', 700);
+          showToast('🪂 GLIDER!', 800);
           if (window.SFX) SFX.play('jump');
         }
       }
@@ -473,6 +482,14 @@ const Game = {
             showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
             if (window.SFX) SFX.play('pickup');
           }
+        }
+      }
+      // コイン取得 (1枚で+2%加速)
+      if (Track.collectCoin(c.x, c.z, 2.0)) {
+        const gained = c.addCoin(1);
+        if (c.isLocal && gained) {
+          GameUI.updateCoins && GameUI.updateCoins(c.coins);
+          if (window.SFX) SFX.play('pickup');
         }
       }
     }
@@ -507,7 +524,7 @@ const Game = {
 
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
     const back = Utils.lerp(4.2, 5.4, speedT);
-    const up   = Utils.lerp(2.0, 1.6, speedT);
+    const up   = Utils.lerp(2.2, 1.8, speedT);
     const lookFwd = Utils.lerp(6, 14, speedT);
 
     let backDir = 1;
@@ -570,6 +587,8 @@ const Game = {
     document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
     document.getElementById('hud-speed').textContent = Math.floor(sp);
+    // コイン枚数HUD更新
+    if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
 
     const bestEl = document.getElementById('hud-best');
     if (bestEl) {
@@ -607,10 +626,11 @@ const Game = {
       }
     }
 
-    // 最終ラップ装飾
+    // 最終ラップ装飾 (現在の周回が最終周回 = lap+1 === totalLaps の時のみ点滅)
     const hudLap = document.getElementById('hud-lap');
     if (hudLap) {
-      if (this.localCar.lap === this.totalLaps - 1 && !this.localCar.finished) {
+      const currentLap = this.localCar.lap + 1;
+      if (currentLap === this.totalLaps && !this.localCar.finished && this.state === 'racing') {
         hudLap.parentElement.classList.add('final-lap');
       } else {
         hudLap.parentElement.classList.remove('final-lap');

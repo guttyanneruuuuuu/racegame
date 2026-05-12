@@ -514,7 +514,7 @@ const Game = {
 
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
     const back = Utils.lerp(4.2, 5.4, speedT);
-    const up   = Utils.lerp(2.0, 1.6, speedT);
+    const up   = Utils.lerp(2.2, 1.8, speedT);
     const lookFwd = Utils.lerp(6, 14, speedT);
 
     let backDir = 1;

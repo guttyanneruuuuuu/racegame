@@ -15,12 +15,13 @@ const Input = {
   _smoothed: 0,        // ローパスフィルタ後
 
   // ジャイロ感度設定
-  sensitivity: 22,
+  sensitivity: 18,
   deadzone: 1.5,
   invert: false,
 
   // タッチハンドル/ボタン押下
   _keys: {},
+  _keySteer: 0,
   _touchSteer: 0,
   _touchSteerActive: false,
 
@@ -85,7 +86,7 @@ const Input = {
   _updateFromKeys() {
     const keys = this._keys;
     if (!this.gyroEnabled && !this._touchSteerActive) {
-      this.steer = (keys['arrowright'] || keys['d'] ? 1 : 0) + (keys['arrowleft'] || keys['a'] ? -1 : 0);
+      this._keySteer = (keys['arrowright'] || keys['d'] ? 1 : 0) + (keys['arrowleft'] || keys['a'] ? -1 : 0);
     }
     this.accel = !!(keys['arrowup'] || keys['w']);
     this.brake = !!(keys['arrowdown'] || keys['s']);
@@ -155,31 +156,28 @@ const Input = {
     const overlay = document.getElementById('steer-overlay');
     if (!overlay) return;
     let active = false;
-    let startX = 0;
-    const setSteer = (sx, cx) => {
-      const dx = cx - sx;
-      const max = Math.min(220, window.innerWidth * 0.25);
+    const setSteer = (cx) => {
+      const dx = cx - window.innerWidth * 0.5;
+      const max = Math.min(200, window.innerWidth * 0.2);
       this._touchSteer = Utils.clamp(dx / max, -1, 1);
-      if (!this.gyroEnabled) this.steer = this._touchSteer;
     };
     const onStart = (e) => {
       const t = e.touches ? e.touches[0] : e;
-      startX = t.clientX;
       active = true;
       this._touchSteerActive = true;
+      setSteer(t.clientX);
       e.preventDefault();
     };
     const onMove = (e) => {
       if (!active) return;
       const t = e.touches ? e.touches[0] : e;
-      setSteer(startX, t.clientX);
+      setSteer(t.clientX);
       e.preventDefault();
     };
     const onEnd = (e) => {
       active = false;
       this._touchSteer = 0;
       this._touchSteerActive = false;
-      if (!this.gyroEnabled) this.steer = 0;
     };
     overlay.addEventListener('touchstart', onStart, { passive: false });
     overlay.addEventListener('touchmove', onMove, { passive: false });
@@ -188,6 +186,15 @@ const Input = {
     overlay.addEventListener('mousedown', onStart);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onEnd);
+  },
+
+  update(dt) {
+    if (this.gyroEnabled) return;
+    const target = this._touchSteerActive ? this._touchSteer : this._keySteer;
+    const response = target === 0 ? 14 : 10;
+    const alpha = Utils.clamp(dt * response, 0.18, 0.65);
+    this.steer = Utils.lerp(this.steer, target, alpha);
+    if (Math.abs(this.steer) < 0.001 && target === 0) this.steer = 0;
   },
 
   async enableGyro() {

@@ -151,6 +151,7 @@ const Game = {
 
   _updateLocal(dt) {
     if (!this.localCar) return;
+    Input.update(dt);
     if (this.localCar.finished) {
       this.localCar.applyInput(0, false, true, dt);
     } else {
@@ -160,9 +161,10 @@ const Game = {
         this.useItem(this.localCar, this.cars);
       }
       // 壁ヒットでカメラ揺れ
-      if (this.localCar.wallHitFlash > 0.2) {
-        this._camShakeTime = 0.3;
-        this._camShakeAmp = 0.4;
+      const wallImpact = this.localCar.consumeWallImpact();
+      if (wallImpact > 0) {
+        this._camShakeTime = 0.12 + wallImpact * 0.35;
+        this._camShakeAmp = wallImpact;
         if (window.SFX) SFX.play('wall');
       }
       // 逆走警告

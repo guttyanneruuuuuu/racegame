@@ -812,9 +812,10 @@ input { font-family: inherit; outline: none; }
 /* ============= 追加: コインHUD ============= */
 .hud-coins {
   position: absolute;
-  left: 50%;
-  top: 70px;
-  transform: translateX(-50%);
+  right: 14px;
+  top: 210px;
+  left: auto;
+  transform: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -849,16 +850,16 @@ input { font-family: inherit; outline: none; }
   animation: coinMaxGlow 1s ease-in-out infinite alternate;
 }
 @keyframes coinPop {
-  0%   { transform: translateX(-50%) scale(1); }
-  40%  { transform: translateX(-50%) scale(1.22); }
-  100% { transform: translateX(-50%) scale(1); }
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.22); }
+  100% { transform: scale(1); }
 }
 @keyframes coinMaxGlow {
   from { box-shadow: 0 0 12px #FFEB3B, 0 3px 10px rgba(0,0,0,0.4); }
   to   { box-shadow: 0 0 26px #FFC107, 0 3px 14px rgba(0,0,0,0.5); }
 }
 @media (orientation: portrait) {
-  .hud-coins { top: 60px; font-size: 15px; padding: 4px 10px; }
+  .hud-coins { top: 190px; font-size: 15px; padding: 4px 10px; }
 }
 
 /* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */

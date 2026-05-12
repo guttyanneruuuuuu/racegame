@@ -76,17 +76,16 @@ const Track = {
       { x: -400, z:  -50 },
       { x: -390, z:   30 },
       { x: -360, z:   90 },
-      // --- セクター5: 北西ワインディング (修正版: 自己交差を解消し滑らかに) ---
-      // 旧コースは折り返しが多すぎて Catmull-Rom スプラインが暴れ、
-      // 隣接セグメント同士の壁が交差して "壁すり抜け" が発生していた。
-      // ゴール直前は緩やかな大回りカーブで安定したライン取りに整える。
-      { x: -300, z:  140 },
-      { x: -260, z:  190 },
-      { x: -210, z:  230 },
-      { x: -150, z:  260 },
-      { x:  -90, z:  270 },
-      { x:  -40, z:  275 },
-      { x:    0, z:  280 }, // セクター1の最初の点へスムーズ接続
+      // --- セクター5: 北西からゴールへの大回りカーブ (再修正: 完全に滑らか) ---
+      // 過去のコースは折り返しが多く Catmull-Rom が暴れ、隣接セグメント同士の
+      // 壁が交差して "壁すり抜け" が発生していた。
+      // 制御点を等間隔・低曲率に絞り、ゴール直前は緩やかな大回りで接続。
+      { x: -320, z:  150 },
+      { x: -280, z:  210 },
+      { x: -220, z:  250 },
+      { x: -150, z:  275 },
+      { x:  -75, z:  285 },
+      // セクター1の最初の点 { x: 0, z: 280 } へスムーズに戻る (重複点は省く)
     ];
 
     this.pathPoints = this._catmullRomLoop(this.controlPoints, 14);
@@ -1265,9 +1264,23 @@ const Track = {
     }
 
     if (bestSeg) {
-      const inset = 0.12; // 0.08 → 0.12 (少し深めに押し戻して再すり抜け防止)
-      const newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + inset);
-      const newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + inset);
+      // 隣接セグメントとの法線の平均を取り、急カーブで法線が暴れるケースを安定化
+      const nA = this._segNorm[bestSeg.index];
+      const nP = this._segNorm[((bestSeg.index - 1) % this.pathPoints.length + this.pathPoints.length) % this.pathPoints.length];
+      const nN = this._segNorm[(bestSeg.index + 1) % this.pathPoints.length];
+      let avgNx = nA.nx + nP.nx + nN.nx;
+      let avgNz = nA.nz + nP.nz + nN.nz;
+      const avgLen = Math.hypot(avgNx, avgNz) || 1;
+      avgNx /= avgLen; avgNz /= avgLen;
+
+      const inset = 0.18; // 0.12 → 0.18 (さらに深めに押し戻して再すり抜け防止)
+      // 元の法線で押し戻し
+      let newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + inset);
+      let newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + inset);
+      // 平均法線でも安全側に追加押し戻し (急カーブ自己交差対策)
+      const extra = 0.25;
+      newX -= bestSeg.sign * avgNx * extra;
+      newZ -= bestSeg.sign * avgNz * extra;
       return {
         x: newX, z: newZ, hit: true,
         nx: -bestSeg.sign * bestSeg.nx,

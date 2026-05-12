@@ -407,7 +407,13 @@ class Car {
       const slideFactor = Utils.clamp(0.92 - Math.abs(dotN) * 0.28, 0.55, 0.92);
       const fallbackSlide = tangSign * Math.min(Math.abs(speedMag) * 0.28, 7);
       const nextSpeed = tangPart > 0.7 ? tangSpeed * slideFactor : fallbackSlide * slowFactor;
-      this.speed = Math.abs(speedMag) < 0.75 ? 0 : nextSpeed;
+      const minEscapeSlide = (2.2 + Math.abs(dotN) * 2.4) * tangSign;
+      this.speed = Math.abs(speedMag) < 0.75 ? minEscapeSlide : nextSpeed;
+      if (Math.abs(this.speed) < 1.8) this.speed = minEscapeSlide;
+      // 接線方向へ少し流して、壁際で止まり続ける状態を回避
+      const slideNudge = 0.04 + Math.min(0.18, tangPart * 0.01);
+      this.x += tx * tangSign * slideNudge;
+      this.z += tz * tangSign * slideNudge;
 
       // 車体角度を壁の沿い方向に少し向き直す（ゴリ押し回避）
       const slideAng = Math.atan2(tx * tangSign, tz * tangSign);

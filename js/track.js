@@ -15,6 +15,7 @@ const Track = {
   jumpPads: [],
   oilPads: [],       // ハザード: オイル
   shortcuts: [],     // 近道(芝ショートカット)
+  coins: [],         // コイン (取得で速度ボーナス, 最大10枚)
 
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
@@ -75,20 +76,17 @@ const Track = {
       { x: -400, z:  -50 },
       { x: -390, z:   30 },
       { x: -360, z:   90 },
-      // --- セクター5: 北西山岳ワインディング ---
-      { x: -300, z:  130 },
-      { x: -240, z:  170 },
-      { x: -200, z:  230 },
-      { x: -150, z:  270 },
-      { x: -100, z:  240 },
-      { x:  -70, z:  200 },
-      { x:  -90, z:  160 },
-      { x: -130, z:  140 },
-      { x: -110, z:   90 },
-      { x:  -60, z:   80 },
-      { x:  -30, z:  130 },
-      { x:  -50, z:  190 },
-      { x:  -30, z:  240 },
+      // --- セクター5: 北西ワインディング (修正版: 自己交差を解消し滑らかに) ---
+      // 旧コースは折り返しが多すぎて Catmull-Rom スプラインが暴れ、
+      // 隣接セグメント同士の壁が交差して "壁すり抜け" が発生していた。
+      // ゴール直前は緩やかな大回りカーブで安定したライン取りに整える。
+      { x: -300, z:  140 },
+      { x: -260, z:  190 },
+      { x: -210, z:  230 },
+      { x: -150, z:  260 },
+      { x:  -90, z:  270 },
+      { x:  -40, z:  275 },
+      { x:    0, z:  280 }, // セクター1の最初の点へスムーズ接続
     ];
 
     this.pathPoints = this._catmullRomLoop(this.controlPoints, 14);
@@ -106,6 +104,7 @@ const Track = {
     this._buildBoostPads();
     this._buildJumpPads();
     this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
+    this._buildCoins();       // コインをルートに点在
     this._buildDecorations();
     this._buildDirectionArrows();
 
@@ -184,8 +183,8 @@ const Track = {
       else if (t < 0.50)   w = 22;
       // セクター4 (0.50..0.72) 高速バンク: 広い
       else if (t < 0.72)   w = 30;
-      // セクター5 (0.72..1.0) 山岳ワインディング: 狭い
-      else                 w = 19;
+      // セクター5 (0.72..1.0) ゴール直前カーブ: 広めに変更 (壁すり抜け対策)
+      else                 w = 26;
 
       // 隣接セグメントとの曲率に応じて少し補正 (急カーブは僅かに広げる)
       const prev = (i - 1 + n) % n;
@@ -881,8 +880,7 @@ const Track = {
       { from: Math.floor(n * 0.42), to: Math.floor(n * 0.52) },
       // セクター4 バンク内側
       { from: Math.floor(n * 0.62), to: Math.floor(n * 0.68) },
-      // セクター5 山岳ループ内側
-      { from: Math.floor(n * 0.82), to: Math.floor(n * 0.90) },
+      // セクター5 はゴール直前のスムーズカーブに変更したのでショートカットは削除
     ];
     for (const sc of shortcuts) {
       const a = this.pathPoints[sc.from];
@@ -1219,7 +1217,7 @@ const Track = {
   },
 
   // 壁衝突解決 (改善版: 法線にのみ押し戻し、接線は保存)
-  // すり抜け対策: hintIdx近辺だけでなく、複数候補で最も近いセグメントを基準にする
+  // すり抜け対策: 検査範囲を大幅に広げ、最も深いめり込みを基準に押し戻す
   resolveWalls(x, z, radius, hintIdx = -1) {
     const prog = this.getProgress(x, z, hintIdx);
     const idx = prog.index;
@@ -1229,22 +1227,21 @@ const Track = {
     const lateral = rx * nx + rz * nz;
     const w = this.widthAt(idx);
     const limit = w - radius;
+
+    // 最大めり込みを追跡 (代表セグメントから周辺まで全部見て最深を採用)
+    let bestExcess = -Infinity;
+    let bestSeg = null;
+
     if (Math.abs(lateral) > limit) {
-      // ショートカット上ならスキップ
-      if (this.isOnShortcut(x, z)) {
-        return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
+      if (!this.isOnShortcut(x, z)) {
+        bestExcess = Math.abs(lateral) - limit;
+        bestSeg = { sign: Math.sign(lateral) || 1, nx, nz, lateral, index: idx };
       }
-      const sign = Math.sign(lateral) || 1;
-      const excess = Math.abs(lateral) - limit;
-      const inset = 0.08;
-      const newX = x - sign * nx * (excess + inset);
-      const newZ = z - sign * nz * (excess + inset);
-      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral, index: idx };
     }
-    // セグメントの法線で見ると路面内でも、隣接セグメントの壁内側を貫通している場合がある (急カーブ)
-    // → 近隣セグメントも検査し、最も大きなめり込みを採用
+
+    // 近隣セグメントも広めに検査 (-2..+2 → -4..+4 に拡張)
     const n = this.pathPoints.length;
-    for (let k = -2; k <= 2; k++) {
+    for (let k = -4; k <= 4; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
       const pj = this.pathPoints[j];
@@ -1253,19 +1250,30 @@ const Track = {
       const latj = rxj * seg.nx + rzj * seg.nz;
       const wj = this.widthAt(j);
       const limj = wj - radius;
-      // タンジェント方向の距離が遠すぎるセグメントは除外
       const segDir = this._segDir[j];
       const tang = Math.abs(rxj * segDir.ux + rzj * segDir.uz);
-      if (tang > 18) continue;
+      // タンジェント許容を 18 → 26 に広げる (高速で飛び込んだ場合の取りこぼし防止)
+      if (tang > 26) continue;
       if (Math.abs(latj) > limj) {
         if (this.isOnShortcut(x, z)) continue;
-        const sign = Math.sign(latj) || 1;
         const excess = Math.abs(latj) - limj;
-        const inset = 0.08;
-        const newX = x - sign * seg.nx * (excess + inset);
-        const newZ = z - sign * seg.nz * (excess + inset);
-        return { x: newX, z: newZ, hit: true, nx: -sign * seg.nx, nz: -sign * seg.nz, lateral: latj, index: j };
+        if (excess > bestExcess) {
+          bestExcess = excess;
+          bestSeg = { sign: Math.sign(latj) || 1, nx: seg.nx, nz: seg.nz, lateral: latj, index: j };
+        }
       }
+    }
+
+    if (bestSeg) {
+      const inset = 0.12; // 0.08 → 0.12 (少し深めに押し戻して再すり抜け防止)
+      const newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + inset);
+      const newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + inset);
+      return {
+        x: newX, z: newZ, hit: true,
+        nx: -bestSeg.sign * bestSeg.nx,
+        nz: -bestSeg.sign * bestSeg.nz,
+        lateral: bestSeg.lateral, index: bestSeg.index,
+      };
     }
     return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
   },
@@ -1306,6 +1314,20 @@ const Track = {
         p.glow.position.y = 1.4 + Math.sin(p._phase) * 0.15;
       }
     }
+    // コインの回転・上下バウンス
+    for (const c of this.coins) {
+      if (c.active) {
+        c.mesh.rotation.z += dt * 3.5;
+        c.mesh.position.y = 1.2 + Math.sin(now * 0.004 + c.phase) * 0.18;
+        if (c.ring) {
+          c.ring.material.opacity = 0.4 + Math.sin(now * 0.005 + c.phase) * 0.18;
+        }
+      } else if (now > c.respawn) {
+        c.active = true;
+        c.mesh.visible = true;
+        if (c.ring) c.ring.visible = true;
+      }
+    }
   },
 
   // ===== パッド衝突チェック =====
@@ -1343,6 +1365,101 @@ const Track = {
         if (b.ring) b.ring.visible = false;
         if (b.beam) b.beam.visible = false;
         b.respawn = performance.now() + 3500;
+        return true;
+      }
+    }
+    return false;
+  },
+
+  // ===== コイン (マリオカート風: 1枚 = +2%最高速, 最大10枚) =====
+  _buildCoins() {
+    const n = this.pathPoints.length;
+    // ルート全周にわたって等間隔に多数配置
+    const step = 6; // 細かめ間隔
+    const coinGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.15, 18);
+    const coinMat = new THREE.MeshLambertMaterial({
+      color: 0xFFD700,
+      emissive: 0xB28900,
+      emissiveIntensity: 0.5,
+    });
+    const coinEdgeMat = new THREE.MeshLambertMaterial({
+      color: 0xFFEA70,
+      emissive: 0xC79500,
+      emissiveIntensity: 0.4,
+    });
+
+    // パターン: 中央 / ジグザグ / 三連 / 弧 をローテーション
+    let pattern = 0;
+    for (let i = 8; i < n; i += step) {
+      // アイテムボックス/ブーストパッド/ジャンプ盤と被らないように軽くチェック
+      const cur = this.pathPoints[i];
+      const { nx, nz } = this._segNorm[i];
+      const w = this.widthAt(i);
+      // 他要素との被り簡易判定 (距離8m以内なら配置スキップ)
+      let skip = false;
+      for (const o of this.itemBoxes) {
+        if (Math.abs(o.x - cur.x) < 8 && Math.abs(o.z - cur.z) < 8) { skip = true; break; }
+      }
+      if (skip) continue;
+      for (const o of this.boostPads) {
+        if (Math.abs(o.x - cur.x) < 6 && Math.abs(o.z - cur.z) < 6) { skip = true; break; }
+      }
+      if (skip) continue;
+      for (const o of this.jumpPads) {
+        if (Math.abs(o.x - cur.x) < 8 && Math.abs(o.z - cur.z) < 8) { skip = true; break; }
+      }
+      if (skip) continue;
+
+      // パターンごとに横オフセット
+      let offsets;
+      const p = pattern % 4;
+      if (p === 0) offsets = [0];                         // 中央単独
+      else if (p === 1) offsets = [-w * 0.45, w * 0.45];   // 両サイド
+      else if (p === 2) offsets = [-w * 0.5, 0, w * 0.5];  // 三連
+      else offsets = [Math.sin(i * 0.3) * w * 0.4];        // 蛇行
+
+      for (const off of offsets) {
+        const px = cur.x + nx * off;
+        const pz = cur.z + nz * off;
+        const mesh = new THREE.Mesh(coinGeo, [coinEdgeMat, coinMat, coinMat]);
+        // CylinderGeometry はマテリアル配列を使う場合 [側面, 上, 下]
+        mesh.material = [coinEdgeMat, coinMat, coinMat];
+        mesh.position.set(px, 1.2, pz);
+        mesh.rotation.x = Math.PI / 2; // 立てる
+        mesh.castShadow = false;
+        this.group.add(mesh);
+
+        // 光るリング (拾いやすさUP)
+        const ringGeo = new THREE.RingGeometry(0.7, 0.95, 18);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0xFFE082, transparent: true, opacity: 0.45, side: THREE.DoubleSide,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(px, 0.05, pz);
+        this.group.add(ring);
+
+        this.coins.push({
+          mesh, ring,
+          x: px, z: pz,
+          active: true,
+          respawn: 0,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      pattern++;
+    }
+  },
+
+  // コイン取得判定
+  collectCoin(x, z, radius = 2.0) {
+    for (const c of this.coins) {
+      if (!c.active) continue;
+      if (Utils.dist2(x, z, c.x, c.z) < radius) {
+        c.active = false;
+        c.mesh.visible = false;
+        if (c.ring) c.ring.visible = false;
+        c.respawn = performance.now() + 6000; // 6秒後に復活
         return true;
       }
     }

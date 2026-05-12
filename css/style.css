@@ -795,16 +795,71 @@ input { font-family: inherit; outline: none; }
   100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
 }
 
-/* ============= 追加: インクスプラッシュ ============= */
+/* ============= 追加: インクスプラッシュ (弱体化: 視界を奪いすぎない) ============= */
 .ink-splat {
   position: fixed; inset: 0;
   z-index: 35;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 1.5s;
+  opacity: 0.55;          /* 強さを 1.0 → 0.55 に弱体化 */
+  transition: opacity 0.8s;
+  /* 中央視野を残し、周辺だけ汚れる */
+  mask-image: radial-gradient(circle at 50% 55%, transparent 0%, transparent 22%, rgba(0,0,0,0.5) 38%, #000 70%);
+  -webkit-mask-image: radial-gradient(circle at 50% 55%, transparent 0%, transparent 22%, rgba(0,0,0,0.5) 38%, #000 70%);
 }
-.ink-splat svg { width: 100%; height: 100%; }
+.ink-splat svg { width: 100%; height: 100%; opacity: 0.85; }
 .ink-splat.fade { opacity: 0; }
+
+/* ============= 追加: コインHUD ============= */
+.hud-coins {
+  position: absolute;
+  left: 50%;
+  top: 70px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, rgba(255,215,0,0.95), rgba(255,179,0,0.95));
+  border: 2px solid #fff;
+  border-radius: 18px;
+  font-weight: bold;
+  font-size: 18px;
+  color: #4e342e;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35), inset 0 0 8px rgba(255,255,255,0.5);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+  z-index: 40;
+  pointer-events: none;
+  user-select: none;
+}
+.hud-coins .coin-icon { font-size: 20px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)); }
+.hud-coins .coin-num  { min-width: 46px; text-align: center; }
+.hud-coins .coin-bonus {
+  background: rgba(255,255,255,0.9);
+  color: #d84315;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 14px;
+}
+.hud-coins.pop {
+  animation: coinPop 0.32s ease-out;
+}
+.hud-coins.max {
+  background: linear-gradient(135deg, #FFEA00, #FF6F00);
+  box-shadow: 0 0 16px #FFEB3B, 0 3px 10px rgba(0,0,0,0.4);
+  animation: coinMaxGlow 1s ease-in-out infinite alternate;
+}
+@keyframes coinPop {
+  0%   { transform: translateX(-50%) scale(1); }
+  40%  { transform: translateX(-50%) scale(1.22); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+@keyframes coinMaxGlow {
+  from { box-shadow: 0 0 12px #FFEB3B, 0 3px 10px rgba(0,0,0,0.4); }
+  to   { box-shadow: 0 0 26px #FFC107, 0 3px 14px rgba(0,0,0,0.5); }
+}
+@media (orientation: portrait) {
+  .hud-coins { top: 60px; font-size: 15px; padding: 4px 10px; }
+}
 
 /* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
 .ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 66px; height: 66px; font-size: 24px; }

@@ -52,6 +52,15 @@ class Car {
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
 
+    // コイン (1枚で+2%最高速, 上限10枚)
+    this.coins = 0;
+    this.coinFlashTimer = 0;
+
+    // グライダー (空中で展開、ゆっくり滑空)
+    this.glider = false;
+    this.gliderTimer = 0;
+    this.gliderMesh = null;
+
     // アイテム
     this.item = null;
     this.itemReady = false;
@@ -222,6 +231,41 @@ class Car {
     // 墨スプラッシュ(コンフューズ時に視界に出す用): スプライト
     this.confuseSprite = null;
 
+    // ===== グライダー翼 (空中で展開) =====
+    const wingGrp = new THREE.Group();
+    const wingMat = new THREE.MeshLambertMaterial({
+      color: colorHex, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.85,
+    });
+    // 左翼
+    const wingL = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 1.2), wingMat);
+    wingL.position.set(-2.0, 0, 0);
+    wingL.rotation.z = 0.08;
+    wingGrp.add(wingL);
+    // 右翼
+    const wingR = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 1.2), wingMat);
+    wingR.position.set(2.0, 0, 0);
+    wingR.rotation.z = -0.08;
+    wingGrp.add(wingR);
+    // 中央フレーム
+    const wingC = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 0.6),
+      new THREE.MeshLambertMaterial({ color: 0xfafafa }));
+    wingGrp.add(wingC);
+    // ストラップ
+    const strapMat = new THREE.MeshBasicMaterial({ color: 0x424242 });
+    const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.4, 0.08), strapMat);
+    strapL.position.set(-0.6, -0.7, 0);
+    const strapR = strapL.clone(); strapR.position.x = 0.6;
+    wingGrp.add(strapL, strapR);
+
+    wingGrp.position.set(0, 2.6, 0);
+    wingGrp.visible = false;
+    group.add(wingGrp);
+    this.gliderMesh = wingGrp;
+
+    // ===== コインカウンター表示 (車の上に小さく) =====
+    this.coinIcon = null;
+
     return group;
   }
 
@@ -281,10 +325,10 @@ class Car {
       return;
     }
 
-    // コンフューズ(墨): ステア反転
+    // コンフューズ(墨): 弱体化 - 反転ではなく舵が鈍るのみ
     if (this.confuseTimer > 0) {
       this.confuseTimer -= dt;
-      steer = -steer;
+      steer *= 0.55; // 操作半減のみ (完全反転は廃止)
     }
 
     if (this.wallRecoverTimer > 0) {
@@ -293,8 +337,9 @@ class Car {
       steer = Utils.lerp(steer, this.wallRecoverSteer, assist);
     }
 
-    // 加速
-    if (accel) this.speed += CarPhysics.ACCEL * dt;
+    // 加速 (コインボーナス: 1枚で+2%加速)
+    const accelMul = 1 + Math.min(10, this.coins) * 0.02;
+    if (accel) this.speed += CarPhysics.ACCEL * accelMul * dt;
     if (brake) {
       if (this.speed > 0.2) this.speed -= CarPhysics.BRAKE * dt;
       else this.speed -= CarPhysics.REVERSE_ACCEL * dt;
@@ -325,6 +370,9 @@ class Car {
     let maxSp = CarPhysics.MAX_SPEED;
     if (this.boostTimer > 0) maxSp = CarPhysics.MAX_SPEED_BOOST;
     else if (this.miniTurboTimer > 0) maxSp = CarPhysics.MAX_SPEED_MINI;
+    // コインボーナス: 1枚で+2% (最大10枚 = +20%)
+    const coinMul = 1 + Math.min(10, this.coins) * 0.02;
+    maxSp *= coinMul;
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
 
     // === ドリフト処理 ===
@@ -366,16 +414,42 @@ class Car {
 
     // 重力 & ジャンプ
     if (this.y > 0 || this.vy > 0) {
-      this.vy -= 30 * dt;
+      // 空中で一定以上の高さがあり、かつ落下中ならグライダーを自動展開
+      if (this.y > 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
+        this.deployGlider(3.0);
+      }
+      // グライダー有効中は重力が弱く前進推進が付く
+      const gravity = (this.glider && this.gliderTimer > 0) ? 8 : 30;
+      this.vy -= gravity * dt;
+      // グライダー中は落下速度の下限を制限 (ゆっくり)
+      if (this.glider && this.gliderTimer > 0 && this.vy < -6) this.vy = -6;
       this.y += this.vy * dt;
       this.airTime += dt;
+      // グライダー中は推進力 (空中加速)
+      if (this.glider && this.gliderTimer > 0) {
+        this.gliderTimer -= dt;
+        this.speed = Math.min(this.speed + 14 * dt, CarPhysics.MAX_SPEED * 1.05);
+      }
       if (this.y <= 0) {
         this.y = 0; this.vy = 0;
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
         if (this.airTime > 0.5 && !this.driftActive) {
-          this.applyMiniTurbo(0.5 + Math.min(0.6, this.airTime * 0.3));
+          this.applyMiniTurbo(0.5 + Math.min(0.8, this.airTime * 0.35));
         }
+        // 長時間滞空時のグライダーボーナス
+        if (this.glider && this.airTime > 1.5) {
+          this.applyBoost(0.8);
+          if (this.isLocal && typeof showToast === 'function') showToast('🪂 GLIDE BOOST!', 800);
+        }
+        this.glider = false;
+        this.gliderTimer = 0;
         this.airTime = 0;
+      }
+    } else {
+      // 地上ではグライダー解除
+      if (this.glider) {
+        this.glider = false;
+        this.gliderTimer = 0;
       }
     }
 
@@ -609,6 +683,17 @@ class Car {
       }
     }
 
+    // グライダー翼の表示
+    if (this.gliderMesh) {
+      const showG = this.glider && this.gliderTimer > 0 && this.y > 0.5;
+      this.gliderMesh.visible = showG;
+      if (showG) {
+        // 軽く揺れる
+        this.gliderMesh.rotation.x = Math.sin(performance.now() * 0.006) * 0.08;
+      }
+    }
+    if (this.coinFlashTimer > 0) this.coinFlashTimer -= 0.016;
+
     // シールド
     this.shieldMesh.visible = this.invincibleTimer > 0;
     if (this.shieldMesh.visible) {
@@ -803,6 +888,7 @@ class Car {
     if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
     this.spinTimer = 1.2;
     this.driftActive = false; this.driftCharge = 0;
+    this.dropCoins(2);
     return true;
   }
   hitRocket() {
@@ -810,6 +896,7 @@ class Car {
     this.squishTimer = 1.6;
     this.lockedTimer = 1.6;
     this.speed = 0;
+    this.dropCoins(3);
     return true;
   }
   hitLightning() {
@@ -827,7 +914,8 @@ class Car {
   }
   hitInkSplash() {
     if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
-    this.applyConfuse(4.0);
+    // 弱体化: 4.0秒 → 1.8秒, 操作反転はやめ"舵が鈍る"程度に
+    this.applyConfuse(1.8);
     return true;
   }
   hitMine() {
@@ -837,11 +925,41 @@ class Car {
     this.speed = 0;
     this.vy = 8;
     this.y = 0.1;
+    this.dropCoins(3);
     return true;
+  }
+  hitBananaCoinDrop() {
+    this.dropCoins(2);
   }
 
   giveShield(seconds = 5) {
     this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
+  }
+
+  // コイン取得 (上限10枚)
+  addCoin(n = 1) {
+    const before = this.coins;
+    this.coins = Math.min(10, this.coins + n);
+    if (this.coins !== before) {
+      this.coinFlashTimer = 0.5;
+      // 取得時に少しだけ加速を上乗せ (取った感を出す)
+      this.speed = Math.min(this.speed + 1.6, CarPhysics.MAX_SPEED_BOOST * 1.1);
+      return true;
+    }
+    return false;
+  }
+
+  // 衝突や攻撃を受けた時にコインを少し落とす
+  dropCoins(amount = 3) {
+    const drop = Math.min(amount, this.coins);
+    this.coins = Math.max(0, this.coins - drop);
+    return drop;
+  }
+
+  // グライダー展開 (一定時間, 滞空)
+  deployGlider(seconds = 2.5) {
+    this.glider = true;
+    this.gliderTimer = Math.max(this.gliderTimer, seconds);
   }
 
   setItem(item) {

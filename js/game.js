@@ -458,9 +458,11 @@ const Game = {
         }
       }
       if (r.jump) {
-        c.applyJump(16);
+        c.applyJump(18);
+        // ジャンプ盤ではグライダーを展開
+        c.deployGlider(3.5);
         if (c.isLocal) {
-          showToast('🚀 JUMP!', 700);
+          showToast('🪂 GLIDER!', 800);
           if (window.SFX) SFX.play('jump');
         }
       }
@@ -480,6 +482,14 @@ const Game = {
             showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
             if (window.SFX) SFX.play('pickup');
           }
+        }
+      }
+      // コイン取得 (1枚で+2%加速)
+      if (Track.collectCoin(c.x, c.z, 2.0)) {
+        const gained = c.addCoin(1);
+        if (c.isLocal && gained) {
+          GameUI.updateCoins && GameUI.updateCoins(c.coins);
+          if (window.SFX) SFX.play('pickup');
         }
       }
     }
@@ -577,6 +587,8 @@ const Game = {
     document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
     document.getElementById('hud-speed').textContent = Math.floor(sp);
+    // コイン枚数HUD更新
+    if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
 
     const bestEl = document.getElementById('hud-best');
     if (bestEl) {

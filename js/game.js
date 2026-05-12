@@ -582,17 +582,18 @@ const Game = {
       const points = Track.pathPoints || [];
       if (points.length > 2) {
         const n = points.length;
-        const idx = ((this.localCar.lastProgressIdx % n) + n) % n;
-        const prev = points[(idx - 1 + n) % n];
+        const prog = Track.getProgress(this.localCar.x, this.localCar.z, this.localCar.lastProgressIdx);
+        const idx = ((prog.index % n) + n) % n;
+        const curr = points[idx];
         const next = points[(idx + 1) % n];
-        const tx = next.x - prev.x;
-        const tz = next.z - prev.z;
+        const tx = next.x - curr.x;
+        const tz = next.z - curr.z;
         const tLen = Math.hypot(tx, tz);
         if (tLen > 0.001) {
           const fx = Math.sin(this.localCar.angle);
           const fz = Math.cos(this.localCar.angle);
           const dot = (fx * tx + fz * tz) / tLen;
-          const isForward = dot >= 0;
+          const isForward = dot >= 0.18;
           dirEl.textContent = isForward ? '向き: 順走 ↗' : '向き: 逆向き ↙';
           dirEl.classList.toggle('wrong', !isForward);
         } else {

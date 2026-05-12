@@ -12,9 +12,10 @@ const Game = {
   totalLaps: 3,    // 3周のレース
   lastSendTime: 0,
   netSendInterval: 50,
-  forwardDotThreshold: 0.18,
+  forwardDotThreshold: Math.cos(Math.PI * 0.45),
   directionForwardLabel: '向き: 順走 ↗',
   directionReverseLabel: '向き: 逆向き ↙',
+  directionUnknownLabel: '向き: --',
 
   miniCtx: null,
   miniCanvas: null,
@@ -600,11 +601,11 @@ const Game = {
           dirEl.textContent = isForward ? this.directionForwardLabel : this.directionReverseLabel;
           dirEl.classList.toggle('wrong', !isForward);
         } else {
-          dirEl.textContent = '向き: --';
+          dirEl.textContent = this.directionUnknownLabel;
           dirEl.classList.remove('wrong');
         }
       } else {
-        dirEl.textContent = '向き: --';
+        dirEl.textContent = this.directionUnknownLabel;
         dirEl.classList.remove('wrong');
       }
     }

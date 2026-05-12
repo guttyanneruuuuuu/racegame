@@ -1185,7 +1185,7 @@ const Track = {
     if (Math.abs(lateral) > limit) {
       // ショートカット上ならスキップ
       if (this.isOnShortcut(x, z)) {
-        return { x, z, hit: false, nx: 0, nz: 0, lateral };
+        return { x, z, hit: false, nx: 0, nz: 0, lateral, index: prog.index };
       }
       const sign = Math.sign(lateral);
       const excess = Math.abs(lateral) - limit;
@@ -1193,9 +1193,9 @@ const Track = {
       const newX = x - sign * nx * (excess + inset);
       const newZ = z - sign * nz * (excess + inset);
       // 壁外向き法線 (車の押し戻す向きは内側 = -sign*n)
-      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral };
+      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral, index: prog.index };
     }
-    return { x, z, hit: false, nx: 0, nz: 0, lateral };
+    return { x, z, hit: false, nx: 0, nz: 0, lateral, index: prog.index };
   },
 
   update(dt, now) {

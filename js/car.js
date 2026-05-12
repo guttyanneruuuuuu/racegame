@@ -3,20 +3,20 @@ const CarPhysics = {
   MAX_SPEED: 54,            // m/s (約195km/h)
   MAX_SPEED_BOOST: 88,
   MAX_SPEED_MINI: 68,       // ミニターボ時
-  ACCEL: 34,
+  ACCEL: 38,                // 加速向上 (より楽しく)
   BRAKE: 58,
   REVERSE_ACCEL: 18,
-  FRICTION: 5,
+  FRICTION: 4.2,            // 自然減速をやや弱く
   OFFTRACK_FRICTION: 22,
-  STEER_SPEED: 3.5,
-  STEER_AT_SPEED: 0.30,
+  STEER_SPEED: 3.9,         // ハンドリング向上
+  STEER_AT_SPEED: 0.26,     // 高速時の効き低下を緩和
   LATERAL_GRIP: 10.5,
   SPIN_FRICTION: 4.0,
   WALL_BOUNCE: 0.50,        // 壁反発 (高め: ハマり防止)
   WALL_FRICTION: 0.50,      // 壁衝突時の減速率
   RADIUS: 1.2,
-  STUCK_TIME: 2.5,          // この秒数進行が止まったら自動復活
-  STUCK_SPEED: 1.5,         // この速度未満をスタック判定
+  STUCK_TIME: 2.2,          // 自動復帰を少し早く
+  STUCK_SPEED: 1.5,
 };
 
 class Car {
@@ -387,7 +387,16 @@ class Car {
     }
 
     // 壁衝突処理 (ハマり対策: 法線方向に押し戻し+接線方向にスライド)
-    const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+    // サブステップ中に既に検出された衝突情報があればそれを優先
+    let wr = this._pendingWallHit;
+    this._pendingWallHit = null;
+    if (!wr || !wr.hit) {
+      wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+    } else {
+      // 念のためもう一度押し戻し (まだめり込んでいる可能性)
+      const wr2 = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+      if (wr2.hit) { this.x = wr2.x; this.z = wr2.z; }
+    }
     if (wr.hit) {
       this.x = wr.x; this.z = wr.z;
       const fx = Math.sin(this.angle), fz = Math.cos(this.angle);
@@ -493,8 +502,31 @@ class Car {
   _integratePos(dt) {
     const fx = Math.sin(this.angle);
     const fz = Math.cos(this.angle);
-    this.x += fx * this.speed * dt;
-    this.z += fz * this.speed * dt;
+    const dx = fx * this.speed * dt;
+    const dz = fz * this.speed * dt;
+    // 1ステップの移動量が大きすぎる場合 (高速 + 大きなdt) は壁すり抜けを防ぐため、
+    // サブステップに分割しつつ壁チェックを挟む
+    const moveLen = Math.hypot(dx, dz);
+    const maxStep = CarPhysics.RADIUS * 0.55; // 半径の半分以下のステップで壁を確実に検出
+    if (this.y <= 0.3 && moveLen > maxStep) {
+      const n = Math.min(6, Math.ceil(moveLen / maxStep));
+      const stepX = dx / n, stepZ = dz / n;
+      for (let i = 0; i < n; i++) {
+        this.x += stepX;
+        this.z += stepZ;
+        // サブステップごとに壁にめり込んだら押し戻す
+        const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+        if (wr.hit) {
+          this.x = wr.x; this.z = wr.z;
+          this._pendingWallHit = wr;
+          // 残ステップは速度方向を反射させて続行 (ループ脱出のため抜ける)
+          break;
+        }
+      }
+    } else {
+      this.x += dx;
+      this.z += dz;
+    }
   }
 
   // メッシュ更新

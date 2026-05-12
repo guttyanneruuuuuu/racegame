@@ -108,7 +108,6 @@ const Track = {
     this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
     this._buildDecorations();
     this._buildDirectionArrows();
-    this._buildDirectionArrows();
 
     return this;
   },
@@ -296,89 +295,43 @@ const Track = {
   },
   _buildDirectionArrows() {
     const n = this.pathPoints.length;
-    const arrowSpacing = 20;
+    const arrowSpacing = 24; // 間隔を広げて軽量化
     const arrowScale = 3.5;
     const arrowHeight = 0.1;
-    
+
+    // すべての矢印を1つのジオメトリにマージ (描画コール削減)
+    const verts = [];
+    const idx = [];
+    let vCount = 0;
     for (let i = 0; i < n; i += arrowSpacing) {
       const cur = this.pathPoints[i];
       const next = this.pathPoints[(i + 5) % n];
-      
+
       const dx = next.x - cur.x;
       const dz = next.z - cur.z;
       const len = Math.hypot(dx, dz) || 1;
       const ux = dx / len;
       const uz = dz / len;
-      
-      const px = -uz;
-      const pz = ux;
-      
-      const arrowVerts = [
+      const px = -uz, pz = ux;
+
+      verts.push(
         cur.x + ux * arrowScale, arrowHeight, cur.z + uz * arrowScale,
         cur.x - px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z - pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
         cur.x + px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z + pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
-      ];
-      
-      const arrowIdx = [0, 1, 2];
-      
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(arrowVerts, 3));
-      geo.setIndex(arrowIdx);
-      geo.computeVertexNormals();
-      
-      const mat = new THREE.MeshBasicMaterial({ 
-        color: 0xffff00,
-        emissive: 0xffff00,
-        emissiveIntensity: 0.6,
-        side: THREE.DoubleSide
-      });
-      
-      const mesh = new THREE.Mesh(geo, mat);
-      this.group.add(mesh);
+      );
+      idx.push(vCount, vCount + 1, vCount + 2);
+      vCount += 3;
     }
-  },
-  _buildDirectionArrows() {
-    const n = this.pathPoints.length;
-    const arrowSpacing = 20;
-    const arrowScale = 3.5;
-    const arrowHeight = 0.1;
-    
-    for (let i = 0; i < n; i += arrowSpacing) {
-      const cur = this.pathPoints[i];
-      const next = this.pathPoints[(i + 5) % n];
-      
-      const dx = next.x - cur.x;
-      const dz = next.z - cur.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const ux = dx / len;
-      const uz = dz / len;
-      
-      const px = -uz;
-      const pz = ux;
-      
-      const arrowVerts = [
-        cur.x + ux * arrowScale, arrowHeight, cur.z + uz * arrowScale,
-        cur.x - px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z - pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
-        cur.x + px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), arrowHeight, cur.z + pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
-      ];
-      
-      const arrowIdx = [0, 1, 2];
-      
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(arrowVerts, 3));
-      geo.setIndex(arrowIdx);
-      geo.computeVertexNormals();
-      
-      const mat = new THREE.MeshBasicMaterial({ 
-        color: 0xffff00,
-        emissive: 0xffff00,
-        emissiveIntensity: 0.6,
-        side: THREE.DoubleSide
-      });
-      
-      const mesh = new THREE.Mesh(geo, mat);
-      this.group.add(mesh);
-    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    this.group.add(mesh);
   },
 
   _buildCurbs() {
@@ -694,8 +647,8 @@ const Track = {
     const sky = new THREE.Mesh(skyGeo, skyMat);
     scene.add(sky);
     scene.background = new THREE.Color(0x90caf9);
-    // 広大化に合わせフォグも遠くまで
-    scene.fog = new THREE.Fog(0xcfe6ff, 450, 1100);
+    // フォグを少し近くに (描画負荷削減)
+    scene.fog = new THREE.Fog(0xcfe6ff, 350, 680);
   },
 
   _buildItemBoxes() {
@@ -995,14 +948,15 @@ const Track = {
     const leafGeo = new THREE.ConeGeometry(2.5, 6, 8);
     const trunkGeo = new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6);
 
+    // 木の本数を半分以下に間引いて軽量化 (i+=2 → i+=4, 確率も下げる)
     const n = this.pathPoints.length;
-    for (let i = 0; i < n; i += 2) {
+    for (let i = 0; i < n; i += 4) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
 
       for (let side of [1, -1]) {
-        if (Math.random() > 0.55) continue;
+        if (Math.random() > 0.45) continue;
         const off = (w + 12 + Math.random() * 60) * side;
         const px = cur.x + nx * off + Utils.rand(-3, 3);
         const pz = cur.z + nz * off + Utils.rand(-3, 3);
@@ -1010,7 +964,6 @@ const Track = {
         const leaf = new THREE.Mesh(leafGeo, treeMat1);
         trunk.position.set(px, 1.2, pz);
         leaf.position.set(px, 4.5, pz);
-        trunk.castShadow = leaf.castShadow = true;
         this.group.add(trunk);
         this.group.add(leaf);
       }
@@ -1054,18 +1007,19 @@ const Track = {
       this.group.add(audience);
     }
 
+    // フラッグの設置数を削減 (毎8→毎14)
     const flagColors = [0xff5252, 0xffd54f, 0x4fc3f7, 0x81c784];
-    for (let i = 0; i < n; i += 8) {
+    const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 5, 6);
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+    for (let i = 0; i < n; i += 14) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
       for (const side of [1, -1]) {
-        if (Math.random() > 0.5) continue;
+        if (Math.random() > 0.4) continue;
         const off = (w + 4) * side;
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
-        const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 5, 6);
-        const poleMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
         const pole = new THREE.Mesh(poleGeo, poleMat);
         pole.position.set(px, 2.5, pz);
         this.group.add(pole);
@@ -1186,8 +1140,14 @@ const Track = {
 
   // ストレート区間の街灯
   _buildStreetLamps() {
+    // 街灯を大幅削減 (毎6→毎16) + 共通ジオメトリ/マテリアル化
     const n = this.pathPoints.length;
-    for (let i = 0; i < n; i += 6) {
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0x37474f });
+    const headMat = new THREE.MeshBasicMaterial({ color: 0xffee58 });
+    const poleGeo = new THREE.CylinderGeometry(0.12, 0.16, 5.5, 6);
+    const headGeo = new THREE.SphereGeometry(0.45, 8, 6);
+    const armGeo = new THREE.BoxGeometry(1.5, 0.12, 0.12);
+    for (let i = 0; i < n; i += 16) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
@@ -1195,16 +1155,13 @@ const Track = {
         const off = (w + 2.5) * side;
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
-        const poleMat = new THREE.MeshLambertMaterial({ color: 0x37474f });
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.5, 8), poleMat);
+        const pole = new THREE.Mesh(poleGeo, poleMat);
         pole.position.set(px, 2.75, pz);
         this.group.add(pole);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8),
-          new THREE.MeshBasicMaterial({ color: 0xffee58 }));
+        const head = new THREE.Mesh(headGeo, headMat);
         head.position.set(px - nx * 0.6 * side, 5.4, pz - nz * 0.6 * side);
         this.group.add(head);
-        // 横アーム
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), poleMat);
+        const arm = new THREE.Mesh(armGeo, poleMat);
         arm.position.set(px - nx * 0.3 * side, 5.4, pz - nz * 0.3 * side);
         arm.rotation.y = Math.atan2(nx, nz) + Math.PI / 2;
         this.group.add(arm);
@@ -1262,28 +1219,55 @@ const Track = {
   },
 
   // 壁衝突解決 (改善版: 法線にのみ押し戻し、接線は保存)
+  // すり抜け対策: hintIdx近辺だけでなく、複数候補で最も近いセグメントを基準にする
   resolveWalls(x, z, radius, hintIdx = -1) {
     const prog = this.getProgress(x, z, hintIdx);
-    const cur = this.pathPoints[prog.index];
-    const { nx, nz } = this._segNorm[prog.index];
+    const idx = prog.index;
+    const cur = this.pathPoints[idx];
+    const { nx, nz } = this._segNorm[idx];
     const rx = x - cur.x, rz = z - cur.z;
     const lateral = rx * nx + rz * nz;
-    const w = this.widthAt(prog.index);
+    const w = this.widthAt(idx);
     const limit = w - radius;
     if (Math.abs(lateral) > limit) {
       // ショートカット上ならスキップ
       if (this.isOnShortcut(x, z)) {
-        return { x, z, hit: false, nx: 0, nz: 0, lateral, index: prog.index };
+        return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
       }
-      const sign = Math.sign(lateral);
+      const sign = Math.sign(lateral) || 1;
       const excess = Math.abs(lateral) - limit;
-      const inset = 0.06;
+      const inset = 0.08;
       const newX = x - sign * nx * (excess + inset);
       const newZ = z - sign * nz * (excess + inset);
-      // 壁外向き法線 (車の押し戻す向きは内側 = -sign*n)
-      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral, index: prog.index };
+      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral, index: idx };
     }
-    return { x, z, hit: false, nx: 0, nz: 0, lateral, index: prog.index };
+    // セグメントの法線で見ると路面内でも、隣接セグメントの壁内側を貫通している場合がある (急カーブ)
+    // → 近隣セグメントも検査し、最も大きなめり込みを採用
+    const n = this.pathPoints.length;
+    for (let k = -2; k <= 2; k++) {
+      if (k === 0) continue;
+      const j = ((idx + k) % n + n) % n;
+      const pj = this.pathPoints[j];
+      const seg = this._segNorm[j];
+      const rxj = x - pj.x, rzj = z - pj.z;
+      const latj = rxj * seg.nx + rzj * seg.nz;
+      const wj = this.widthAt(j);
+      const limj = wj - radius;
+      // タンジェント方向の距離が遠すぎるセグメントは除外
+      const segDir = this._segDir[j];
+      const tang = Math.abs(rxj * segDir.ux + rzj * segDir.uz);
+      if (tang > 18) continue;
+      if (Math.abs(latj) > limj) {
+        if (this.isOnShortcut(x, z)) continue;
+        const sign = Math.sign(latj) || 1;
+        const excess = Math.abs(latj) - limj;
+        const inset = 0.08;
+        const newX = x - sign * seg.nx * (excess + inset);
+        const newZ = z - sign * seg.nz * (excess + inset);
+        return { x: newX, z: newZ, hit: true, nx: -sign * seg.nx, nz: -sign * seg.nz, lateral: latj, index: j };
+      }
+    }
+    return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
   },
 
   update(dt, now) {

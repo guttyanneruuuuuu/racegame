@@ -9,7 +9,7 @@ const Game = {
   localCar: null,
   state: 'idle',
   raceStartTime: 0,
-  totalLaps: 2,    // コース大型化に伴い周回数を調整 (1周が長いので2周でも十分長く)
+  totalLaps: 3,    // 3周のレース
   lastSendTime: 0,
   netSendInterval: 50,
 
@@ -35,24 +35,30 @@ const Game = {
 
   _initThree() {
     const canvas = document.getElementById('game-canvas');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // 軽量化: アンチエイリアスは画面サイズに応じて切替、ピクセル比は1.5に制限
+    const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+    const aa = !isMobile;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas, antialias: aa, powerPreference: 'high-performance',
+      stencil: false, depth: true,
+    });
+    const pr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+    this.renderer.setPixelRatio(pr);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
+    // 描画距離をやや短く (フォグも同調)
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.4, 700);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
-    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 0.95);
+    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 1.0);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(100, 150, 80);
     this.scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xa9d8ff, 0.25);
-    fill.position.set(-80, 60, -50);
-    this.scene.add(fill);
+    // fill light を削減 (軽量化)
 
     this.clock = new THREE.Clock();
 
@@ -153,11 +159,12 @@ const Game = {
   _updateLocal(dt) {
     if (!this.localCar) return;
     Input.update(dt);
+    const now = performance.now();
     if (this.localCar.finished) {
       this.localCar.applyInput(0, false, true, dt);
     } else {
       this.localCar.applyInput(Input.steer, Input.accel, Input.brake, dt);
-      this.localCar.updateProgress(performance.now());
+      this.localCar.updateProgress(now);
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
@@ -607,10 +614,11 @@ const Game = {
       }
     }
 
-    // 最終ラップ装飾
+    // 最終ラップ装飾 (現在の周回が最終周回 = lap+1 === totalLaps の時のみ点滅)
     const hudLap = document.getElementById('hud-lap');
     if (hudLap) {
-      if (this.localCar.lap === this.totalLaps - 1 && !this.localCar.finished) {
+      const currentLap = this.localCar.lap + 1;
+      if (currentLap === this.totalLaps && !this.localCar.finished && this.state === 'racing') {
         hudLap.parentElement.classList.add('final-lap');
       } else {
         hudLap.parentElement.classList.remove('final-lap');

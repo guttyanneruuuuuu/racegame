@@ -253,8 +253,8 @@ input { font-family: inherit; outline: none; }
   /* 画面中央のみカバー(両端のボタンを避ける) */
   top: 0;
   bottom: 0;
-  left: 25%;
-  right: 25%;
+  left: 19%;
+  right: 19%;
   z-index: 3;
   pointer-events: auto;
   background: transparent;
@@ -405,9 +405,9 @@ input { font-family: inherit; outline: none; }
 }
 .ctrl-btn {
   padding: 0;
-  width: 92px; height: 76px;
+  width: 102px; height: 84px;
   border-radius: 16px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   color: white;
   letter-spacing: 1px;
@@ -424,7 +424,7 @@ input { font-family: inherit; outline: none; }
 }
 .ctrl-accel { background: linear-gradient(180deg, #66BB6A, #2E7D32); }
 .ctrl-brake { background: linear-gradient(180deg, #EF5350, #C62828); }
-.ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 76px; height: 76px; }
+.ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 82px; height: 82px; }
 
 /* 設定ボタン (右上、アイテムの下に縦並び) */
 .settings-stack {
@@ -689,8 +689,8 @@ input { font-family: inherit; outline: none; }
 .ink-splat.fade { opacity: 0; }
 
 /* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
-.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 60px; height: 60px; font-size: 22px; }
-.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 60px; height: 60px; font-size: 20px; }
+.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 66px; height: 66px; font-size: 24px; }
+.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 66px; height: 66px; font-size: 22px; }
 
 /* ============= 追加: アイテムスロットロール演出 ============= */
 .hud-item.rolling .item-box {
@@ -755,9 +755,9 @@ input { font-family: inherit; outline: none; }
 
 /* スマホ最適化 */
 @media (max-height: 480px) {
-  .ctrl-btn { width: 84px; height: 66px; font-size: 12px; }
-  .ctrl-item { width: 66px; height: 66px; font-size: 12px; }
-  .ctrl-look, .ctrl-respawn { width: 54px; height: 54px; font-size: 18px; }
+  .ctrl-btn { width: 90px; height: 70px; font-size: 12px; }
+  .ctrl-item { width: 70px; height: 70px; font-size: 12px; }
+  .ctrl-look, .ctrl-respawn { width: 58px; height: 58px; font-size: 19px; }
   .hud-mini { width: 96px; height: 96px; }
   .hud-speed { padding: 6px 14px; }
   .speed-val { font-size: 28px; }

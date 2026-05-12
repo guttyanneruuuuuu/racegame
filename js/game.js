@@ -577,6 +577,33 @@ const Game = {
     document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
     document.getElementById('hud-speed').textContent = Math.floor(sp);
+    const dirEl = document.getElementById('hud-direction');
+    if (dirEl) {
+      const points = Track.pathPoints || [];
+      if (points.length > 2) {
+        const n = points.length;
+        const idx = ((this.localCar.lastProgressIdx % n) + n) % n;
+        const prev = points[(idx - 1 + n) % n];
+        const next = points[(idx + 1) % n];
+        const tx = next.x - prev.x;
+        const tz = next.z - prev.z;
+        const tLen = Math.hypot(tx, tz);
+        if (tLen > 0.001) {
+          const fx = Math.sin(this.localCar.angle);
+          const fz = Math.cos(this.localCar.angle);
+          const dot = (fx * tx + fz * tz) / tLen;
+          const isForward = dot >= 0;
+          dirEl.textContent = isForward ? '向き: 順走 ↗' : '向き: 逆向き ↙';
+          dirEl.classList.toggle('wrong', !isForward);
+        } else {
+          dirEl.textContent = '向き: --';
+          dirEl.classList.remove('wrong');
+        }
+      } else {
+        dirEl.textContent = '向き: --';
+        dirEl.classList.remove('wrong');
+      }
+    }
 
     const bestEl = document.getElementById('hud-best');
     if (bestEl) {

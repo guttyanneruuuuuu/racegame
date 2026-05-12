@@ -323,6 +323,8 @@ input { font-family: inherit; outline: none; }
 }
 .hud-top > div { white-space: nowrap; }
 .hud-lap span, .hud-pos span { color: #FFD54F; }
+.hud-dir { color: #A5D6A7; transition: color 0.12s ease; }
+.hud-dir.wrong { color: #FF8A80; }
 .hud-time { font-family: 'Courier New', monospace; color: #80D8FF; }
 .hud-best { font-family: 'Courier New', monospace; color: #A5D6A7; font-size: 12px; }
 

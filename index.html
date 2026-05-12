@@ -34,7 +34,7 @@
         <input type="text" id="player-name" maxlength="10" placeholder="名前を入れてね" />
       </div>
       <div class="car-select">
-        <label>マシンを選ぼう</label>
+        <label>マシンカラー</label>
         <div class="car-options" id="car-options">
           <div class="car-option active" data-color="#E53935" style="--c:#E53935"></div>
           <div class="car-option" data-color="#1E88E5" style="--c:#1E88E5"></div>
@@ -42,6 +42,31 @@
           <div class="car-option" data-color="#43A047" style="--c:#43A047"></div>
           <div class="car-option" data-color="#8E24AA" style="--c:#8E24AA"></div>
           <div class="car-option" data-color="#FB8C00" style="--c:#FB8C00"></div>
+        </div>
+      </div>
+      <div class="car-type-select">
+        <label>マシンタイプ <span id="cartype-label-name" class="cartype-label">バランス</span></label>
+        <div class="cartype-options" id="cartype-options">
+          <div class="cartype-option active" data-type="balanced">
+            <div class="ctt-icon">⚖️</div><div class="ctt-name">バランス</div>
+            <div class="ctt-stats"><span>速度★★★</span><span>加速★★★</span><span>旋回★★★</span></div>
+          </div>
+          <div class="cartype-option" data-type="speed">
+            <div class="ctt-icon">🚀</div><div class="ctt-name">スピード</div>
+            <div class="ctt-stats"><span>速度★★★★★</span><span>加速★★</span><span>旋回★★</span></div>
+          </div>
+          <div class="cartype-option" data-type="accel">
+            <div class="ctt-icon">⚡</div><div class="ctt-name">アクセル</div>
+            <div class="ctt-stats"><span>速度★★</span><span>加速★★★★★</span><span>旋回★★★</span></div>
+          </div>
+          <div class="cartype-option" data-type="handling">
+            <div class="ctt-icon">🎯</div><div class="ctt-name">ハンドリング</div>
+            <div class="ctt-stats"><span>速度★★★</span><span>加速★★</span><span>旋回★★★★★</span></div>
+          </div>
+          <div class="cartype-option" data-type="heavy">
+            <div class="ctt-icon">🦏</div><div class="ctt-name">ヘビー</div>
+            <div class="ctt-stats"><span>速度★★★★</span><span>加速★★</span><span>旋回★★ <small>(押し負けない)</small></span></div>
+          </div>
         </div>
       </div>
       <div class="title-buttons">
@@ -124,10 +149,18 @@
       <button class="ctrl-btn ctrl-brake" id="ctrl-brake">◀ BRAKE</button>
       <button class="ctrl-btn ctrl-look" id="ctrl-look" title="後ろを見る">👀</button>
       <button class="ctrl-btn ctrl-respawn" id="ctrl-respawn" title="復帰">🔄</button>
+      <button class="ctrl-btn ctrl-rewind" id="ctrl-rewind" title="3秒巻き戻し (レース中1回のみ)">⏪ REWIND</button>
     </div>
     <div class="touch-controls-right">
       <button class="ctrl-btn ctrl-item" id="ctrl-item">★<br>USE</button>
       <button class="ctrl-btn ctrl-accel" id="ctrl-accel">ACCEL ▶</button>
+    </div>
+
+    <!-- 巻き戻しゲージ HUD -->
+    <div class="hud-rewind" id="hud-rewind">
+      <div class="rewind-icon">⏪</div>
+      <div class="rewind-label">REWIND</div>
+      <div class="rewind-state" id="rewind-state">READY</div>
     </div>
 
     <!-- 設定ボタン群 (右上、HUDアイテムの下) -->

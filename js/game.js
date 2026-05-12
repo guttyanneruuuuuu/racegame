@@ -9,7 +9,7 @@ const Game = {
   localCar: null,
   state: 'idle',
   raceStartTime: 0,
-  totalLaps: 2,    // コース大型化に伴い周回数を調整 (1周が長いので2周でも十分長く)
+  totalLaps: 3,    // 3周のレース
   lastSendTime: 0,
   netSendInterval: 50,
 
@@ -94,12 +94,23 @@ const Game = {
     for (let i = 0; i < playersList.length; i++) {
       const p = playersList[i];
       const pos = positions[i];
+      // AI車にもランダムな車種を割り当て (毎レース多様性)
+      let cType = p.carType;
+      if (!cType) {
+        if (p.isAI) {
+          const types = ['balanced','speed','accel','handling','heavy'];
+          cType = types[Math.floor(Math.random() * types.length)];
+        } else {
+          cType = 'balanced';
+        }
+      }
       const car = new Car({
         id: p.id,
         name: p.name,
         color: p.color,
         isLocal: p.id === localId,
         isAI: !!p.isAI,
+        carType: cType,
         x: pos.x, z: pos.z, angle: pos.angle,
       });
       this.scene.add(car.mesh);
@@ -116,6 +127,16 @@ const Game = {
     this.state = 'countdown';
     this.lapTimes = {};
     this._prevRanks.clear();
+
+    // 巻き戻しHUDのリセット
+    const hud = document.getElementById('hud-rewind');
+    if (hud) {
+      hud.classList.remove('used', 'active');
+      const st = document.getElementById('rewind-state');
+      if (st) st.textContent = 'READY';
+    }
+    const rwBtn = document.getElementById('ctrl-rewind');
+    if (rwBtn) rwBtn.classList.remove('used');
   },
 
   startCountdown(startTime) {
@@ -136,6 +157,7 @@ const Game = {
     if (this.state === 'racing' || this.state === 'finished') {
       this._updateLocal(dt);
       this._updateAIs(dt);
+      this.updateRemoteInterpolation(dt);
       this._handleCollisions();
       this._sendNetwork(now);
       this._updateMagnet(dt);
@@ -245,16 +267,24 @@ const Game = {
         const d = Math.hypot(dx, dz);
         const minD = 2.5;
         if (d < minD && d > 0.001) {
-          const overlap = (minD - d) / 2;
+          // 車種別重量で押し戻し量を非対称に
+          const wa = (a.stats && a.stats.weight) || 1;
+          const wb = (b.stats && b.stats.weight) || 1;
+          const totalW = wa + wb;
+          // 軽い方がより押される
+          const overlap = (minD - d);
+          const aShare = wb / totalW;
+          const bShare = wa / totalW;
           const nx = dx / d, nz = dz / d;
-          a.x -= nx * overlap;
-          a.z -= nz * overlap;
-          b.x += nx * overlap;
-          b.z += nz * overlap;
+          a.x -= nx * overlap * aShare;
+          a.z -= nz * overlap * aShare;
+          b.x += nx * overlap * bShare;
+          b.z += nz * overlap * bShare;
+          // 速度: 重い方が運動量を保つ
           const ra = a.speed * 0.7;
           const rb = b.speed * 0.7;
-          a.speed = ra * 0.55 + rb * 0.45;
-          b.speed = ra * 0.45 + rb * 0.55;
+          a.speed = ra * (0.5 + bShare * 0.2) + rb * (0.5 - bShare * 0.2);
+          b.speed = ra * (0.5 - aShare * 0.2) + rb * (0.5 + aShare * 0.2);
           // 衝撃音
           if ((a.isLocal || b.isLocal) && window.SFX && Math.abs(ra - rb) > 6) SFX.play('bump');
         }
@@ -302,11 +332,49 @@ const Game = {
   applyRemoteState(id, state) {
     const car = this.cars.find(c => c.id === id);
     if (!car || car.isLocal) return;
-    car.x = Utils.lerp(car.x, state.x, 0.55);
-    car.z = Utils.lerp(car.z, state.z, 0.55);
-    if (state.y !== undefined) car.y = Utils.lerp(car.y, state.y, 0.5);
-    const diff = Utils.angDiff(state.angle, car.angle);
-    car.angle += diff * 0.5;
+    const now = performance.now();
+    // === デッドレコニング: 受信時刻 + 速度/角度から将来位置を予測し、
+    //     ローカルでは予測ターゲットへ滑らかに補間する ===
+    if (!car._net) {
+      car._net = {
+        targetX: state.x, targetZ: state.z, targetY: state.y || 0,
+        targetAngle: state.angle, targetSpeed: state.speed,
+        lastRecvTime: now,
+        // 受信ごとに更新される推定速度ベクトル
+        vx: Math.sin(state.angle) * state.speed,
+        vz: Math.cos(state.angle) * state.speed,
+        // 初回は即座にスナップ
+        x: state.x, z: state.z, y: state.y || 0, angle: state.angle,
+      };
+      car.x = state.x; car.z = state.z; car.y = state.y || 0; car.angle = state.angle;
+    } else {
+      const net = car._net;
+      // 受信間隔(秒)
+      const recvDt = Math.max(0.01, (now - net.lastRecvTime) / 1000);
+      // 前回のターゲットと今回の実測値の差から実速度を推定
+      const obsVx = (state.x - net.targetX) / recvDt;
+      const obsVz = (state.z - net.targetZ) / recvDt;
+      // ノイズ除去: 観測 + 送信元の speed/angle のブレンド
+      const reportedVx = Math.sin(state.angle) * state.speed;
+      const reportedVz = Math.cos(state.angle) * state.speed;
+      // 異常な瞬間移動(>40m/フレーム)はクランプして観測を破棄
+      const jumpDist = Math.hypot(state.x - net.targetX, state.z - net.targetZ);
+      if (jumpDist > 40) {
+        // テレポート扱い: 即座にスナップ
+        net.vx = reportedVx; net.vz = reportedVz;
+        car.x = state.x; car.z = state.z;
+      } else {
+        // 70%観測, 30%報告 のブレンドで速度ベクトル更新
+        net.vx = obsVx * 0.7 + reportedVx * 0.3;
+        net.vz = obsVz * 0.7 + reportedVz * 0.3;
+      }
+      net.targetX = state.x;
+      net.targetZ = state.z;
+      net.targetY = state.y !== undefined ? state.y : net.targetY;
+      net.targetAngle = state.angle;
+      net.targetSpeed = state.speed;
+      net.lastRecvTime = now;
+    }
     car.speed = state.speed;
     car.lap = state.lap;
     car.totalProgress = state.totalProgress;
@@ -315,6 +383,33 @@ const Game = {
     car.invincibleTimer = state.shield ? 0.2 : car.invincibleTimer;
     car.squishTimer = state.squish ? 0.2 : 0;
     car.ghostTimer = state.ghost ? 0.2 : 0;
+  },
+
+  // 毎フレーム呼ばれる: リモート車の補間とデッドレコニング適用
+  updateRemoteInterpolation(dt) {
+    if (this.mode !== 'multi') return;
+    const now = performance.now();
+    for (const car of this.cars) {
+      if (car.isLocal || car.isAI) continue;
+      const net = car._net;
+      if (!net) continue;
+      // 受信からの経過(秒)
+      const sinceRecv = Math.max(0, (now - net.lastRecvTime) / 1000);
+      // 予測位置 = 最後のターゲット + 速度ベクトル * 経過時間
+      // ただし古すぎる(>0.5s)外挿はクランプ
+      const extrapT = Math.min(0.5, sinceRecv);
+      const predX = net.targetX + net.vx * extrapT;
+      const predZ = net.targetZ + net.vz * extrapT;
+      const predY = net.targetY;
+      // 現在位置から予測位置へ exponential smoothing (時間定数 ~80ms)
+      const tau = 0.08;
+      const alpha = 1 - Math.exp(-dt / tau);
+      car.x = Utils.lerp(car.x, predX, alpha);
+      car.z = Utils.lerp(car.z, predZ, alpha);
+      car.y = Utils.lerp(car.y, predY, alpha);
+      const aDiff = Utils.angDiff(net.targetAngle, car.angle);
+      car.angle += aDiff * alpha;
+    }
   },
 
   applyRemoteAction(action) {
@@ -515,6 +610,36 @@ const Game = {
 
   forceFinish() {
     this._checkRaceEnd();
+  },
+
+  // ===== ユニーク機能: 時間巻き戻し (3秒前) =====
+  triggerRewind() {
+    if (this.state !== 'racing') return false;
+    if (!this.localCar || this.localCar.finished) return false;
+    const ok = this.localCar.doRewind();
+    if (ok) {
+      if (typeof showToast === 'function') showToast('⏪ TIME REWIND!', 1200);
+      if (window.SFX) try { SFX.play('item'); } catch (_) {}
+      // HUD更新
+      const hud = document.getElementById('hud-rewind');
+      if (hud) {
+        hud.classList.add('used');
+        const st = document.getElementById('rewind-state');
+        if (st) st.textContent = 'USED';
+      }
+      const btn = document.getElementById('ctrl-rewind');
+      if (btn) btn.classList.add('used');
+      // ネット同期 (他クライアントには瞬間移動として伝わるが、dead-reckoningで吸収される)
+      if (window.Net && Net.sendAction) {
+        try { Net.sendAction({ kind: '_rewind' }); } catch (_) {}
+      }
+      // カメラを即時スナップ
+      if (typeof this._updateCamera === 'function') this._updateCamera(0, true);
+      return true;
+    } else {
+      if (typeof showToast === 'function') showToast('⏪ 巻き戻しは使用済み', 900);
+      return false;
+    }
   },
 
   _updateCamera(dt, snap = false) {

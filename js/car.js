@@ -19,6 +19,15 @@ const CarPhysics = {
   STUCK_SPEED: 1.5,
 };
 
+// ===== 車種ごとの統計値 (デフォルト=balanced からの乗数) =====
+const CarTypeStats = {
+  balanced:  { maxSpeed: 1.00, accel: 1.00, steer: 1.00, weight: 1.00, friction: 1.00 },
+  speed:     { maxSpeed: 1.15, accel: 0.82, steer: 0.85, weight: 1.10, friction: 0.95 },
+  accel:     { maxSpeed: 0.92, accel: 1.40, steer: 1.05, weight: 0.85, friction: 1.10 },
+  handling:  { maxSpeed: 0.98, accel: 0.95, steer: 1.30, weight: 0.90, friction: 1.05 },
+  heavy:     { maxSpeed: 1.08, accel: 0.78, steer: 0.78, weight: 1.50, friction: 0.90 },
+};
+
 class Car {
   constructor(opts = {}) {
     this.id = opts.id || 'p';
@@ -26,6 +35,8 @@ class Car {
     this.color = opts.color || '#FF3B3B';
     this.isLocal = !!opts.isLocal;
     this.isAI = !!opts.isAI;
+    this.carType = opts.carType || 'balanced';
+    this.stats = CarTypeStats[this.carType] || CarTypeStats.balanced;
 
     this.x = opts.x || 0;
     this.z = opts.z || 0;
@@ -60,6 +71,13 @@ class Car {
     this.glider = false;
     this.gliderTimer = 0;
     this.gliderMesh = null;
+
+    // 時間巻き戻し (ユニーク機能: マリオカートには無い)
+    // 過去 3秒の状態をリングバッファに保存しておき、ボタン押下で巻き戻す
+    this.rewindBuffer = [];     // [{t, x, z, y, angle, speed, lap, totalProgress}, ...]
+    this.rewindBufferDur = 3.0; // 最大3秒
+    this.rewindUsed = false;    // 1レース1回のみ
+    this.rewinding = false;     // 巻き戻し演出中
 
     // アイテム
     this.item = null;
@@ -337,23 +355,18 @@ class Car {
       steer = Utils.lerp(steer, this.wallRecoverSteer, assist);
     }
 
-<<<<<<< HEAD
-    // 加速 (コインボーナス: 1枚で+2%加速)
-    const accelMul = 1 + Math.min(10, this.coins) * 0.02;
+    // 加速 (コインボーナス: 1枚で+2%加速 + 車種別 accel 倍率)
+    const accelMul = (1 + Math.min(10, this.coins) * 0.02) * (this.stats.accel || 1);
     if (accel) this.speed += CarPhysics.ACCEL * accelMul * dt;
-=======
-    // 加速
-    if (accel) this.speed += CarPhysics.ACCEL * dt;
->>>>>>> origin/main
     if (brake) {
       if (this.speed > 0.2) this.speed -= CarPhysics.BRAKE * dt;
       else this.speed -= CarPhysics.REVERSE_ACCEL * dt;
     }
 
-    // 自然減速
+    // 自然減速 (車種別 friction 倍率)
     if (!accel && !brake) {
       const sign = Math.sign(this.speed);
-      this.speed -= sign * CarPhysics.FRICTION * dt;
+      this.speed -= sign * CarPhysics.FRICTION * (this.stats.friction || 1) * dt;
       if (Math.abs(this.speed) < 0.2) this.speed = 0;
     }
 
@@ -375,9 +388,9 @@ class Car {
     let maxSp = CarPhysics.MAX_SPEED;
     if (this.boostTimer > 0) maxSp = CarPhysics.MAX_SPEED_BOOST;
     else if (this.miniTurboTimer > 0) maxSp = CarPhysics.MAX_SPEED_MINI;
-    // コインボーナス: 1枚で+2% (最大10枚 = +20%)
+    // コインボーナス: 1枚で+2% (最大10枚 = +20%) + 車種別 maxSpeed 倍率
     const coinMul = 1 + Math.min(10, this.coins) * 0.02;
-    maxSp *= coinMul;
+    maxSp *= coinMul * (this.stats.maxSpeed || 1);
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
 
     // === ドリフト処理 ===
@@ -404,8 +417,8 @@ class Car {
     const absSp = Math.abs(this.speed);
     const speedFactor = Utils.clamp(0.55 + absSp / 22, 0.55, 1.0);
     const highSpeedDamp = 1 - Math.min(1, absSp / CarPhysics.MAX_SPEED) * CarPhysics.STEER_AT_SPEED;
-    // ドリフト時は片方向に強く曲がる
-    let turnEffect = CarPhysics.STEER_SPEED * speedFactor * highSpeedDamp;
+    // ドリフト時は片方向に強く曲がる (車種別 steer 倍率)
+    let turnEffect = CarPhysics.STEER_SPEED * speedFactor * highSpeedDamp * (this.stats.steer || 1);
     if (this.driftActive) turnEffect *= 1.35;
     const dir = Math.sign(this.speed) || 1;
     this.angle += steer * turnEffect * dt * dir;
@@ -558,6 +571,52 @@ class Car {
     if (this.squishTimer > 0) this.squishTimer -= dt;
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
     if (this.ghostTimer > 0) this.ghostTimer -= dt;
+    // 巻き戻しバッファに状態を保存 (ローカルのみで十分だが全車保存しても軽量)
+    this._recordRewindSnapshot(dt);
+  }
+
+  _recordRewindSnapshot(dt) {
+    if (this.rewinding) return;
+    this._rewindAccum = (this._rewindAccum || 0) + dt;
+    // 0.08秒ごとにサンプル (約12fps相当、3秒で~37サンプル)
+    if (this._rewindAccum < 0.08) return;
+    this._rewindAccum = 0;
+    const t = performance.now() / 1000;
+    this.rewindBuffer.push({
+      t, x: this.x, z: this.z, y: this.y,
+      angle: this.angle, speed: this.speed,
+      lap: this.lap, totalProgress: this.totalProgress,
+      lastProgressIdx: this.lastProgressIdx,
+    });
+    // 古いサンプルを捨てる
+    const cutoff = t - this.rewindBufferDur;
+    while (this.rewindBuffer.length > 0 && this.rewindBuffer[0].t < cutoff) {
+      this.rewindBuffer.shift();
+    }
+  }
+
+  // 巻き戻し実行 (3秒前の状態へ瞬間移動)
+  doRewind() {
+    if (this.rewindUsed) return false;
+    if (this.rewindBuffer.length < 3) return false;
+    // 一番古い (=3秒前) サンプルへ
+    const snap = this.rewindBuffer[0];
+    this.x = snap.x; this.z = snap.z; this.y = snap.y;
+    this.angle = snap.angle;
+    this.speed = Math.max(snap.speed * 0.7, 8); // 少し落とす (連打防止)
+    this.lastProgressIdx = snap.lastProgressIdx;
+    // 状態リセット (悪い状態から逃れるため)
+    this.spinTimer = 0; this.confuseTimer = 0; this.slowTimer = 0;
+    this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
+    this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
+    this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
+    // 短時間の無敵 (連続ダメージ防止)
+    this.invincibleTimer = Math.max(this.invincibleTimer, 1.5);
+    this.rewindBuffer = [];
+    this.rewindUsed = true;
+    this.rewinding = true;
+    setTimeout(() => { this.rewinding = false; }, 350);
+    return true;
   }
 
   _releaseDrift() {

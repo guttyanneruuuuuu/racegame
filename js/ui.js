@@ -1,6 +1,7 @@
 // ============= UI 管理 =============
 const GameUI = {
   selectedColor: '#E53935',
+  selectedCarType: 'balanced',
 
   init() {
     // 色選択
@@ -11,6 +12,25 @@ const GameUI = {
         this.selectedColor = el.dataset.color;
       });
     });
+
+    // マシンタイプ選択
+    document.querySelectorAll('.cartype-option').forEach(el => {
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.cartype-option').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
+        this.selectedCarType = el.dataset.type;
+        const lab = document.getElementById('cartype-label-name');
+        if (lab) lab.textContent = el.querySelector('.ctt-name').textContent;
+      });
+    });
+    // localStorage から復元
+    try {
+      const savedType = localStorage.getItem('gr_carType');
+      if (savedType) {
+        const el = document.querySelector(`.cartype-option[data-type="${savedType}"]`);
+        if (el) el.click();
+      }
+    } catch (_) {}
 
     // タイトル画面ボタン
     document.getElementById('btn-create-room').addEventListener('click', () => this._onCreateRoom());
@@ -143,7 +163,8 @@ const GameUI = {
     if (!name) name = 'プレイヤー' + Math.floor(Math.random() * 100);
     if (name.length > 10) name = name.slice(0, 10);
     localStorage.setItem('gyrorush-name', name);
-    return { name, color: this.selectedColor };
+    try { localStorage.setItem('gr_carType', this.selectedCarType); } catch (_) {}
+    return { name, color: this.selectedColor, carType: this.selectedCarType };
   },
 
   async _onCreateRoom() {
@@ -365,35 +386,35 @@ const GameUI = {
     setTimeout(() => el.remove(), duration + 50);
   },
 
-  // 墨スプラッシュ (弱体化版: 中央視界を残し、効果時間も短く)
+  // 墨スプラッシュ (大幅弱体化版: 角の小さい汚れだけ、視野ほぼ確保)
   flashInk() {
     // 既存の墨があれば差し替え (重ね掛け防止)
     const old = document.querySelector('.ink-splat');
     if (old) old.remove();
     const el = document.createElement('div');
     el.className = 'ink-splat';
-    // 周辺だけ汚す控えめなレイアウト + 中央透過
+    // 4隅のさらに小さな汚れ + 中央~周辺はほぼ透過
     el.innerHTML = `<svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
       <defs>
-        <filter id="ink-blur"><feGaussianBlur stdDeviation="10"/></filter>
-        <radialGradient id="ink-grad" cx="50%" cy="55%" r="55%">
+        <filter id="ink-blur"><feGaussianBlur stdDeviation="8"/></filter>
+        <radialGradient id="ink-grad" cx="50%" cy="55%" r="60%">
           <stop offset="0%"  stop-color="#000" stop-opacity="0"/>
-          <stop offset="55%" stop-color="#000" stop-opacity="0"/>
+          <stop offset="70%" stop-color="#000" stop-opacity="0"/>
           <stop offset="100%" stop-color="#000" stop-opacity="1"/>
         </radialGradient>
         <mask id="ink-mask"><rect width="800" height="600" fill="url(#ink-grad)"/></mask>
       </defs>
       <g filter="url(#ink-blur)" fill="#1a1a2e" mask="url(#ink-mask)">
-        <circle cx="120" cy="120" r="110"/>
-        <circle cx="680" cy="140" r="120"/>
-        <circle cx="90"  cy="460" r="100"/>
-        <circle cx="720" cy="460" r="110"/>
+        <circle cx="70"  cy="80"  r="65"/>
+        <circle cx="730" cy="90"  r="70"/>
+        <circle cx="60"  cy="510" r="60"/>
+        <circle cx="740" cy="510" r="65"/>
       </g>
     </svg>`;
     document.body.appendChild(el);
-    // 短時間でフェード開始 (2.2s → 1.0s)、合計1.8sで完全消去
-    setTimeout(() => el.classList.add('fade'), 1000);
-    setTimeout(() => el.remove(), 1900);
+    // さらに短く: 0.5sでフェード開始、合計1.2sで完全消去
+    setTimeout(() => el.classList.add('fade'), 500);
+    setTimeout(() => el.remove(), 1200);
   },
 
   showResults(cars) {

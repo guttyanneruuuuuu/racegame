@@ -82,6 +82,12 @@ const Input = {
         // C: 後方視点 トグル
         this.lookBack = !this.lookBack;
       }
+      if (e.key.toLowerCase() === 'q') {
+        // Q: 巻き戻し
+        if (Game && Game.localCar) {
+          if (typeof Game.triggerRewind === 'function') Game.triggerRewind();
+        }
+      }
     });
     window.addEventListener('keyup', (e) => {
       this._keys[e.key.toLowerCase()] = false;
@@ -152,6 +158,17 @@ const Input = {
       };
       respawnBtn.addEventListener('touchstart', on, { passive: false });
       respawnBtn.addEventListener('mousedown', on);
+    }
+
+    // 巻き戻しボタン (ユニーク機能: 3秒前へ巻き戻し、レース中1回のみ)
+    const rewindBtn = document.getElementById('ctrl-rewind');
+    if (rewindBtn) {
+      const on = (e) => {
+        e.preventDefault();
+        if (Game && typeof Game.triggerRewind === 'function') Game.triggerRewind();
+      };
+      rewindBtn.addEventListener('touchstart', on, { passive: false });
+      rewindBtn.addEventListener('mousedown', on);
     }
 
     this._bindSteerOverlay();

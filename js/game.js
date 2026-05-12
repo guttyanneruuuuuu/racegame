@@ -9,7 +9,7 @@ const Game = {
   localCar: null,
   state: 'idle',
   raceStartTime: 0,
-  totalLaps: 2,    // コース大型化に伴い周回数を調整 (1周が長いので2周でも十分長く)
+  totalLaps: 3,    // 3周のレース
   lastSendTime: 0,
   netSendInterval: 50,
 

@@ -337,14 +337,9 @@ class Car {
       steer = Utils.lerp(steer, this.wallRecoverSteer, assist);
     }
 
-<<<<<<< HEAD
     // 加速 (コインボーナス: 1枚で+2%加速)
     const accelMul = 1 + Math.min(10, this.coins) * 0.02;
     if (accel) this.speed += CarPhysics.ACCEL * accelMul * dt;
-=======
-    // 加速
-    if (accel) this.speed += CarPhysics.ACCEL * dt;
->>>>>>> origin/main
     if (brake) {
       if (this.speed > 0.2) this.speed -= CarPhysics.BRAKE * dt;
       else this.speed -= CarPhysics.REVERSE_ACCEL * dt;

@@ -948,6 +948,40 @@ input { font-family: inherit; outline: none; }
   0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
 }
+.wrong-way.show.rescue {
+  animation: wwRescuePulse 0.55s ease-in-out infinite alternate;
+  background: rgba(30, 136, 229, 0.92);
+  border-color: #fff176;
+  box-shadow: 0 6px 20px rgba(30,136,229,0.55), 0 0 24px rgba(255,241,118,0.55);
+}
+.wrong-way.rescue::before {
+  content: '🪝';
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  transform: translateX(-50%);
+  font-size: 24px;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
+  animation: wwHookBob 0.45s ease-in-out infinite alternate;
+}
+.wrong-way.rescue::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -16px;
+  width: 2px;
+  height: 16px;
+  background: rgba(255,255,255,0.92);
+  transform: translateX(-50%);
+}
+@keyframes wwRescuePulse {
+  0% { opacity: 0.88; transform: translate(-50%, -50%) scale(0.98); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+}
+@keyframes wwHookBob {
+  0% { transform: translateX(-50%) translateY(0); }
+  100% { transform: translateX(-50%) translateY(3px); }
+}
 
 /* ============= 追加: インクスプラッシュ (弱体化: 視界を奪いすぎない) ============= */
 .ink-splat {

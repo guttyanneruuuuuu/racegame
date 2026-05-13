@@ -284,7 +284,7 @@ const GameUI = {
 
     // プレイヤー数表示
     const countEl = document.getElementById('player-count');
-    const maxPlayers = (window.Net && Number.isFinite(Net.MAX_PLAYERS)) ? Net.MAX_PLAYERS : 6;
+    const maxPlayers = (window.Net && Number.isInteger(Net.MAX_PLAYERS) && Net.MAX_PLAYERS > 0) ? Net.MAX_PLAYERS : 6;
     if (countEl) countEl.textContent = `${players.length} / ${maxPlayers}`;
 
     for (const p of players) {

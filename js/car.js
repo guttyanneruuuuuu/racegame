@@ -17,6 +17,10 @@ const CarPhysics = {
   RADIUS: 1.2,
   STUCK_TIME: 2.2,          // 自動復帰を少し早く
   STUCK_SPEED: 1.5,
+  WRONG_WAY_MIN_SPEED: 4,
+  WRONG_WAY_DOT_THRESHOLD: -0.35,
+  WRONG_WAY_TIMER_INC: 0.016,
+  WRONG_WAY_TIMER_DEC: 0.03,
 };
 
 // ===== 車種ごとの統計値 (デフォルト=balanced からの乗数) =====
@@ -873,15 +877,15 @@ class Car {
       const vx = Math.sin(this.angle) * this.speed;
       const vz = Math.cos(this.angle) * this.speed;
       const vLen = Math.hypot(vx, vz);
-      if (vLen > 4) {
+      if (vLen > CarPhysics.WRONG_WAY_MIN_SPEED) {
         const dirDot = (vx * segDir.ux + vz * segDir.uz) / vLen; // +1:順走 / -1:逆走
-        if (dirDot < -0.35) this.wrongWayTimer += 0.016;
-        else this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
+        if (dirDot < CarPhysics.WRONG_WAY_DOT_THRESHOLD) this.wrongWayTimer += CarPhysics.WRONG_WAY_TIMER_INC;
+        else this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
       } else {
-        this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
+        this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
       }
     } else {
-      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
     }
 
     // スタック検知 (動いてないのに時間経過)

@@ -867,15 +867,21 @@ class Car {
     this.lastProgressIdx = prog.index;
     this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
 
-    // 逆走検知 (進行度が一定期間落ち続けた場合)
-    if (this.totalProgress > this.maxProgress) {
-      this.maxProgress = this.totalProgress;
-      this.wrongWayTimer = 0;
-    } else if (this.totalProgress < this.maxProgress - 8) {
-      // 後退している
-      this.wrongWayTimer += 0.016;
+    // 逆走検知 (コース進行方向に対する速度ベクトルで判定)
+    const segDir = Track._segDir && Track._segDir[prog.index];
+    if (segDir) {
+      const vx = Math.sin(this.angle) * this.speed;
+      const vz = Math.cos(this.angle) * this.speed;
+      const vLen = Math.hypot(vx, vz);
+      if (vLen > 4) {
+        const dirDot = (vx * segDir.ux + vz * segDir.uz) / vLen; // +1:順走 / -1:逆走
+        if (dirDot < -0.35) this.wrongWayTimer += 0.016;
+        else this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
+      } else {
+        this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
+      }
     } else {
-      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.01);
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.03);
     }
 
     // スタック検知 (動いてないのに時間経過)

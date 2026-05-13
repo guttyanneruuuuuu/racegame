@@ -17,10 +17,11 @@ const CarPhysics = {
   RADIUS: 1.2,
   STUCK_TIME: 2.2,          // 自動復帰を少し早く
   STUCK_SPEED: 1.5,
-  WRONG_WAY_MIN_SPEED: 4,
+  WRONG_WAY_MIN_SPEED: 4,       // m/s: 低速時は誤検知を避けるため判定しない
   WRONG_WAY_DOT_THRESHOLD: -0.35,
   WRONG_WAY_TIMER_INC: 0.016,
   WRONG_WAY_TIMER_DEC: 0.03,
+  SEGMENT_DIRECTION_MIN_MAGNITUDE: 1e-6,
 };
 
 // ===== 車種ごとの統計値 (デフォルト=balanced からの乗数) =====
@@ -872,6 +873,9 @@ class Car {
     this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
 
     // 逆走検知 (コース進行方向に対する速度ベクトルで判定)
+    const decayWrongWayTimer = () => {
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
+    };
     const segmentDirection = Track._segDir?.[prog.index];
     if (segmentDirection) {
       const velocityX = Math.sin(this.angle) * this.speed;
@@ -879,22 +883,22 @@ class Car {
       const velocityMagnitude = Math.hypot(velocityX, velocityZ);
       if (velocityMagnitude > CarPhysics.WRONG_WAY_MIN_SPEED) {
         const segmentDirectionMagnitude = Math.hypot(segmentDirection.ux, segmentDirection.uz);
-        if (segmentDirectionMagnitude > 1e-6) {
+        if (segmentDirectionMagnitude > CarPhysics.SEGMENT_DIRECTION_MIN_MAGNITUDE) {
           const normalizedVelX = velocityX / velocityMagnitude;
           const normalizedVelZ = velocityZ / velocityMagnitude;
           const normalizedSegX = segmentDirection.ux / segmentDirectionMagnitude;
           const normalizedSegZ = segmentDirection.uz / segmentDirectionMagnitude;
           const directionDotProduct = normalizedVelX * normalizedSegX + normalizedVelZ * normalizedSegZ; // +1:順走 / -1:逆走
           if (directionDotProduct < CarPhysics.WRONG_WAY_DOT_THRESHOLD) this.wrongWayTimer += CarPhysics.WRONG_WAY_TIMER_INC;
-          else this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
+          else decayWrongWayTimer();
         } else {
-          this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
+          decayWrongWayTimer();
         }
       } else {
-        this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
+        decayWrongWayTimer();
       }
     } else {
-      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
+      decayWrongWayTimer();
     }
 
     // スタック検知 (動いてないのに時間経過)

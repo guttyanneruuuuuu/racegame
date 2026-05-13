@@ -207,7 +207,7 @@ const Net = {
         break;
       }
       case 'startRace': {
-        this._emit('startRace', data.seed, data.startTime);
+        this._emit('startRace', data.seed, data.startTime, data.mapId);
         break;
       }
       case 'state': {
@@ -226,11 +226,11 @@ const Net = {
   },
 
   // ====== 公開API ======
-  startRace(seed) {
+  startRace(seed, mapId) {
     if (!this.isHost) return;
     const startTime = Date.now() + 3500;
-    this._broadcast({ type: 'startRace', seed, startTime });
-    this._emit('startRace', seed, startTime);
+    this._broadcast({ type: 'startRace', seed, startTime, mapId });
+    this._emit('startRace', seed, startTime, mapId);
   },
 
   sendState(state) {

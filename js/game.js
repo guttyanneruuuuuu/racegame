@@ -17,6 +17,7 @@ const Game = {
   miniCanvas: null,
 
   mode: 'multi',
+  currentMapId: 'grand',
 
   _camShakeTime: 0,
   _camShakeAmp: 0,
@@ -38,25 +39,40 @@ const Game = {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
-
-    this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
-    // 火山サーキット用の暖色ライティング
-    const hemi = new THREE.HemisphereLight(0xff8866, 0x3a1a14, 0.9);
-    this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffd0a0, 0.8);
-    dir.position.set(100, 150, 80);
-    this.scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xff5522, 0.35);  // 溶岩からの照り返し
-    fill.position.set(-80, 30, -50);
-    this.scene.add(fill);
-
     this.clock = new THREE.Clock();
+    const initialMap = (window.GameUI && GameUI.getSelectedMap) ? GameUI.getSelectedMap() : 'grand';
+    this._buildScene(initialMap);
+  },
 
-    Track.generate(this.scene);
+  _buildScene(mapId) {
+    this.currentMapId = (window.Track && Track.normalizeMapId) ? Track.normalizeMapId(mapId) : (mapId || 'grand');
+    this.scene = new THREE.Scene();
+
+    if (this.currentMapId === 'volcano') {
+      const hemi = new THREE.HemisphereLight(0xff8866, 0x3a1a14, 0.9);
+      this.scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffd0a0, 0.8);
+      dir.position.set(100, 150, 80);
+      this.scene.add(dir);
+      const fill = new THREE.DirectionalLight(0xff5522, 0.35);
+      fill.position.set(-80, 30, -50);
+      this.scene.add(fill);
+    } else {
+      const hemi = new THREE.HemisphereLight(0xf5fbff, 0x67a55c, 1.0);
+      this.scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+      dir.position.set(120, 150, 90);
+      this.scene.add(dir);
+      const fill = new THREE.DirectionalLight(0x90caf9, 0.18);
+      fill.position.set(-90, 45, -40);
+      this.scene.add(fill);
+    }
+
+    Track.generate(this.scene, this.currentMapId);
     ItemSystem.init(this.scene);
   },
 
@@ -76,11 +92,12 @@ const Game = {
     this.camera.updateProjectionMatrix();
   },
 
-  setupRace(playersList, localId, mode) {
+  setupRace(playersList, localId, mode, mapId) {
     this.mode = mode || 'multi';
-    for (const c of this.cars) this.scene.remove(c.mesh);
-    this.cars = [];
     ItemSystem.reset();
+    this._buildScene(mapId || this.currentMapId);
+    this.cars = [];
+    this.localCar = null;
 
     const numCars = playersList.length;
     const positions = Track.getStartPositions(numCars);
@@ -88,12 +105,18 @@ const Game = {
     for (let i = 0; i < playersList.length; i++) {
       const p = playersList[i];
       const pos = positions[i];
+      let cType = p.carType;
+      if (!cType && p.isAI) {
+        const types = ['balanced', 'speed', 'accel', 'handling', 'heavy'];
+        cType = types[Math.floor(Math.random() * types.length)];
+      }
       const car = new Car({
         id: p.id,
         name: p.name,
         color: p.color,
         isLocal: p.id === localId,
         isAI: !!p.isAI,
+        carType: cType,
         x: pos.x, z: pos.z, angle: pos.angle,
       });
       this.scene.add(car.mesh);
@@ -105,6 +128,7 @@ const Game = {
 
     if (this.localCar) {
       this._updateCamera(0, true);
+      if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
     }
 
     this.state = 'countdown';
@@ -446,7 +470,8 @@ const Game = {
         }
       }
       if (r.jump) {
-        c.applyJump(16);
+        c.applyJump(18);
+        c.deployGlider(3.5);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
           if (window.SFX) SFX.play('jump');
@@ -497,6 +522,13 @@ const Game = {
             showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
             if (window.SFX) SFX.play('pickup');
           }
+        }
+      }
+      if (Track.collectCoin && Track.collectCoin(c.x, c.z, 2.0)) {
+        const gained = c.addCoin ? c.addCoin(1) : false;
+        if (c.isLocal && gained && GameUI.updateCoins) {
+          GameUI.updateCoins(c.coins);
+          if (window.SFX) SFX.play('pickup');
         }
       }
     }

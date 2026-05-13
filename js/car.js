@@ -61,6 +61,7 @@ class Car {
     this.slowTimer = 0;           // オイル等の減速デバフ
     this.slowMul = 1.0;
     this.confuseTimer = 0;        // 逆操作デバフ (墨)
+    this.inkScrambleTimer = 0;    // HUD/ミニマップスクランブル (新墨効果)
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
 
@@ -576,6 +577,7 @@ class Car {
     if (this.squishTimer > 0) this.squishTimer -= dt;
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
     if (this.ghostTimer > 0) this.ghostTimer -= dt;
+    if (this.inkScrambleTimer > 0) this.inkScrambleTimer -= dt;
     // 巻き戻しバッファに状態を保存 (ローカルのみで十分だが全車保存しても軽量)
     this._recordRewindSnapshot(dt);
   }
@@ -611,7 +613,7 @@ class Car {
     this.speed = Math.max(snap.speed * 0.7, 8); // 少し落とす (連打防止)
     this.lastProgressIdx = snap.lastProgressIdx;
     // 状態リセット (悪い状態から逃れるため)
-    this.spinTimer = 0; this.confuseTimer = 0; this.slowTimer = 0;
+    this.spinTimer = 0; this.confuseTimer = 0; this.slowTimer = 0; this.inkScrambleTimer = 0;
     this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
     this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
     this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
@@ -1047,8 +1049,11 @@ class Car {
   }
   hitInkSplash() {
     if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
-    // 弱体化: 4.0秒 → 1.8秒, 操作反転はやめ"舵が鈍る"程度に
-    this.applyConfuse(1.8);
+    // 新仕様: 操作妨害ではなく『HUD/ミニマップを乱す』効果に変更
+    // - confuseTimer は短めに残す (僅かな操作鈍化はキャラ的演出)
+    // - inkScrambleTimer でミニマップ/順位/スピード表示をスクランブル
+    this.applyConfuse(0.6);
+    this.inkScrambleTimer = Math.max(this.inkScrambleTimer || 0, 4.5);
     return true;
   }
   hitMine() {

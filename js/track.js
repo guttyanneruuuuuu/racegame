@@ -940,20 +940,27 @@ const Track = {
   },
 
   _buildDecorations() {
+    // 品質モードで装飾密度を決定
+    const q = window.__GR_QUALITY__ || 'med';
+    const denseConf = {
+      low:  { treeStep: 8, treeProb: 0.18, signs: false, gates: false, lamps: false },
+      med:  { treeStep: 4, treeProb: 0.45, signs: true,  gates: true,  lamps: true  },
+      high: { treeStep: 3, treeProb: 0.55, signs: true,  gates: true,  lamps: true  },
+    }[q];
+
     const treeMat1 = new THREE.MeshLambertMaterial({ color: 0x2e7d32 });
     const treeMat2 = new THREE.MeshLambertMaterial({ color: 0x6d4c41 });
-    const leafGeo = new THREE.ConeGeometry(2.5, 6, 8);
-    const trunkGeo = new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6);
+    const leafGeo = new THREE.ConeGeometry(2.5, 6, q === 'low' ? 5 : 8);
+    const trunkGeo = new THREE.CylinderGeometry(0.5, 0.6, 2.5, q === 'low' ? 4 : 6);
 
-    // 木の本数を半分以下に間引いて軽量化 (i+=2 → i+=4, 確率も下げる)
     const n = this.pathPoints.length;
-    for (let i = 0; i < n; i += 4) {
+    for (let i = 0; i < n; i += denseConf.treeStep) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
 
       for (let side of [1, -1]) {
-        if (Math.random() > 0.45) continue;
+        if (Math.random() > denseConf.treeProb) continue;
         const off = (w + 12 + Math.random() * 60) * side;
         const px = cur.x + nx * off + Utils.rand(-3, 3);
         const pz = cur.z + nz * off + Utils.rand(-3, 3);
@@ -966,37 +973,44 @@ const Track = {
       }
     }
 
-    // ===== セクターサインボード (大型) =====
-    this._buildSectorSigns();
-    // ===== コースゲート/トンネル風アーチ (進行を盛り上げる) =====
-    this._buildGates();
-    // ===== 街灯ポール (高速ストレート区間) =====
-    this._buildStreetLamps();
+    // ===== セクターサインボード (大型) — 中品質以上のみ =====
+    if (denseConf.signs) this._buildSectorSigns();
+    // ===== コースゲート/トンネル風アーチ — 中品質以上のみ =====
+    if (denseConf.gates) this._buildGates();
+    // ===== 街灯ポール — 中品質以上のみ =====
+    if (denseConf.lamps) this._buildStreetLamps();
 
+    // 観客スタンド: 低品質は数を減らす
+    const standCount = q === 'low' ? 4 : 10;
     const p = this.pathPoints[0];
     const standColors = [0xffffff, 0xe53935, 0x1976d2, 0xfbc02d];
-    for (let i = 0; i < 10; i++) {
+    // === スタンド観客テクスチャを1枚だけ生成し全スタンドで共有 (描画コール&メモリ削減) ===
+    const audCanvas = document.createElement('canvas');
+    audCanvas.width = 256; audCanvas.height = 64;
+    const actx = audCanvas.getContext('2d');
+    actx.fillStyle = '#ffffff'; actx.fillRect(0, 0, 256, 64);
+    const dotCount = q === 'low' ? 40 : 80;
+    for (let k = 0; k < dotCount; k++) {
+      actx.fillStyle = `hsl(${Math.random() * 360}, 80%, 55%)`;
+      actx.beginPath();
+      actx.arc(Math.random() * 256, Math.random() * 64, 3 + Math.random() * 2, 0, Math.PI * 2);
+      actx.fill();
+    }
+    const audTex = new THREE.CanvasTexture(audCanvas);
+    const audMat = new THREE.MeshBasicMaterial({ map: audTex });
+    const standGeo = new THREE.BoxGeometry(10, 4, 3);
+    const audGeo = new THREE.PlaneGeometry(9.5, 3.5);
+    const offset = (standCount - 1) / 2;
+    for (let i = 0; i < standCount; i++) {
       const mat = new THREE.MeshLambertMaterial({ color: standColors[i % standColors.length] });
-      const stand = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 3), mat);
+      const stand = new THREE.Mesh(standGeo, mat);
       const { nx, nz } = this._segNorm[0];
       const off = this.widthAt(0) + 12;
-      stand.position.set(p.x + nx * off + (i - 4.5) * 11, 2, p.z + nz * off);
+      stand.position.set(p.x + nx * off + (i - offset) * 11, 2, p.z + nz * off);
       stand.rotation.y = this.startAngle;
       this.group.add(stand);
 
-      const audCanvas = document.createElement('canvas');
-      audCanvas.width = 256; audCanvas.height = 64;
-      const actx = audCanvas.getContext('2d');
-      actx.fillStyle = '#ffffff'; actx.fillRect(0, 0, 256, 64);
-      for (let k = 0; k < 80; k++) {
-        actx.fillStyle = `hsl(${Math.random() * 360}, 80%, 55%)`;
-        actx.beginPath();
-        actx.arc(Math.random() * 256, Math.random() * 64, 3 + Math.random() * 2, 0, Math.PI * 2);
-        actx.fill();
-      }
-      const audTex = new THREE.CanvasTexture(audCanvas);
-      const audMat = new THREE.MeshBasicMaterial({ map: audTex });
-      const audience = new THREE.Mesh(new THREE.PlaneGeometry(9.5, 3.5), audMat);
+      const audience = new THREE.Mesh(audGeo, audMat);
       audience.position.copy(stand.position);
       audience.position.y += 2.5;
       audience.rotation.y = this.startAngle;
@@ -1004,11 +1018,17 @@ const Track = {
       this.group.add(audience);
     }
 
-    // フラッグの設置数を削減 (毎8→毎14)
+    // フラッグの設置数を品質モードで動的調整 + ジオメトリ/マテリアル共有
+    const flagStep = q === 'low' ? 26 : (q === 'high' ? 12 : 18);
     const flagColors = [0xff5252, 0xffd54f, 0x4fc3f7, 0x81c784];
-    const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 5, 6);
+    const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 5, q === 'low' ? 4 : 6);
     const poleMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-    for (let i = 0; i < n; i += 14) {
+    const flagGeo = new THREE.PlaneGeometry(2.2, 1.2);
+    // フラッグマテリアル4色を事前生成して使い回し
+    const flagMats = flagColors.map(c => new THREE.MeshLambertMaterial({
+      color: c, side: THREE.DoubleSide,
+    }));
+    for (let i = 0; i < n; i += flagStep) {
       const cur = this.pathPoints[i];
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
@@ -1021,11 +1041,8 @@ const Track = {
         pole.position.set(px, 2.5, pz);
         this.group.add(pole);
 
-        const flagMat = new THREE.MeshLambertMaterial({
-          color: flagColors[Math.floor(Math.random() * flagColors.length)],
-          side: THREE.DoubleSide,
-        });
-        const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.2), flagMat);
+        const flagMat = flagMats[Math.floor(Math.random() * flagMats.length)];
+        const flag = new THREE.Mesh(flagGeo, flagMat);
         flag.position.set(px + 1.1 * (side === 1 ? 1 : -1), 4.3, pz);
         flag.rotation.y = Math.PI / 2;
         this.group.add(flag);

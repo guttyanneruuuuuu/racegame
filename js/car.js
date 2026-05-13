@@ -845,8 +845,9 @@ class Car {
     if (this.finished) return;
     const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
     const n = Track.pathPoints.length;
+    const LAP_CHECKPOINT_RATIOS = [0.25, 0.5, 0.75];
     if (this._lapCheckpointPathLen !== n) {
-      const marks = [0.25, 0.5, 0.75]
+      const marks = LAP_CHECKPOINT_RATIOS
         .map(r => Math.floor(n * r))
         .filter((idx) => idx > 0 && idx < n);
       this._lapCheckpointMarks = [...new Set(marks)].sort((a, b) => a - b);

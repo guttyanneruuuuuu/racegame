@@ -93,6 +93,7 @@ class Car {
     this.lapStartTime = 0;
     this.bestLap = Infinity;
     this.lastLap = 0;
+    this.lapCountReady = false;
     this.lastProgressTime = 0;
     this.maxProgress = 0;       // ハイウォーターマーク (逆走検知用)
     this.wrongWayTimer = 0;     // 逆走時間累積
@@ -841,9 +842,12 @@ class Car {
     if (this.finished) return;
     const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
     const n = Track.pathPoints.length;
+    if (!this.lapCountReady && prog.index > n * 0.2 && prog.index < n * 0.8) {
+      this.lapCountReady = true;
+    }
 
     // ラップ判定 (前→後 越境) - コース大型化に伴い境界をやや緩く
-    if (this.lastProgressIdx > n * 0.75 && prog.index < n * 0.15) {
+    if (this.lapCountReady && this.lastProgressIdx > n * 0.75 && prog.index < n * 0.15) {
       this.lap++;
       const lapMs = now - this.lapStartTime;
       this.lastLap = lapMs;
@@ -911,6 +915,7 @@ class Car {
     this.lastProgressIdx = prog.index;
     this.totalProgress = 0;
     this.lap = 0;
+    this.lapCountReady = false;
     this.maxProgress = 0;
     this.lastProgressTime = performance.now();
     this.stuckTimer = 0;

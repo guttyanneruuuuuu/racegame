@@ -55,8 +55,8 @@ const ItemExt = {
       };
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
-        w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.6, ratio));
-        w.tripleRocket = Math.max(w.tripleRocket, Utils.lerp(0.45, 1.6, ratio));
+        w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.8, ratio));
+        w.tripleRocket = Math.max(w.tripleRocket, Utils.lerp(0.45, 1.8, ratio));
       }
       let sum = 0;
       for (const k in w) sum += w[k];

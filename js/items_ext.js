@@ -53,6 +53,11 @@ const ItemExt = {
         boomerang:    Utils.lerp(0.5, 1.6, ratio),    // 自分の前に飛ばす攻撃
         megaShield:   Utils.lerp(0.0, 0.5, ratio),    // 超レア
       };
+      if (totalPlayers <= 2) {
+        // 2人対戦ではロケット系の抽選率を底上げ
+        w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.6, ratio));
+        w.tripleRocket = Math.max(w.tripleRocket, Utils.lerp(0.45, 1.6, ratio));
+      }
       let sum = 0;
       for (const k in w) sum += w[k];
       let r = Math.random() * sum;

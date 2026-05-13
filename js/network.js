@@ -9,7 +9,7 @@ const Net = {
   hostConn: null,         // クライアント側: ホストへの接続
   players: new Map(),     // すべてのプレイヤー情報: id -> {id, name, color, ...}
   callbacks: {},
-  ROOM_PREFIX: 'gyrorush-v1-',
+  ROOM_PREFIX: 'gyrorush-v2-',
   MAX_PLAYERS: 6,
 
   on(event, fn) { (this.callbacks[event] ||= []).push(fn); },
@@ -160,6 +160,28 @@ const Net = {
         this._emit('finished', conn.peer, data.time);
         break;
       }
+      case 'chat': {
+        // チャット/スタンプ: ホストが受け取って全員にブロードキャスト
+        const msg = { type: 'chat', from: conn.peer, text: data.text, stamp: data.stamp };
+        this._broadcast(msg, null);
+        this._emit('chat', { from: conn.peer, text: data.text, stamp: data.stamp });
+        break;
+      }
+      case 'raceSettings': {
+        // クライアントは通常変更しないが、念のためホストにのみ反映 (普通はホスト発信)
+        this._emit('raceSettings', data.settings);
+        break;
+      }
+      case 'updateInfo': {
+        // 車種・色・名前変更などの更新
+        const cur = this.players.get(conn.peer);
+        if (cur) {
+          this.players.set(conn.peer, { ...cur, ...data.info });
+          this._broadcast({ type: 'playerUpdated', id: conn.peer, info: data.info }, null);
+          this._emit('playersChanged', this._playerList());
+        }
+        break;
+      }
     }
   },
   _onClientLeave(id) {
@@ -207,7 +229,7 @@ const Net = {
         break;
       }
       case 'startRace': {
-        this._emit('startRace', data.seed, data.startTime);
+        this._emit('startRace', data.seed, data.startTime, data.settings);
         break;
       }
       case 'state': {
@@ -222,15 +244,61 @@ const Net = {
         this._emit('finished', data.id, data.time);
         break;
       }
+      case 'chat': {
+        this._emit('chat', { from: data.from, text: data.text, stamp: data.stamp });
+        break;
+      }
+      case 'raceSettings': {
+        this._emit('raceSettings', data.settings);
+        break;
+      }
+      case 'playerUpdated': {
+        const cur = this.players.get(data.id);
+        if (cur) this.players.set(data.id, { ...cur, ...data.info });
+        this._emit('playersChanged', this._playerList());
+        break;
+      }
     }
   },
 
   // ====== 公開API ======
-  startRace(seed) {
+  startRace(seed, settings) {
     if (!this.isHost) return;
     const startTime = Date.now() + 3500;
-    this._broadcast({ type: 'startRace', seed, startTime });
-    this._emit('startRace', seed, startTime);
+    this._broadcast({ type: 'startRace', seed, startTime, settings });
+    this._emit('startRace', seed, startTime, settings);
+  },
+
+  sendChat(text, stamp) {
+    if (this.isHost) {
+      const msg = { type: 'chat', from: this.myId, text, stamp };
+      this._broadcast(msg, null);
+      this._emit('chat', { from: this.myId, text, stamp });
+    } else if (this.hostConn && this.hostConn.open) {
+      try { this.hostConn.send({ type: 'chat', text, stamp }); } catch (_) {}
+      // 自分のチャットは即時ローカル表示
+      this._emit('chat', { from: this.myId, text, stamp });
+    }
+  },
+
+  sendRaceSettings(settings) {
+    if (!this.isHost) return;
+    this._broadcast({ type: 'raceSettings', settings }, null);
+    this._emit('raceSettings', settings);
+  },
+
+  updateMyInfo(info) {
+    // 名前・色・車種の変更などを反映
+    if (this.isHost) {
+      const cur = this.players.get(this.myId);
+      if (cur) {
+        this.players.set(this.myId, { ...cur, ...info });
+        this._broadcast({ type: 'playerUpdated', id: this.myId, info }, null);
+        this._emit('playersChanged', this._playerList());
+      }
+    } else if (this.hostConn && this.hostConn.open) {
+      try { this.hostConn.send({ type: 'updateInfo', info }); } catch (_) {}
+    }
   },
 
   sendState(state) {

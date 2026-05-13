@@ -41,7 +41,7 @@ class Car {
 
     this.x = opts.x || 0;
     this.z = opts.z || 0;
-    this.y = 0;
+    this.y = (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z) : 0;
     this.vy = 0;
     this.airTime = 0;
     this.angle = opts.angle || 0;
@@ -331,6 +331,10 @@ class Car {
     this.mesh.add(this.nameSprite);
   }
 
+  _groundHeight(hintIdx = this.lastProgressIdx) {
+    return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx) : 0;
+  }
+
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
     this.wallImpactStrength = 0;
@@ -436,10 +440,12 @@ class Car {
 
     this._tickEffects(dt);
 
+    const groundY = this._groundHeight();
+
     // 重力 & ジャンプ
-    if (this.y > 0 || this.vy > 0) {
+    if (this.y > groundY || this.vy > 0) {
       // 空中で一定以上の高さがあり、かつ落下中ならグライダーを自動展開
-      if (this.y > 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
+      if (this.y > groundY + 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
         this.deployGlider(3.0);
       }
       // グライダー有効中は重力が弱く前進推進が付く
@@ -454,8 +460,8 @@ class Car {
         this.gliderTimer -= dt;
         this.speed = Math.min(this.speed + 14 * dt, CarPhysics.MAX_SPEED * 1.05);
       }
-      if (this.y <= 0) {
-        this.y = 0; this.vy = 0;
+      if (this.y <= groundY) {
+        this.y = groundY; this.vy = 0;
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
         if (this.airTime > 0.5 && !this.driftActive) {
           this.applyMiniTurbo(0.5 + Math.min(0.8, this.airTime * 0.35));
@@ -471,6 +477,7 @@ class Car {
       }
     } else {
       // 地上ではグライダー解除
+      this.y = groundY;
       if (this.glider) {
         this.glider = false;
         this.gliderTimer = 0;
@@ -480,7 +487,7 @@ class Car {
     this._integratePos(dt);
 
     // 空中時は壁チェックを緩和
-    if (this.y > 0.3) {
+    if (this.y > groundY + 0.3) {
       return;
     }
 
@@ -653,7 +660,8 @@ class Car {
     // サブステップに分割しつつ壁チェックを挟む
     const moveLen = Math.hypot(dx, dz);
     const maxStep = CarPhysics.RADIUS * 0.55; // 半径の半分以下のステップで壁を確実に検出
-    if (this.y <= 0.3 && moveLen > maxStep) {
+    const groundY = this._groundHeight();
+    if (this.y <= groundY + 0.3 && moveLen > maxStep) {
       const n = Math.min(6, Math.ceil(moveLen / maxStep));
       const stepX = dx / n, stepZ = dz / n;
       for (let i = 0; i < n; i++) {
@@ -683,7 +691,7 @@ class Car {
     if (this.driftActive) rollExtra = -this.driftDir * 0.18;
     this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
     // 空中時はピッチ
-    if (this.y > 0.05) {
+    if (this.y > this._groundHeight() + 0.05) {
       const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
       this.mesh.rotation.x = pitchAmt;
     } else {
@@ -756,7 +764,7 @@ class Car {
 
     // グライダー翼の表示
     if (this.gliderMesh) {
-      const showG = this.glider && this.gliderTimer > 0 && this.y > 0.5;
+      const showG = this.glider && this.gliderTimer > 0 && this.y > this._groundHeight() + 0.5;
       this.gliderMesh.visible = showG;
       if (showG) {
         // 軽く揺れる
@@ -960,7 +968,7 @@ class Car {
     const next = Track.pathPoints[(idx + 2) % Track.pathPoints.length];
     this.x = p.x;
     this.z = p.z;
-    this.y = 0;
+    this.y = this._groundHeight(idx);
     this.vy = 0;
     this.speed = 0;
     this.angle = Math.atan2(next.x - p.x, next.z - p.z);
@@ -998,9 +1006,10 @@ class Car {
   }
 
   applyJump(power = 12) {
-    if (this.y <= 0.1) {
+    const groundY = this._groundHeight();
+    if (this.y <= groundY + 0.1) {
       this.vy = power;
-      this.y = 0.1;
+      this.y = groundY + 0.1;
     }
   }
 
@@ -1062,7 +1071,7 @@ class Car {
     this.lockedTimer = 1.0;
     this.speed = 0;
     this.vy = 8;
-    this.y = 0.1;
+    this.y = this._groundHeight() + 0.1;
     this.dropCoins(3);
     return true;
   }

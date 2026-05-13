@@ -2,6 +2,7 @@
 const GameUI = {
   selectedColor: '#E53935',
   selectedCarType: 'balanced',
+  selectedMap: 'grand',
 
   init() {
     // 色選択
@@ -30,6 +31,17 @@ const GameUI = {
         const el = document.querySelector(`.cartype-option[data-type="${savedType}"]`);
         if (el) el.click();
       }
+    } catch (_) {}
+
+    // マップ選択
+    document.querySelectorAll('.map-option').forEach(el => {
+      el.addEventListener('click', () => {
+        this.setSelectedMap(el.dataset.map);
+      });
+    });
+    try {
+      const savedMap = localStorage.getItem('gr_mapId');
+      if (savedMap) this.setSelectedMap(savedMap, false);
     } catch (_) {}
 
     // タイトル画面ボタン
@@ -167,6 +179,21 @@ const GameUI = {
     return { name, color: this.selectedColor, carType: this.selectedCarType };
   },
 
+  setSelectedMap(mapId, persist = true) {
+    const normalized = (window.Track && Track.normalizeMapId) ? Track.normalizeMapId(mapId) : (mapId || 'grand');
+    this.selectedMap = normalized;
+    document.querySelectorAll('.map-option').forEach(el => {
+      el.classList.toggle('active', el.dataset.map === normalized);
+    });
+    if (persist) {
+      try { localStorage.setItem('gr_mapId', normalized); } catch (_) {}
+    }
+  },
+
+  getSelectedMap() {
+    return this.selectedMap || 'grand';
+  },
+
   async _onCreateRoom() {
     const info = this.getMyInfo();
     showToast('部屋を作成中...');
@@ -208,16 +235,17 @@ const GameUI = {
     for (let i = 0; i < 5; i++) {
       players.push({ id: 'ai-' + i, name: aiNames[i], color: aiColors[i] || '#888', isAI: true });
     }
-    await this._beginRace(players, localId, 'solo');
+    await this._beginRace(players, localId, 'solo', this.getSelectedMap());
   },
 
-  async _beginRace(players, localId, mode) {
+  async _beginRace(players, localId, mode, mapId) {
     if (this._isMobile() && !Input.gyroEnabled) {
       await this._askGyro();
     }
+    if (mapId) this.setSelectedMap(mapId, mode !== 'multi');
     this.showScreen('screen-game');
     Input.autoCalibrateOnStart();
-    Game.setupRace(players, localId, mode);
+    Game.setupRace(players, localId, mode, this.getSelectedMap());
     Game.startCountdown(Date.now() + 3500);
   },
 
@@ -246,7 +274,7 @@ const GameUI = {
   _onStartRace() {
     const players = Array.from(Net.players.values());
     if (players.length < 1) return;
-    Net.startRace(Math.floor(Math.random() * 1e9));
+    Net.startRace(Math.floor(Math.random() * 1e9), this.getSelectedMap());
   },
 
   _onLeaveRoom() {

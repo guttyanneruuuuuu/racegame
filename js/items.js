@@ -24,6 +24,11 @@ const ItemSystem = {
       tripleRocket: Utils.lerp(0.05, 1.4, ratio),
       lightning:    Utils.lerp(0.05, 1.6, ratio),
     };
+    if (totalPlayers <= 2) {
+      // 2人対戦ではロケット系を出しやすくする
+      weights.rocket = Math.max(weights.rocket, Utils.lerp(2.2, 3.8, ratio));
+      weights.tripleRocket = Math.max(weights.tripleRocket, Utils.lerp(0.45, 1.8, ratio));
+    }
     let sum = 0;
     for (const k in weights) sum += weights[k];
     let r = Math.random() * sum;

@@ -15,6 +15,7 @@ const Game = {
 
   miniCtx: null,
   miniCanvas: null,
+  wrongWayEl: null,
 
   mode: 'multi',
   currentMapId: 'grand',
@@ -28,6 +29,7 @@ const Game = {
   init() {
     this._initThree();
     this._initMini();
+    this.wrongWayEl = document.getElementById('wrong-way');
     Input.init();
     if (window.SFX) SFX.init();
     window.addEventListener('resize', () => this._onResize());
@@ -130,6 +132,11 @@ const Game = {
       this._updateCamera(0, true);
       if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
     }
+    if (this.wrongWayEl) {
+      this.wrongWayEl.classList.remove('show', 'rescue');
+      this.wrongWayEl.dataset.mode = 'off';
+      this.wrongWayEl.textContent = '⚠ 逆走中！';
+    }
 
     this.state = 'countdown';
     this.lapTimes = {};
@@ -191,12 +198,24 @@ const Game = {
         if (window.SFX) SFX.play('wall');
       }
       // 逆走警告
-      if (this.localCar.wrongWayTimer > 1.0) {
-        const wrongEl = document.getElementById('wrong-way');
-        if (wrongEl) wrongEl.classList.add('show');
-      } else {
-        const wrongEl = document.getElementById('wrong-way');
-        if (wrongEl) wrongEl.classList.remove('show');
+      if (this.wrongWayEl) {
+        const mode = this.localCar.wrongWayRescueTimer > 0
+          ? 'rescue'
+          : (this.localCar.wrongWayTimer > 1.0 ? 'warn' : 'off');
+        if (this.wrongWayEl.dataset.mode !== mode) {
+          this.wrongWayEl.dataset.mode = mode;
+          if (mode === 'rescue') {
+            this.wrongWayEl.classList.add('show', 'rescue');
+            this.wrongWayEl.textContent = '🛟 方向修正中…';
+          } else if (mode === 'warn') {
+            this.wrongWayEl.classList.add('show');
+            this.wrongWayEl.classList.remove('rescue');
+            this.wrongWayEl.textContent = '⚠ 逆走中！';
+          } else {
+            this.wrongWayEl.classList.remove('show', 'rescue');
+            this.wrongWayEl.textContent = '⚠ 逆走中！';
+          }
+        }
       }
       if (this.localCar.lap >= this.totalLaps && !this.localCar.finished) {
         this.localCar.finished = true;

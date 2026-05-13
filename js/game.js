@@ -9,7 +9,7 @@ const Game = {
   localCar: null,
   state: 'idle',
   raceStartTime: 0,
-  totalLaps: 3,    // 3周のレース
+  totalLaps: 3,
   lastSendTime: 0,
   netSendInterval: 50,
 
@@ -20,7 +20,6 @@ const Game = {
 
   _camShakeTime: 0,
   _camShakeAmp: 0,
-  _lastWallShakeTime: 0,
 
   // 順位変動通知用
   _prevRanks: new Map(),
@@ -35,67 +34,30 @@ const Game = {
 
   _initThree() {
     const canvas = document.getElementById('game-canvas');
-    const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-
-    // === 品質モード自動判定 + 設定上書き ===
-    // localStorage の gyrorush-quality を尊重し、'auto' なら端末性能で推定
-    let q = (localStorage.getItem('gyrorush-quality') || 'auto');
-    if (q === 'auto') {
-      // CPUコア数 + メモリ + モバイルかどうかで雑に推定
-      const cores = navigator.hardwareConcurrency || 4;
-      const mem = navigator.deviceMemory || 4;
-      const w = window.innerWidth;
-      if (isMobile && (cores <= 4 || mem <= 3 || w < 500)) q = 'low';
-      else if (isMobile) q = 'med';
-      else if (cores >= 8 && mem >= 8) q = 'high';
-      else q = 'med';
-    }
-    this.quality = q; // 'low' | 'med' | 'high'
-    window.__GR_QUALITY__ = q;
-
-    // 品質別: アンチエイリアス / ピクセル比 / 描画距離 / 装飾数
-    const qConf = {
-      low:  { aa: false, prCap: 1.0, far: 480, fogNear: 240, fogFar: 460 },
-      med:  { aa: !isMobile, prCap: 1.3, far: 620, fogNear: 320, fogFar: 600 },
-      high: { aa: true, prCap: 1.75, far: 760, fogNear: 380, fogFar: 740 },
-    }[q];
-
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: qConf.aa,
-      powerPreference: 'high-performance',
-      stencil: false,
-      depth: true,
-      // 透過は不要 -> compositor負荷削減
-      alpha: false,
-      // 互換目的のフォールバック許容
-      failIfMajorPerformanceCaveat: false,
-    });
-    const pr = Math.min(window.devicePixelRatio || 1, qConf.prCap);
-    this.renderer.setPixelRatio(pr);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = false; // 影は常時OFF (大きな描画コール削減)
+    this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xcfe6ff, qConf.fogNear, qConf.fogFar);
-    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, qConf.far);
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
-    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 1.0);
+    // 火山サーキット用の暖色ライティング
+    const hemi = new THREE.HemisphereLight(0xff8866, 0x3a1a14, 0.9);
     this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dir = new THREE.DirectionalLight(0xffd0a0, 0.8);
     dir.position.set(100, 150, 80);
     this.scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xff5522, 0.35);  // 溶岩からの照り返し
+    fill.position.set(-80, 30, -50);
+    this.scene.add(fill);
 
     this.clock = new THREE.Clock();
 
     Track.generate(this.scene);
     ItemSystem.init(this.scene);
-
-    // FPS 監視 + 自動劣化 (LOW モード以外で激落ちしたら自動で劣化)
-    this._fpsAccum = 0; this._fpsCount = 0; this._fpsLastCheck = performance.now();
-    this._downgraded = false;
   },
 
   _initMini() {
@@ -126,23 +88,12 @@ const Game = {
     for (let i = 0; i < playersList.length; i++) {
       const p = playersList[i];
       const pos = positions[i];
-      // AI車にもランダムな車種を割り当て (毎レース多様性)
-      let cType = p.carType;
-      if (!cType) {
-        if (p.isAI) {
-          const types = ['balanced','speed','accel','handling','heavy'];
-          cType = types[Math.floor(Math.random() * types.length)];
-        } else {
-          cType = 'balanced';
-        }
-      }
       const car = new Car({
         id: p.id,
         name: p.name,
         color: p.color,
         isLocal: p.id === localId,
         isAI: !!p.isAI,
-        carType: cType,
         x: pos.x, z: pos.z, angle: pos.angle,
       });
       this.scene.add(car.mesh);
@@ -159,16 +110,6 @@ const Game = {
     this.state = 'countdown';
     this.lapTimes = {};
     this._prevRanks.clear();
-
-    // 巻き戻しHUDのリセット
-    const hud = document.getElementById('hud-rewind');
-    if (hud) {
-      hud.classList.remove('used', 'active');
-      const st = document.getElementById('rewind-state');
-      if (st) st.textContent = 'READY';
-    }
-    const rwBtn = document.getElementById('ctrl-rewind');
-    if (rwBtn) rwBtn.classList.remove('used');
   },
 
   startCountdown(startTime) {
@@ -189,7 +130,6 @@ const Game = {
     if (this.state === 'racing' || this.state === 'finished') {
       this._updateLocal(dt);
       this._updateAIs(dt);
-      this.updateRemoteInterpolation(dt);
       this._handleCollisions();
       this._sendNetwork(now);
       this._updateMagnet(dt);
@@ -198,8 +138,6 @@ const Game = {
       this._checkPads(now);
       this._detectRankChanges();
       for (const c of this.cars) c.updateMesh();
-      // === FPS監視: 持続的に低FPSなら自動で品質劣化 ===
-      this._monitorFps(now);
     } else if (this.state === 'countdown') {
       for (const c of this.cars) c.updateMesh();
     }
@@ -214,25 +152,19 @@ const Game = {
 
   _updateLocal(dt) {
     if (!this.localCar) return;
-    Input.update(dt);
-    const now = performance.now();
     if (this.localCar.finished) {
       this.localCar.applyInput(0, false, true, dt);
     } else {
       this.localCar.applyInput(Input.steer, Input.accel, Input.brake, dt);
-      this.localCar.updateProgress(now);
+      this.localCar.updateProgress(performance.now());
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
       // 壁ヒットでカメラ揺れ
-      const wallImpact = this.localCar.consumeWallImpact();
-      if (wallImpact > 0) {
-        if (now - this._lastWallShakeTime > 180) {
-          this._camShakeTime = 0.04 + wallImpact * 0.12;
-          this._camShakeAmp = wallImpact * 0.3;
-          this._lastWallShakeTime = now;
-          if (window.SFX) SFX.play('wall');
-        }
+      if (this.localCar.wallHitFlash > 0.2) {
+        this._camShakeTime = 0.3;
+        this._camShakeAmp = 0.4;
+        if (window.SFX) SFX.play('wall');
       }
       // 逆走警告
       if (this.localCar.wrongWayTimer > 1.0) {
@@ -301,24 +233,16 @@ const Game = {
         const d = Math.hypot(dx, dz);
         const minD = 2.5;
         if (d < minD && d > 0.001) {
-          // 車種別重量で押し戻し量を非対称に
-          const wa = (a.stats && a.stats.weight) || 1;
-          const wb = (b.stats && b.stats.weight) || 1;
-          const totalW = wa + wb;
-          // 軽い方がより押される
-          const overlap = (minD - d);
-          const aShare = wb / totalW;
-          const bShare = wa / totalW;
+          const overlap = (minD - d) / 2;
           const nx = dx / d, nz = dz / d;
-          a.x -= nx * overlap * aShare;
-          a.z -= nz * overlap * aShare;
-          b.x += nx * overlap * bShare;
-          b.z += nz * overlap * bShare;
-          // 速度: 重い方が運動量を保つ
+          a.x -= nx * overlap;
+          a.z -= nz * overlap;
+          b.x += nx * overlap;
+          b.z += nz * overlap;
           const ra = a.speed * 0.7;
           const rb = b.speed * 0.7;
-          a.speed = ra * (0.5 + bShare * 0.2) + rb * (0.5 - bShare * 0.2);
-          b.speed = ra * (0.5 - aShare * 0.2) + rb * (0.5 + aShare * 0.2);
+          a.speed = ra * 0.55 + rb * 0.45;
+          b.speed = ra * 0.45 + rb * 0.55;
           // 衝撃音
           if ((a.isLocal || b.isLocal) && window.SFX && Math.abs(ra - rb) > 6) SFX.play('bump');
         }
@@ -366,49 +290,11 @@ const Game = {
   applyRemoteState(id, state) {
     const car = this.cars.find(c => c.id === id);
     if (!car || car.isLocal) return;
-    const now = performance.now();
-    // === デッドレコニング: 受信時刻 + 速度/角度から将来位置を予測し、
-    //     ローカルでは予測ターゲットへ滑らかに補間する ===
-    if (!car._net) {
-      car._net = {
-        targetX: state.x, targetZ: state.z, targetY: state.y || 0,
-        targetAngle: state.angle, targetSpeed: state.speed,
-        lastRecvTime: now,
-        // 受信ごとに更新される推定速度ベクトル
-        vx: Math.sin(state.angle) * state.speed,
-        vz: Math.cos(state.angle) * state.speed,
-        // 初回は即座にスナップ
-        x: state.x, z: state.z, y: state.y || 0, angle: state.angle,
-      };
-      car.x = state.x; car.z = state.z; car.y = state.y || 0; car.angle = state.angle;
-    } else {
-      const net = car._net;
-      // 受信間隔(秒)
-      const recvDt = Math.max(0.01, (now - net.lastRecvTime) / 1000);
-      // 前回のターゲットと今回の実測値の差から実速度を推定
-      const obsVx = (state.x - net.targetX) / recvDt;
-      const obsVz = (state.z - net.targetZ) / recvDt;
-      // ノイズ除去: 観測 + 送信元の speed/angle のブレンド
-      const reportedVx = Math.sin(state.angle) * state.speed;
-      const reportedVz = Math.cos(state.angle) * state.speed;
-      // 異常な瞬間移動(>40m/フレーム)はクランプして観測を破棄
-      const jumpDist = Math.hypot(state.x - net.targetX, state.z - net.targetZ);
-      if (jumpDist > 40) {
-        // テレポート扱い: 即座にスナップ
-        net.vx = reportedVx; net.vz = reportedVz;
-        car.x = state.x; car.z = state.z;
-      } else {
-        // 70%観測, 30%報告 のブレンドで速度ベクトル更新
-        net.vx = obsVx * 0.7 + reportedVx * 0.3;
-        net.vz = obsVz * 0.7 + reportedVz * 0.3;
-      }
-      net.targetX = state.x;
-      net.targetZ = state.z;
-      net.targetY = state.y !== undefined ? state.y : net.targetY;
-      net.targetAngle = state.angle;
-      net.targetSpeed = state.speed;
-      net.lastRecvTime = now;
-    }
+    car.x = Utils.lerp(car.x, state.x, 0.55);
+    car.z = Utils.lerp(car.z, state.z, 0.55);
+    if (state.y !== undefined) car.y = Utils.lerp(car.y, state.y, 0.5);
+    const diff = Utils.angDiff(state.angle, car.angle);
+    car.angle += diff * 0.5;
     car.speed = state.speed;
     car.lap = state.lap;
     car.totalProgress = state.totalProgress;
@@ -417,33 +303,6 @@ const Game = {
     car.invincibleTimer = state.shield ? 0.2 : car.invincibleTimer;
     car.squishTimer = state.squish ? 0.2 : 0;
     car.ghostTimer = state.ghost ? 0.2 : 0;
-  },
-
-  // 毎フレーム呼ばれる: リモート車の補間とデッドレコニング適用
-  updateRemoteInterpolation(dt) {
-    if (this.mode !== 'multi') return;
-    const now = performance.now();
-    for (const car of this.cars) {
-      if (car.isLocal || car.isAI) continue;
-      const net = car._net;
-      if (!net) continue;
-      // 受信からの経過(秒)
-      const sinceRecv = Math.max(0, (now - net.lastRecvTime) / 1000);
-      // 予測位置 = 最後のターゲット + 速度ベクトル * 経過時間
-      // ただし古すぎる(>0.5s)外挿はクランプ
-      const extrapT = Math.min(0.5, sinceRecv);
-      const predX = net.targetX + net.vx * extrapT;
-      const predZ = net.targetZ + net.vz * extrapT;
-      const predY = net.targetY;
-      // 現在位置から予測位置へ exponential smoothing (時間定数 ~80ms)
-      const tau = 0.08;
-      const alpha = 1 - Math.exp(-dt / tau);
-      car.x = Utils.lerp(car.x, predX, alpha);
-      car.z = Utils.lerp(car.z, predZ, alpha);
-      car.y = Utils.lerp(car.y, predY, alpha);
-      const aDiff = Utils.angDiff(net.targetAngle, car.angle);
-      car.angle += aDiff * alpha;
-    }
   },
 
   applyRemoteAction(action) {
@@ -587,12 +446,39 @@ const Game = {
         }
       }
       if (r.jump) {
-        c.applyJump(18);
-        // ジャンプ盤ではグライダーを展開
-        c.deployGlider(3.5);
+        c.applyJump(16);
         if (c.isLocal) {
-          showToast('🪂 GLIDER!', 800);
+          showToast('💨 GEYSER!', 700);
           if (window.SFX) SFX.play('jump');
+        }
+      }
+      if (r.lava) {
+        // 溶岩プール: スリップ + 軽い炎上ダメージ
+        if (c.hitOilSplash) c.hitOilSplash();
+        c.speed *= 0.55;
+        if (c.isLocal) {
+          this._camShakeTime = 0.25;
+          this._camShakeAmp = 0.35;
+          showToast('🔥 LAVA!', 700);
+          if (window.SFX) SFX.play('wall');
+          GameUI.flashScreen && GameUI.flashScreen('#ff3300', 220);
+        }
+      }
+      // 転がる溶岩岩との衝突
+      if (Track.checkBoulderHit) {
+        const bh = Track.checkBoulderHit(c, now);
+        if (bh.hit) {
+          // 跳ね返し
+          c.speed *= 0.45;
+          c.x += bh.nx * 0.8;
+          c.z += bh.nz * 0.8;
+          c.wallHitFlash = 0.6;
+          if (c.isLocal) {
+            this._camShakeTime = 0.35;
+            this._camShakeAmp = 0.5;
+            showToast('🪨 BOULDER!', 700);
+            if (window.SFX) SFX.play('bump');
+          }
         }
       }
     }
@@ -611,14 +497,6 @@ const Game = {
             showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
             if (window.SFX) SFX.play('pickup');
           }
-        }
-      }
-      // コイン取得 (1枚で+2%加速)
-      if (Track.collectCoin(c.x, c.z, 2.0)) {
-        const gained = c.addCoin(1);
-        if (c.isLocal && gained) {
-          GameUI.updateCoins && GameUI.updateCoins(c.coins);
-          if (window.SFX) SFX.play('pickup');
         }
       }
     }
@@ -646,62 +524,6 @@ const Game = {
     this._checkRaceEnd();
   },
 
-  // 持続的に低FPSなら自動で品質劣化 (装飾フェードアウト/解像度ダウン)
-  _monitorFps(now) {
-    this._fpsCount = (this._fpsCount || 0) + 1;
-    if (now - (this._fpsLastCheck || now) > 1500) {
-      const fps = this._fpsCount * 1000 / Math.max(1, now - this._fpsLastCheck);
-      this._fpsLastCheck = now;
-      this._fpsCount = 0;
-      if (!this._downgraded && fps > 0 && fps < 28 && this.quality !== 'low') {
-        this._downgraded = true;
-        // ピクセル比を1.0に、描画距離を縮小
-        try {
-          this.renderer.setPixelRatio(Math.min(this.renderer.getPixelRatio(), 1.0));
-        } catch (_) {}
-        if (this.scene && this.scene.fog) {
-          this.scene.fog.near = Math.min(this.scene.fog.near, 240);
-          this.scene.fog.far  = Math.min(this.scene.fog.far,  460);
-        }
-        if (this.camera) {
-          this.camera.far = Math.min(this.camera.far, 500);
-          this.camera.updateProjectionMatrix();
-        }
-        if (typeof showToast === 'function') showToast('⚡ 軽量モードに自動切替', 1200);
-      }
-    }
-  },
-
-  // ===== ユニーク機能: 時間巻き戻し (3秒前) =====
-  triggerRewind() {
-    if (this.state !== 'racing') return false;
-    if (!this.localCar || this.localCar.finished) return false;
-    const ok = this.localCar.doRewind();
-    if (ok) {
-      if (typeof showToast === 'function') showToast('⏪ TIME REWIND!', 1200);
-      if (window.SFX) try { SFX.play('item'); } catch (_) {}
-      // HUD更新
-      const hud = document.getElementById('hud-rewind');
-      if (hud) {
-        hud.classList.add('used');
-        const st = document.getElementById('rewind-state');
-        if (st) st.textContent = 'USED';
-      }
-      const btn = document.getElementById('ctrl-rewind');
-      if (btn) btn.classList.add('used');
-      // ネット同期 (他クライアントには瞬間移動として伝わるが、dead-reckoningで吸収される)
-      if (window.Net && Net.sendAction) {
-        try { Net.sendAction({ kind: '_rewind' }); } catch (_) {}
-      }
-      // カメラを即時スナップ
-      if (typeof this._updateCamera === 'function') this._updateCamera(0, true);
-      return true;
-    } else {
-      if (typeof showToast === 'function') showToast('⏪ 巻き戻しは使用済み', 900);
-      return false;
-    }
-  },
-
   _updateCamera(dt, snap = false) {
     if (!this.localCar) return;
     const c = this.localCar;
@@ -709,7 +531,7 @@ const Game = {
 
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
     const back = Utils.lerp(4.2, 5.4, speedT);
-    const up   = Utils.lerp(2.2, 1.8, speedT);
+    const up   = Utils.lerp(2.0, 1.6, speedT);
     const lookFwd = Utils.lerp(6, 14, speedT);
 
     let backDir = 1;
@@ -762,29 +584,16 @@ const Game = {
 
   _updateHUD(now) {
     if (!this.localCar) return;
-    const inkOn = (this.localCar.inkScrambleTimer || 0) > 0;
     const elapsed = (this.state === 'racing' || this.state === 'finished')
       ? (this.localCar.finished ? this.localCar.finishTime : (now - this.raceStartTime))
       : 0;
     document.getElementById('hud-time').textContent = Utils.formatTime(elapsed);
     const lapDisp = this.localCar.finished ? this.totalLaps : Math.min(this.localCar.lap + 1, this.totalLaps);
-    // === 墨スクランブル中はHUD表示が乱れる (操作妨害ではなく情報妨害) ===
-    document.getElementById('hud-lap').textContent = inkOn
-      ? this._scrambleText(`${lapDisp}/${this.totalLaps}`)
-      : `${lapDisp}/${this.totalLaps}`;
+    document.getElementById('hud-lap').textContent = `${lapDisp}/${this.totalLaps}`;
     const rank = this._getRank(this.localCar);
-    document.getElementById('hud-pos').textContent = inkOn
-      ? this._scrambleText(`${rank}/${this.cars.length}`)
-      : `${rank}/${this.cars.length}`;
+    document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
-    document.getElementById('hud-speed').textContent = inkOn
-      ? this._scrambleNum(Math.floor(sp))
-      : Math.floor(sp);
-    // HUD全体に墨スクランブルクラスを切替 (CSSで揺らぎを表現)
-    const hudEl = document.getElementById('hud');
-    if (hudEl) hudEl.classList.toggle('ink-scramble', inkOn);
-    // コイン枚数HUD更新
-    if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
+    document.getElementById('hud-speed').textContent = Math.floor(sp);
 
     const bestEl = document.getElementById('hud-best');
     if (bestEl) {
@@ -822,11 +631,10 @@ const Game = {
       }
     }
 
-    // 最終ラップ装飾 (現在の周回が最終周回 = lap+1 === totalLaps の時のみ点滅)
+    // 最終ラップ装飾
     const hudLap = document.getElementById('hud-lap');
     if (hudLap) {
-      const currentLap = this.localCar.lap + 1;
-      if (currentLap === this.totalLaps && !this.localCar.finished && this.state === 'racing') {
+      if (this.localCar.lap === this.totalLaps - 1 && !this.localCar.finished) {
         hudLap.parentElement.classList.add('final-lap');
       } else {
         hudLap.parentElement.classList.remove('final-lap');
@@ -861,18 +669,6 @@ const Game = {
 
   _escape(s) {
     return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  },
-
-  // 墨スクランブル用: 文字列をランダムな数字/記号に置換 (構造は保持)
-  _scrambleText(s) {
-    const glyphs = '0123456789#@?!*';
-    return String(s).split('').map(ch => {
-      if (ch === '/' || ch === ':' || ch === '.') return ch;
-      return glyphs[(Math.random() * glyphs.length) | 0];
-    }).join('');
-  },
-  _scrambleNum(n) {
-    return ((Math.random() * 999) | 0).toString();
   },
 
   _updateMinimap() {
@@ -929,11 +725,32 @@ const Game = {
       }
     }
     if (Track.jumpPads) {
-      ctx.fillStyle = '#42A5F5';
+      ctx.fillStyle = '#FFAB40';  // 間欠泉=オレンジ
       for (const p of Track.jumpPads) {
         ctx.beginPath();
         ctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+    // 溶岩プール
+    if (Track.lavaPools) {
+      ctx.fillStyle = '#FF3D00';
+      for (const lp of Track.lavaPools) {
+        ctx.beginPath();
+        ctx.arc(toX(lp.x), toZ(lp.z), 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // 転がる岩 (動的位置)
+    if (Track.boulders) {
+      ctx.fillStyle = '#5D4037';
+      ctx.strokeStyle = '#FF6F00';
+      ctx.lineWidth = 1.2;
+      for (const b of Track.boulders) {
+        ctx.beginPath();
+        ctx.arc(toX(b.mesh.position.x), toZ(b.mesh.position.z), 3.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
     }
 

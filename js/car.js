@@ -867,15 +867,37 @@ class Car {
     this.lastProgressIdx = prog.index;
     this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
 
-    // 逆走検知 (進行度が一定期間落ち続けた場合)
-    if (this.totalProgress > this.maxProgress) {
-      this.maxProgress = this.totalProgress;
-      this.wrongWayTimer = 0;
-    } else if (this.totalProgress < this.maxProgress - 8) {
-      // 後退している
-      this.wrongWayTimer += 0.016;
+    // 逆走検知 (進行度の揺れではなく「車速 + 向き」で判定)
+    if (this.totalProgress > this.maxProgress) this.maxProgress = this.totalProgress;
+    const TRACK_POINT_OFFSET = 2;
+    const REVERSE_SPEED_THRESHOLD = -2;
+    const FORWARD_SPEED_THRESHOLD = 4;
+    const WRONG_WAY_HEADING_THRESHOLD = -0.35;
+    const WRONG_WAY_DECAY_RATE = 1.2;
+    const dtSec = this.lastProgressTime > 0
+      ? Utils.clamp((now - this.lastProgressTime) / 1000, 0.001, 0.05)
+      : 0.016;
+    this.lastProgressTime = now;
+
+    let headingDot = 1;
+    if (n > 2) {
+      const prev = Track.pathPoints[(prog.index - TRACK_POINT_OFFSET + n) % n];
+      const next = Track.pathPoints[(prog.index + TRACK_POINT_OFFSET) % n];
+      const tx = next.x - prev.x;
+      const tz = next.z - prev.z;
+      const tLen = Math.hypot(tx, tz) || 1;
+      const ux = tx / tLen;
+      const uz = tz / tLen;
+      const fx = Math.sin(this.angle);
+      const fz = Math.cos(this.angle);
+      headingDot = fx * ux + fz * uz;
+    }
+    const goingBackwardBySpeed = this.speed < REVERSE_SPEED_THRESHOLD;
+    const goingBackwardByHeading = this.speed > FORWARD_SPEED_THRESHOLD && headingDot < WRONG_WAY_HEADING_THRESHOLD;
+    if (goingBackwardBySpeed || goingBackwardByHeading) {
+      this.wrongWayTimer += dtSec;
     } else {
-      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.01);
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - dtSec * WRONG_WAY_DECAY_RATE);
     }
 
     // スタック検知 (動いてないのに時間経過)

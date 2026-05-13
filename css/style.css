@@ -77,8 +77,8 @@ input { font-family: inherit; outline: none; }
 .title-content .game-title { grid-area: title; margin-bottom: 4px; line-height: 1; }
 .title-content .name-input-wrap { grid-area: name; margin: 0; }
 .title-content .car-select { grid-area: car; margin: 0; }
+.title-content .map-select { grid-area: extras; margin: 0; }
 .title-content .title-buttons { grid-area: buttons; margin-top: 0; align-self: center; }
-.title-content .title-extras { grid-area: extras; margin-top: 4px; }
 .title-content .hint { grid-area: hint; margin-top: 2px; }
 
 .title-main {
@@ -144,7 +144,8 @@ input { font-family: inherit; outline: none; }
 
 /* ===== マシンタイプ選択 ===== */
 .car-type-select { margin: 12px 0; }
-.car-type-select label {
+.car-type-select label,
+.map-select label {
   font-size: 13px; color: #2b1d10; font-weight: 700;
   display: flex; align-items: center; gap: 8px;
 }
@@ -181,6 +182,46 @@ input { font-family: inherit; outline: none; }
   .cartype-options { grid-template-columns: repeat(5, 1fr); gap: 3px; }
   .cartype-option .ctt-stats { font-size: 7px; }
   .cartype-option .ctt-name { font-size: 10px; }
+}
+
+/* ===== マップ選択 ===== */
+.map-select { text-align: left; }
+.map-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.map-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.14);
+  background: rgba(255,255,255,0.92);
+  text-align: left;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.map-option:hover { transform: translateY(-2px); }
+.map-option.active {
+  border-color: #ff7043;
+  background: linear-gradient(135deg, #fff8e1, #ffe0b2);
+  box-shadow: 0 6px 14px rgba(255,112,67,0.2);
+}
+.map-option-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #2b1d10;
+}
+.map-option-sub {
+  font-size: 11px;
+  color: #6d4c41;
+  font-weight: 700;
+}
+@media (max-width: 600px) {
+  .map-options { grid-template-columns: 1fr; }
+  .map-option-title { font-size: 12px; }
 }
 
 .title-buttons {

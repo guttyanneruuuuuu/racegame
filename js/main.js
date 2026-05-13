@@ -1,38 +1,3 @@
-// ============= ゲート向き補正 (Track.generate 前に実行) =============
-// track.js 内のゲートはローカルX軸がゲートの横幅なので、rotation.y は
-// 進行方向 angle そのものにする。angle - PI/2 だと道路と平行に立つ。
-(function fixGateOrientationBeforeInit() {
-  if (!window.Track || Track._gateOrientationFixed) return;
-  Track._gateOrientationFixed = true;
-
-  if (typeof Track._buildArch === 'function') {
-    const originalBuildArch = Track._buildArch.bind(Track);
-    Track._buildArch = function (x, z, angle, w) {
-      originalBuildArch(x, z, angle, w);
-      const grp = this.group && this.group.children[this.group.children.length - 1];
-      if (grp && grp.isGroup) grp.rotation.y = angle;
-    };
-  }
-
-  if (typeof Track._buildGates === 'function') {
-    const originalBuildGates = Track._buildGates.bind(Track);
-    Track._buildGates = function () {
-      const before = this.group ? this.group.children.length : 0;
-      originalBuildGates();
-      if (!this.group || !this.pathPoints || !this._segDir) return;
-
-      const positions = [0.14, 0.32, 0.50, 0.68, 0.85];
-      for (let k = 0; k < positions.length; k++) {
-        const gate = this.group.children[before + k];
-        if (!gate || !gate.isGroup) continue;
-        const i = Math.floor(positions[k] * this.pathPoints.length);
-        const dir = this._segDir[i];
-        if (dir) gate.rotation.y = Math.atan2(dir.ux, dir.uz);
-      }
-    };
-  }
-})();
-
 // ============= エントリポイント =============
 window.addEventListener('load', () => {
   // UI初期化
@@ -98,11 +63,11 @@ window.addEventListener('load', () => {
     Net.leave();
     GameUI.showScreen('screen-title');
   });
-  Net.on('startRace', async (seed, startTime) => {
+  Net.on('startRace', async (seed, startTime, mapId) => {
     const players = Array.from(Net.players.values()).map(p => ({
       id: p.id, name: p.name, color: p.color, carType: p.carType, isAI: false,
     }));
-    await GameUI._beginRace(players, Net.myId, 'multi');
+    await GameUI._beginRace(players, Net.myId, 'multi', mapId);
     // ネットワーク同期カウントダウン
     Game.startCountdown(startTime);
   });

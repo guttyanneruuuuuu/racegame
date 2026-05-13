@@ -1130,7 +1130,7 @@ const Track = {
       grp.add(banner);
 
       grp.position.set(cur.x, 0, cur.z);
-      grp.rotation.y = angle - Math.PI / 2;
+      grp.rotation.y = angle;
       this.group.add(grp);
     }
   },

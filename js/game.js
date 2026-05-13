@@ -35,21 +35,50 @@ const Game = {
 
   _initThree() {
     const canvas = document.getElementById('game-canvas');
-    // 軽量化: アンチエイリアスは画面サイズに応じて切替、ピクセル比は1.5に制限
     const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-    const aa = !isMobile;
+
+    // === 品質モード自動判定 + 設定上書き ===
+    // localStorage の gyrorush-quality を尊重し、'auto' なら端末性能で推定
+    let q = (localStorage.getItem('gyrorush-quality') || 'auto');
+    if (q === 'auto') {
+      // CPUコア数 + メモリ + モバイルかどうかで雑に推定
+      const cores = navigator.hardwareConcurrency || 4;
+      const mem = navigator.deviceMemory || 4;
+      const w = window.innerWidth;
+      if (isMobile && (cores <= 4 || mem <= 3 || w < 500)) q = 'low';
+      else if (isMobile) q = 'med';
+      else if (cores >= 8 && mem >= 8) q = 'high';
+      else q = 'med';
+    }
+    this.quality = q; // 'low' | 'med' | 'high'
+    window.__GR_QUALITY__ = q;
+
+    // 品質別: アンチエイリアス / ピクセル比 / 描画距離 / 装飾数
+    const qConf = {
+      low:  { aa: false, prCap: 1.0, far: 480, fogNear: 240, fogFar: 460 },
+      med:  { aa: !isMobile, prCap: 1.3, far: 620, fogNear: 320, fogFar: 600 },
+      high: { aa: true, prCap: 1.75, far: 760, fogNear: 380, fogFar: 740 },
+    }[q];
+
     this.renderer = new THREE.WebGLRenderer({
-      canvas, antialias: aa, powerPreference: 'high-performance',
-      stencil: false, depth: true,
+      canvas,
+      antialias: qConf.aa,
+      powerPreference: 'high-performance',
+      stencil: false,
+      depth: true,
+      // 透過は不要 -> compositor負荷削減
+      alpha: false,
+      // 互換目的のフォールバック許容
+      failIfMajorPerformanceCaveat: false,
     });
-    const pr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+    const pr = Math.min(window.devicePixelRatio || 1, qConf.prCap);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = false; // 影は常時OFF (大きな描画コール削減)
 
     this.scene = new THREE.Scene();
-    // 描画距離をやや短く (フォグも同調)
-    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.4, 700);
+    this.scene.fog = new THREE.Fog(0xcfe6ff, qConf.fogNear, qConf.fogFar);
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, qConf.far);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
@@ -58,12 +87,15 @@ const Game = {
     const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(100, 150, 80);
     this.scene.add(dir);
-    // fill light を削減 (軽量化)
 
     this.clock = new THREE.Clock();
 
     Track.generate(this.scene);
     ItemSystem.init(this.scene);
+
+    // FPS 監視 + 自動劣化 (LOW モード以外で激落ちしたら自動で劣化)
+    this._fpsAccum = 0; this._fpsCount = 0; this._fpsLastCheck = performance.now();
+    this._downgraded = false;
   },
 
   _initMini() {
@@ -166,6 +198,8 @@ const Game = {
       this._checkPads(now);
       this._detectRankChanges();
       for (const c of this.cars) c.updateMesh();
+      // === FPS監視: 持続的に低FPSなら自動で品質劣化 ===
+      this._monitorFps(now);
     } else if (this.state === 'countdown') {
       for (const c of this.cars) c.updateMesh();
     }
@@ -612,6 +646,32 @@ const Game = {
     this._checkRaceEnd();
   },
 
+  // 持続的に低FPSなら自動で品質劣化 (装飾フェードアウト/解像度ダウン)
+  _monitorFps(now) {
+    this._fpsCount = (this._fpsCount || 0) + 1;
+    if (now - (this._fpsLastCheck || now) > 1500) {
+      const fps = this._fpsCount * 1000 / Math.max(1, now - this._fpsLastCheck);
+      this._fpsLastCheck = now;
+      this._fpsCount = 0;
+      if (!this._downgraded && fps > 0 && fps < 28 && this.quality !== 'low') {
+        this._downgraded = true;
+        // ピクセル比を1.0に、描画距離を縮小
+        try {
+          this.renderer.setPixelRatio(Math.min(this.renderer.getPixelRatio(), 1.0));
+        } catch (_) {}
+        if (this.scene && this.scene.fog) {
+          this.scene.fog.near = Math.min(this.scene.fog.near, 240);
+          this.scene.fog.far  = Math.min(this.scene.fog.far,  460);
+        }
+        if (this.camera) {
+          this.camera.far = Math.min(this.camera.far, 500);
+          this.camera.updateProjectionMatrix();
+        }
+        if (typeof showToast === 'function') showToast('⚡ 軽量モードに自動切替', 1200);
+      }
+    }
+  },
+
   // ===== ユニーク機能: 時間巻き戻し (3秒前) =====
   triggerRewind() {
     if (this.state !== 'racing') return false;
@@ -702,16 +762,27 @@ const Game = {
 
   _updateHUD(now) {
     if (!this.localCar) return;
+    const inkOn = (this.localCar.inkScrambleTimer || 0) > 0;
     const elapsed = (this.state === 'racing' || this.state === 'finished')
       ? (this.localCar.finished ? this.localCar.finishTime : (now - this.raceStartTime))
       : 0;
     document.getElementById('hud-time').textContent = Utils.formatTime(elapsed);
     const lapDisp = this.localCar.finished ? this.totalLaps : Math.min(this.localCar.lap + 1, this.totalLaps);
-    document.getElementById('hud-lap').textContent = `${lapDisp}/${this.totalLaps}`;
+    // === 墨スクランブル中はHUD表示が乱れる (操作妨害ではなく情報妨害) ===
+    document.getElementById('hud-lap').textContent = inkOn
+      ? this._scrambleText(`${lapDisp}/${this.totalLaps}`)
+      : `${lapDisp}/${this.totalLaps}`;
     const rank = this._getRank(this.localCar);
-    document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
+    document.getElementById('hud-pos').textContent = inkOn
+      ? this._scrambleText(`${rank}/${this.cars.length}`)
+      : `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
-    document.getElementById('hud-speed').textContent = Math.floor(sp);
+    document.getElementById('hud-speed').textContent = inkOn
+      ? this._scrambleNum(Math.floor(sp))
+      : Math.floor(sp);
+    // HUD全体に墨スクランブルクラスを切替 (CSSで揺らぎを表現)
+    const hudEl = document.getElementById('hud');
+    if (hudEl) hudEl.classList.toggle('ink-scramble', inkOn);
     // コイン枚数HUD更新
     if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
 
@@ -790,6 +861,18 @@ const Game = {
 
   _escape(s) {
     return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  },
+
+  // 墨スクランブル用: 文字列をランダムな数字/記号に置換 (構造は保持)
+  _scrambleText(s) {
+    const glyphs = '0123456789#@?!*';
+    return String(s).split('').map(ch => {
+      if (ch === '/' || ch === ':' || ch === '.') return ch;
+      return glyphs[(Math.random() * glyphs.length) | 0];
+    }).join('');
+  },
+  _scrambleNum(n) {
+    return ((Math.random() * 999) | 0).toString();
   },
 
   _updateMinimap() {

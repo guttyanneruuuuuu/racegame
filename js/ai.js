@@ -74,11 +74,12 @@ const AIDriver = {
       // 攻撃系/ブースト系は即使用
       if (itm === 'boost' || itm === 'tripleBoost' || itm === 'shield' ||
           itm === 'rocket' || itm === 'tripleRocket' || itm === 'lightning' ||
-          itm === 'ghost' || itm === 'magnet') {
+          itm === 'ghost' || itm === 'magnet' || itm === 'megaShield' ||
+          itm === 'mini' || itm === 'boomerang' || itm === 'fog') {
         use = true;
       }
       // 設置系: 後ろから迫られている / 自分より遅い場合に撒く
-      else if (itm === 'banana' || itm === 'oil' || itm === 'mine') {
+      else if (itm === 'banana' || itm === 'oil' || itm === 'mine' || itm === 'block') {
         const threat = this._threatBehind(car, allCars);
         use = threat || car.totalProgress < this._leaderProgress(allCars) || Math.random() < 0.35;
       }
@@ -86,11 +87,36 @@ const AIDriver = {
       else if (itm === 'ink') {
         use = this._hasRivalAhead(car, allCars) || Math.random() < 0.4;
       }
+      // === 新規アイテムの判断 ===
+      // ワープ: 直前で危険(後ろから接近)or前にライバル
+      else if (itm === 'teleport') {
+        use = this._threatBehind(car, allCars) || this._hasRivalAhead(car, allCars) || Math.random() < 0.5;
+      }
+      // EMPは周囲に敵が複数いる時 (範囲攻撃の効率)
+      else if (itm === 'emp') {
+        use = this._enemiesNearby(car, allCars, 14) >= 1 || Math.random() < 0.4;
+      }
+      // デコイ: 後ろから狙われている (ロケットの囮になる) or 戦略的設置
+      else if (itm === 'decoy') {
+        use = this._threatBehind(car, allCars) || Math.random() < 0.3;
+      }
       if (use) {
         Game.useItem(car, allCars);
         st.itemCooldown = 2.5 + Math.random() * 2.5;
       }
     }
+  },
+
+  _enemiesNearby(car, allCars, r) {
+    let n = 0;
+    const r2 = r * r;
+    for (const o of allCars) {
+      if (o.id === car.id) continue;
+      if (o.finished) continue;
+      const dx = o.x - car.x, dz = o.z - car.z;
+      if (dx*dx + dz*dz < r2) n++;
+    }
+    return n;
   },
 
   // 後方近距離に追跡してくる車がいるか?

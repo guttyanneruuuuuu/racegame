@@ -7,7 +7,7 @@ window.createTrackVolcano = function () {
   pathPoints: [],
   pathLength: 0,
   cumLen: [],
-  width: 24,
+  width: 22,
   wallHeight: 3.0,
   surfaceHeights: [],
 
@@ -55,16 +55,17 @@ window.createTrackVolcano = function () {
       { x:   40, z: -180 },
       { x:  130, z: -150 },
       { x:  180, z: -100 },   // 右下のフック
-      { x:  100, z:  -90 },   // 折返し (ヘアピン2 / 厳しめ)
-      { x:   30, z:  -40 },
-      { x:  -40, z:  -10 },
+      { x:  145, z: -125 },   // 折返し (ヘアピン2) を緩和
+      { x:   75, z: -110 },
+      { x:   10, z:  -70 },
+      { x:  -40, z:  -15 },
       { x:  -90, z:   40 },
       { x:  -90, z:  110 },   // 戻り直線
       { x:  -40, z:  150 },
     ];
 
-    // セグメント分割を軽量化: 16 → 12 (描画頂点が約25%減)
-    this.pathPoints = this._catmullRomLoop(this.controlPoints, 12);
+    // 壁重なり抑制のため分割を少し増やして接線変化を滑らかにする
+    this.pathPoints = this._catmullRomLoop(this.controlPoints, 16);
     this._buildCumLen();
     this._buildSegmentDirs();
     this._buildSurfaceHeights();
@@ -80,6 +81,8 @@ window.createTrackVolcano = function () {
     this._buildItemBoxes();
     this._buildBoostPads();
     this._buildJumpPads();       // 間欠泉ジャンプ台
+    this._buildDirectionArrows(); // 地上ガイド
+    this._buildAerialGuides();    // 空中ガイド
     this._buildShortcuts();      // 溶岩割れ目ショートカット
     this._buildLavaPools();      // ハザード
     this._buildBoulders();       // 動く障害物
@@ -166,24 +169,29 @@ window.createTrackVolcano = function () {
   _buildSurfaceHeights() {
     const n = this.pathPoints.length;
     this.surfaceHeights = new Array(n).fill(0);
-    const start = Math.floor(n * 0.58);
-    const peakStart = Math.floor(n * 0.66);
-    const peakEnd = Math.floor(n * 0.71);
-    const end = Math.floor(n * 0.79);
-    const bridgeHeight = 9.0;
-
     const ease = (t) => 0.5 - Math.cos(Math.PI * t) * 0.5;
-    for (let i = start; i <= end; i++) {
-      let h = bridgeHeight;
-      if (i < peakStart) {
-        const t = (i - start) / Math.max(1, peakStart - start);
-        h = bridgeHeight * ease(t);
-      } else if (i > peakEnd) {
-        const t = (end - i) / Math.max(1, end - peakEnd);
-        h = bridgeHeight * ease(t);
+    const applyPlateau = (fromT, peakStartT, peakEndT, toT, height) => {
+      const from = Math.floor(n * fromT);
+      const peakStart = Math.floor(n * peakStartT);
+      const peakEnd = Math.floor(n * peakEndT);
+      const to = Math.floor(n * toT);
+      for (let i = from; i <= to; i++) {
+        let h = height;
+        if (i < peakStart) {
+          const t = (i - from) / Math.max(1, peakStart - from);
+          h = height * ease(t);
+        } else if (i > peakEnd) {
+          const t = (to - i) / Math.max(1, to - peakEnd);
+          h = height * ease(t);
+        }
+        this.surfaceHeights[i] = Math.max(this.surfaceHeights[i], h);
       }
-      this.surfaceHeights[i] = h;
-    }
+    };
+
+    // 序盤: 小さな高台 (ジャンプ後のライン取り意味付け)
+    applyPlateau(0.12, 0.16, 0.19, 0.24, 4.5);
+    // 終盤: 大きな高架 (登り→頂上→下りを明確化)
+    applyPlateau(0.56, 0.65, 0.71, 0.82, 10.5);
   },
 
   _getTrackY(i) {
@@ -285,6 +293,41 @@ window.createTrackVolcano = function () {
     const line = new THREE.Line(geo, mat);
     line.computeLineDistances();
     this.group.add(line);
+  },
+
+  _buildDirectionArrows() {
+    const n = this.pathPoints.length;
+    const spacing = 28;
+    const arrowScale = 3.4;
+    const verts = [];
+    const idx = [];
+    let vCount = 0;
+    for (let i = 0; i < n; i += spacing) {
+      const cur = this.pathPoints[i];
+      const next = this.pathPoints[(i + 5) % n];
+      const dx = next.x - cur.x;
+      const dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const ux = dx / len;
+      const uz = dz / len;
+      const px = -uz;
+      const pz = ux;
+      const y = this._getTrackY(i) + 0.1;
+      verts.push(
+        cur.x + ux * arrowScale, y, cur.z + uz * arrowScale,
+        cur.x - px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), y, cur.z - pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+        cur.x + px * (arrowScale * 0.4) - ux * (arrowScale * 0.3), y, cur.z + pz * (arrowScale * 0.4) - uz * (arrowScale * 0.3),
+      );
+      idx.push(vCount, vCount + 1, vCount + 2);
+      vCount += 3;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const mesh = new THREE.Mesh(geo, mat);
+    this.group.add(mesh);
   },
 
   _buildCurbs() {
@@ -740,11 +783,46 @@ window.createTrackVolcano = function () {
       this.group.add(steam);
 
       this.jumpPads.push({
-        mesh: ringMesh, glow: inner, steam, x: px, z: pz, y: py, dirX, dirZ,
+        mesh: ringMesh, glow: inner, steam, x: px, z: pz, y: py, dirX, dirZ, idx,
         radius: 4.0,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });
+    }
+  },
+
+  _buildAerialGuides() {
+    if (!this.jumpPads || this.jumpPads.length === 0) return;
+    const ringGeo = new THREE.TorusGeometry(1.25, 0.12, 8, 16);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffe082, transparent: true, opacity: 0.78 });
+    const arrowGeo = new THREE.ConeGeometry(0.75, 1.8, 4);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffca28, transparent: true, opacity: 0.9 });
+
+    for (const p of this.jumpPads) {
+      const baseIdx = p.idx || 0;
+      const markers = [5, 10, 15];
+      for (let m = 0; m < markers.length; m++) {
+        const i = (baseIdx + markers[m]) % this.pathPoints.length;
+        const cur = this.pathPoints[i];
+        const next = this.pathPoints[(i + 3) % this.pathPoints.length];
+        const dx = next.x - cur.x;
+        const dz = next.z - cur.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const ux = dx / len;
+        const uz = dz / len;
+        const y = this._getTrackY(i) + (2.8 - m * 0.8);
+
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(cur.x, y, cur.z);
+        ring.rotation.x = Math.PI / 2;
+        this.group.add(ring);
+
+        const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+        arrow.position.set(cur.x + ux * 1.6, y, cur.z + uz * 1.6);
+        arrow.rotation.x = -Math.PI / 2;
+        arrow.rotation.z = Math.atan2(ux, uz);
+        this.group.add(arrow);
+      }
     }
   },
 

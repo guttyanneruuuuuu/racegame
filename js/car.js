@@ -27,6 +27,7 @@ const CarTypeStats = {
   handling:  { maxSpeed: 0.98, accel: 0.95, steer: 1.30, weight: 0.90, friction: 1.05 },
   heavy:     { maxSpeed: 1.08, accel: 0.78, steer: 0.78, weight: 1.50, friction: 0.90 },
 };
+const LAP_CHECKPOINT_RATIOS = Object.freeze([0.25, 0.5, 0.75]);
 
 class Car {
   constructor(opts = {}) {
@@ -845,10 +846,10 @@ class Car {
     if (this.finished) return;
     const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
     const n = Track.pathPoints.length;
-    const LAP_CHECKPOINT_RATIOS = [0.25, 0.5, 0.75];
     if (this._lapCheckpointPathLen !== n) {
       const marks = LAP_CHECKPOINT_RATIOS
         .map(r => Math.floor(n * r))
+        // スタート/ゴール線(0近傍)は周回判定と重なるため、チェックポイント対象から除外
         .filter((idx) => idx > 0 && idx < n);
       this._lapCheckpointMarks = [...new Set(marks)].sort((a, b) => a - b);
       this._lapCheckpointPathLen = n;
@@ -863,7 +864,7 @@ class Car {
     const forwardStep = (to - from + n) % n;
     const backwardStep = (from - to + n) % n;
     const movedForward = forwardStep <= backwardStep;
-    const crossedForward = (start, end, mark) => {
+    const didCrossMarker = (start, end, mark) => {
       if (start === end) return false;
       if (start < end) return start < mark && mark <= end;
       return mark > start || mark <= end;
@@ -871,7 +872,7 @@ class Car {
     if (movedForward && this.lapCheckpointStep < this._lapCheckpointMarks.length) {
       while (
         this.lapCheckpointStep < this._lapCheckpointMarks.length &&
-        crossedForward(from, to, this._lapCheckpointMarks[this.lapCheckpointStep])
+        didCrossMarker(from, to, this._lapCheckpointMarks[this.lapCheckpointStep])
       ) {
         this.lapCheckpointStep++;
       }

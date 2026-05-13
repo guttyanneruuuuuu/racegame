@@ -872,13 +872,16 @@ class Car {
     this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
 
     // 逆走検知 (コース進行方向に対する速度ベクトルで判定)
-    const segmentDirection = Track._segDir && Track._segDir[prog.index];
+    const segmentDirection = Track._segDir?.[prog.index];
     if (segmentDirection) {
       const velocityX = Math.sin(this.angle) * this.speed;
       const velocityZ = Math.cos(this.angle) * this.speed;
       const velocityMagnitude = Math.hypot(velocityX, velocityZ);
       if (velocityMagnitude > CarPhysics.WRONG_WAY_MIN_SPEED) {
-        const directionDotProduct = (velocityX * segmentDirection.ux + velocityZ * segmentDirection.uz) / velocityMagnitude; // +1:順走 / -1:逆走
+        const segmentDirectionMagnitude = Math.hypot(segmentDirection.ux, segmentDirection.uz) || 1;
+        const normalizedSegX = segmentDirection.ux / segmentDirectionMagnitude;
+        const normalizedSegZ = segmentDirection.uz / segmentDirectionMagnitude;
+        const directionDotProduct = (velocityX * normalizedSegX + velocityZ * normalizedSegZ) / velocityMagnitude; // +1:順走 / -1:逆走
         if (directionDotProduct < CarPhysics.WRONG_WAY_DOT_THRESHOLD) this.wrongWayTimer += CarPhysics.WRONG_WAY_TIMER_INC;
         else this.wrongWayTimer = Math.max(0, this.wrongWayTimer - CarPhysics.WRONG_WAY_TIMER_DEC);
       } else {

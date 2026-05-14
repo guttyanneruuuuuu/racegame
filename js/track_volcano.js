@@ -110,33 +110,16 @@ window.createTrackVolcano = function () {
   },
 
   _catmullRomLoop(pts, segments) {
-    const out = [];
-    const n = pts.length;
-    for (let i = 0; i < n; i++) {
-      const p0 = pts[(i - 1 + n) % n];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % n];
-      const p3 = pts[(i + 2) % n];
-      for (let s = 0; s < segments; s++) {
-        const t = s / segments;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * (
-          (2 * p1.x) +
-          (-p0.x + p2.x) * t +
-          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
-        );
-        const z = 0.5 * (
-          (2 * p1.z) +
-          (-p0.z + p2.z) * t +
-          (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 +
-          (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3
-        );
-        out.push({ x, z });
-      }
-    }
-    return out;
+    const curve = new THREE.CatmullRomCurve3(
+      pts.map((p) => new THREE.Vector3(p.x, 0, p.z)),
+      true,
+      'centripetal',
+      0.5
+    );
+    const sampleCount = Math.max(pts.length * segments, pts.length * 4);
+    const sampled = curve.getPoints(sampleCount);
+    if (sampled.length > 1) sampled.pop(); // 末尾の始点重複を除去
+    return sampled.map((v) => ({ x: v.x, z: v.z }));
   },
 
   _buildCumLen() {
@@ -202,6 +185,10 @@ window.createTrackVolcano = function () {
   getSurfaceHeight(x, z, hintIdx = -1) {
     const prog = this.getProgress(x, z, hintIdx);
     return this._getTrackY(prog.index);
+  },
+
+  widthAt() {
+    return this.width;
   },
 
   _buildTrack() {
@@ -1107,8 +1094,9 @@ window.createTrackVolcano = function () {
   },
 
   isOffTrack(x, z, hintIdx = -1) {
-    const { dist } = this.getProgress(x, z, hintIdx);
-    if (dist <= this.width) return false;
+    const prog = this.getProgress(x, z, hintIdx);
+    const w = this.widthAt(prog.index);
+    if (prog.dist <= w) return false;
     if (this.isOnShortcut(x, z)) return false;
     return true;
   },
@@ -1125,22 +1113,72 @@ window.createTrackVolcano = function () {
 
   resolveWalls(x, z, radius, hintIdx = -1) {
     const prog = this.getProgress(x, z, hintIdx);
-    const cur = this.pathPoints[prog.index];
-    const { nx, nz } = this._segNorm[prog.index];
+    const idx = prog.index;
+    const cur = this.pathPoints[idx];
+    const { nx, nz } = this._segNorm[idx];
     const rx = x - cur.x, rz = z - cur.z;
     const lateral = rx * nx + rz * nz;
-    const limit = this.width - radius;
+    const w = this.widthAt(idx);
+    const limit = w - radius;
+
+    let bestExcess = -Infinity;
+    let bestSeg = null;
+
     if (Math.abs(lateral) > limit) {
-      if (this.isOnShortcut(x, z)) {
-        return { x, z, hit: false, nx: 0, nz: 0, lateral };
+      if (!this.isOnShortcut(x, z)) {
+        bestExcess = Math.abs(lateral) - limit;
+        bestSeg = { sign: Math.sign(lateral) || 1, nx, nz, lateral, index: idx };
       }
-      const sign = Math.sign(lateral);
-      const excess = Math.abs(lateral) - limit;
-      const newX = x - sign * nx * excess;
-      const newZ = z - sign * nz * excess;
-      return { x: newX, z: newZ, hit: true, nx: -sign * nx, nz: -sign * nz, lateral };
     }
-    return { x, z, hit: false, nx: 0, nz: 0, lateral };
+
+    const n = this.pathPoints.length;
+    for (let k = -4; k <= 4; k++) {
+      if (k === 0) continue;
+      const j = ((idx + k) % n + n) % n;
+      const pj = this.pathPoints[j];
+      const seg = this._segNorm[j];
+      const rxj = x - pj.x, rzj = z - pj.z;
+      const latj = rxj * seg.nx + rzj * seg.nz;
+      const wj = this.widthAt(j);
+      const limj = wj - radius;
+      const segDir = this._segDir[j];
+      const tang = Math.abs(rxj * segDir.ux + rzj * segDir.uz);
+      if (tang > 24) continue;
+      if (Math.abs(latj) > limj) {
+        if (this.isOnShortcut(x, z)) continue;
+        const excess = Math.abs(latj) - limj;
+        if (excess > bestExcess) {
+          bestExcess = excess;
+          bestSeg = { sign: Math.sign(latj) || 1, nx: seg.nx, nz: seg.nz, lateral: latj, index: j };
+        }
+      }
+    }
+
+    if (bestSeg) {
+      const nA = this._segNorm[bestSeg.index];
+      const nP = this._segNorm[((bestSeg.index - 1) % n + n) % n];
+      const nN = this._segNorm[(bestSeg.index + 1) % n];
+      let avgNx = nA.nx + nP.nx + nN.nx;
+      let avgNz = nA.nz + nP.nz + nN.nz;
+      const avgLen = Math.hypot(avgNx, avgNz) || 1;
+      avgNx /= avgLen; avgNz /= avgLen;
+
+      const inset = 0.18;
+      let newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + inset);
+      let newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + inset);
+      const extra = 0.22;
+      newX -= bestSeg.sign * avgNx * extra;
+      newZ -= bestSeg.sign * avgNz * extra;
+
+      return {
+        x: newX, z: newZ, hit: true,
+        nx: -bestSeg.sign * bestSeg.nx,
+        nz: -bestSeg.sign * bestSeg.nz,
+        lateral: bestSeg.lateral, index: bestSeg.index,
+      };
+    }
+
+    return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
   },
 
   update(dt, now) {

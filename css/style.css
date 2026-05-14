@@ -462,20 +462,26 @@ input { font-family: inherit; outline: none; }
 .hud-item {
   position: absolute;
   top: 12px; right: 14px;
+  display: flex;
+  gap: 8px;
 }
 .item-box {
-  width: 62px; height: 62px;
+  width: 56px; height: 56px;
   background:
     radial-gradient(circle at 30% 30%, rgba(255,255,255,0.55), transparent 55%),
     conic-gradient(from 0deg, #FF5252, #FFD740, #69F0AE, #40C4FF, #E040FB, #FFAB40, #FF5252);
   border: 3px solid #fff;
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 30px; font-weight: 900;
+  font-size: 28px; font-weight: 900;
   color: #fff;
   text-shadow: 0 2px 0 rgba(0,0,0,0.45), 0 0 8px rgba(0,0,0,0.5);
   box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 -6px 0 rgba(0,0,0,0.2);
   position: relative;
+}
+.item-box.slot-secondary {
+  transform: scale(0.92);
+  opacity: 0.95;
 }
 .item-box.has-item {
   animation: itemPulse 0.55s infinite alternate;

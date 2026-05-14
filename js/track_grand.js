@@ -685,7 +685,10 @@ window.createTrackGrand = function () {
       const { nx, nz } = this._segNorm[i];
       const w = this.widthAt(i);
 
-      const offsets = [-w * 0.55, 0, w * 0.55];
+      const pattern = Math.floor(i / step) % 4;
+      const offsets = (pattern === 1 || pattern === 3)
+        ? [-w * 0.48, w * 0.48]   // たまに2個
+        : [-w * 0.55, 0, w * 0.55];
       offsets.forEach(off => {
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;

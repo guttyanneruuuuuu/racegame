@@ -537,7 +537,8 @@ const ItemExt = {
         return origUse(car, allCars);
       }
       const item = car.consumeItem();
-      if (car.isLocal && window.GameUI) GameUI.updateItem(null);
+      if (!item) return;
+      if (car.isLocal && window.GameUI) GameUI.updateItem(car.item, car.itemSecondary);
       if (window.SFX) SFX.play('item');
 
       if (item === 'fog') {

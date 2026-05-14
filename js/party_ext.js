@@ -324,7 +324,8 @@ const PartyExt = {
         Game.useItem = () => {
             const car = Game.getLocalCar && Game.getLocalCar();
             if (car && car.item && this._usePartyItem(car, car.item)) {
-                car.item = null;
+                if (typeof car.consumeItem === 'function') car.consumeItem();
+                else car.item = null;
                 if (Game.updateUI) Game.updateUI();
                 return;
             }

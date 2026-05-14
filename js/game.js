@@ -415,7 +415,7 @@ const Game = {
   useItem(car, allCars) {
     if (!car.item) return;
     const item = car.consumeItem();
-    if (car.isLocal) GameUI.updateItem(null);
+    if (car.isLocal) GameUI.updateItem(car.item, car.itemSecondary);
 
     if (window.SFX) SFX.play('item');
 
@@ -560,17 +560,20 @@ const Game = {
   _checkPickups(now) {
     for (const c of this.cars) {
       if (c.finished) continue;
-      if (!c.item) {
-        if (Track.collectItemBox(c.x, c.z, 2.4)) {
-          const rank = this._getRank(c);
-          const item = ItemSystem.weightedRoll(rank, this.cars.length);
-          c.setItem(item);
-          if (c.isLocal) {
-            GameUI.updateItem(item);
-            showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
-            if (window.SFX) SFX.play('pickup');
-          }
+      let pickupCount = 0;
+      const maxItemPickupsPerFrame = (c.itemSlots && c.itemSlots.length) ? c.itemSlots.length : 2;
+      while (c.canHoldItem() && Track.collectItemBox(c.x, c.z, 2.4)) {
+        const rank = this._getRank(c);
+        const item = ItemSystem.weightedRoll(rank, this.cars.length);
+        const added = c.setItem ? c.setItem(item) : false;
+        if (!added) break;
+        pickupCount++;
+        if (c.isLocal) {
+          GameUI.updateItem(c.item, c.itemSecondary);
+          showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
+          if (window.SFX) SFX.play('pickup');
         }
+        if (pickupCount >= maxItemPickupsPerFrame) break;
       }
       if (Track.collectCoin && Track.collectCoin(c.x, c.z, 2.0)) {
         const gained = c.addCoin ? c.addCoin(1) : false;

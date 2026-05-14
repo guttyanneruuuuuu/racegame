@@ -30,6 +30,9 @@ const Game = {
 
   // 順位変動通知用
   _prevRanks: new Map(),
+  _slipstreamCharge: 0,
+  _slipstreamCooldown: 0,
+  _slipstreamActive: false,
 
   init() {
     this._initThree();
@@ -108,6 +111,8 @@ const Game = {
       best: document.getElementById('hud-best'),
       steerFill: document.getElementById('steer-fill'),
       driftCharge: document.getElementById('drift-charge'),
+      slipMeter: document.getElementById('slipstream-meter'),
+      slipFill: document.getElementById('slipstream-fill'),
       standings: document.getElementById('hud-standings'),
     };
   },
@@ -165,6 +170,12 @@ const Game = {
     this.state = 'countdown';
     this.lapTimes = {};
     this._prevRanks.clear();
+    this._slipstreamCharge = 0;
+    this._slipstreamCooldown = 0;
+    this._slipstreamActive = false;
+    if (this.hudEls && this.hudEls.slipMeter) {
+      this.hudEls.slipMeter.classList.remove('show', 'active', 'ready', 'cooldown');
+    }
   },
 
   startCountdown(startTime) {
@@ -184,6 +195,7 @@ const Game = {
 
     if (this.state === 'racing' || this.state === 'finished') {
       this._updateLocal(dt);
+      this._updateSlipstream(dt);
       this._updateAIs(dt);
       this._handleCollisions();
       this._sendNetwork(now);
@@ -247,6 +259,84 @@ const Game = {
         Net.sendFinished(this.localCar.finishTime);
         this._checkRaceEnd();
       }
+    }
+  },
+
+  _updateSlipstream(dt) {
+    const me = this.localCar;
+    if (!me) return;
+
+    this._slipstreamActive = false;
+    this._slipstreamCooldown = Math.max(0, this._slipstreamCooldown - dt);
+    const decay = (rate = 0.6) => {
+      this._slipstreamCharge = Math.max(0, this._slipstreamCharge - dt * rate);
+    };
+
+    if (
+      this.state !== 'racing' ||
+      me.finished ||
+      me.speed < 14 ||
+      me.spinTimer > 0 ||
+      me.lockedTimer > 0 ||
+      me.wrongWayRescueTimer > 0 ||
+      me.killerTimer > 0
+    ) {
+      decay(0.7);
+      return;
+    }
+
+    const fx = Math.sin(me.angle);
+    const fz = Math.cos(me.angle);
+    const rx = fz;
+    const rz = -fx;
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const other of this.cars) {
+      if (other.id === me.id || other.finished) continue;
+      if (other.speed < 10) continue;
+
+      const dx = other.x - me.x;
+      const dz = other.z - me.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 5 || dist > 26) continue;
+
+      const forwardDist = dx * fx + dz * fz;
+      if (forwardDist < 4) continue;
+
+      const lateral = Math.abs(dx * rx + dz * rz);
+      const lateralLimit = 2.8 + dist * 0.06;
+      if (lateral > lateralLimit) continue;
+
+      const ofx = Math.sin(other.angle);
+      const ofz = Math.cos(other.angle);
+      const headingDot = fx * ofx + fz * ofz;
+      if (headingDot < 0.55) continue;
+
+      const score = (26 - dist) - lateral * 2.4 + forwardDist * 0.08;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { dist };
+      }
+    }
+
+    if (!best) {
+      decay(0.45);
+      return;
+    }
+
+    this._slipstreamActive = true;
+    const wake = Utils.clamp((26 - best.dist) / 21, 0, 1);
+    const draftAccel = 4 + wake * 8;
+    me.speed = Math.min(me.speed + draftAccel * dt, CarPhysics.MAX_SPEED_BOOST * 1.05);
+    this._slipstreamCharge = Math.min(1, this._slipstreamCharge + dt * (0.5 + wake * 0.9));
+
+    if (this._slipstreamCooldown <= 0 && this._slipstreamCharge >= 1) {
+      me.applyMiniTurbo(1.0);
+      this._slipstreamCharge = 0;
+      this._slipstreamCooldown = 4.5;
+      if (window.SFX) SFX.play('boost');
+      showToast('🌪 SLIPSTREAM TURBO!', 900);
     }
   },
 
@@ -713,6 +803,19 @@ const Game = {
       } else {
         dc.classList.remove('show');
       }
+    }
+
+    const slipFill = hud.slipFill;
+    if (slipFill) {
+      slipFill.style.width = `${Math.round(this._slipstreamCharge * 100)}%`;
+    }
+    const slipMeter = hud.slipMeter;
+    if (slipMeter) {
+      const visible = this._slipstreamActive || this._slipstreamCharge > 0.02 || this._slipstreamCooldown > 0;
+      slipMeter.classList.toggle('show', visible);
+      slipMeter.classList.toggle('active', this._slipstreamActive);
+      slipMeter.classList.toggle('ready', this._slipstreamCharge >= 0.98 && this._slipstreamCooldown <= 0);
+      slipMeter.classList.toggle('cooldown', this._slipstreamCooldown > 0);
     }
 
     // 最終ラップ装飾

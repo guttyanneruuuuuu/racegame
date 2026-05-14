@@ -3,6 +3,7 @@ const CarPhysics = {
   MAX_SPEED: 54,            // m/s (約195km/h)
   MAX_SPEED_BOOST: 88,
   MAX_SPEED_MINI: 68,       // ミニターボ時
+  KILLER_SPEED: 102,        // キラー中の最低巡航速度
   ACCEL: 38,                // 加速向上 (より楽しく)
   BRAKE: 58,
   REVERSE_ACCEL: 18,
@@ -430,7 +431,7 @@ class Car {
       } else {
         steer = 0;
       }
-      this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_BOOST * 0.94);
+      this.speed = Math.max(this.speed, CarPhysics.KILLER_SPEED * 0.96);
     }
     // スピン中
     if (this.spinTimer > 0) {
@@ -487,12 +488,13 @@ class Car {
     let maxSp = CarPhysics.MAX_SPEED;
     if (this.boostTimer > 0) maxSp = CarPhysics.MAX_SPEED_BOOST;
     else if (this.miniTurboTimer > 0) maxSp = CarPhysics.MAX_SPEED_MINI;
+    if (killerActive) maxSp = Math.max(maxSp, CarPhysics.KILLER_SPEED);
     // コインボーナス: 1枚で+2% (最大10枚 = +20%) + 車種別 maxSpeed 倍率
     const coinMul = 1 + Math.min(10, this.coins) * 0.02;
     maxSp *= coinMul * (this.stats.maxSpeed || 1);
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
     if (killerActive) {
-      this.speed = Math.max(this.speed, Math.min(maxSp, CarPhysics.MAX_SPEED_BOOST * 0.94));
+      this.speed = Math.max(this.speed, Math.min(maxSp, CarPhysics.KILLER_SPEED * 0.96));
     }
 
     // === ドリフト処理 ===
@@ -1260,7 +1262,7 @@ class Car {
     this.slowMul = 1.0;
     this.driftActive = false;
     this.driftCharge = 0;
-    this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_BOOST * 0.94);
+    this.speed = Math.max(this.speed, CarPhysics.KILLER_SPEED * 0.96);
   }
 
   // コイン取得 (上限10枚)

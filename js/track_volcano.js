@@ -1180,9 +1180,13 @@ window.createTrackVolcano = function () {
   // - 押し戻し inset/extra を Grand と同程度に強化 (再すり抜け防止)
   // - 隣接セグメント法線平均で押し戻し方向を安定化 (急カーブで折れない)
   resolveWalls(x, z, radius, hintIdx = -1) {
+    // 高速時の取りこぼしを抑えるため検査範囲を少し広めに設定
     const MAX_TANGENT_DISTANCE = 34;
+    // 初回押し戻し量を大きめにして再めり込みを防ぐ
     const WALL_COLLISION_INSET = 0.28;
     const WALL_EXTRA_PUSHBACK = 0.38;
+    // 二次検証で使う最終押し戻しの最小量
+    const VERIFICATION_PUSHBACK = 0.16;
     const prog = this.getProgress(x, z, hintIdx);
     const idx = prog.index;
     const cur = this.pathPoints[idx];
@@ -1241,6 +1245,9 @@ window.createTrackVolcano = function () {
       newX -= bestSeg.sign * avgNx * WALL_EXTRA_PUSHBACK;
       newZ -= bestSeg.sign * avgNz * WALL_EXTRA_PUSHBACK;
 
+      // 二次検証:
+      // 初回押し戻し後でも急カーブ連結部では隣接セグメント側に再めり込みすることがあるため、
+      // 新しい位置でもう一度最近傍セグメント基準で許容幅内に収める。
       const verify = this.getProgress(newX, newZ, bestSeg.index);
       const vIdx = verify.index;
       const vCur = this.pathPoints[vIdx];
@@ -1252,8 +1259,8 @@ window.createTrackVolcano = function () {
       if (Math.abs(vLateral) > vLimit && !this.isOnShortcut(newX, newZ)) {
         const vSign = vLateral >= 0 ? 1 : -1;
         const vExcess = Math.abs(vLateral) - vLimit;
-        newX -= vSign * vNorm.nx * (vExcess + 0.16);
-        newZ -= vSign * vNorm.nz * (vExcess + 0.16);
+        newX -= vSign * vNorm.nx * (vExcess + VERIFICATION_PUSHBACK);
+        newZ -= vSign * vNorm.nz * (vExcess + VERIFICATION_PUSHBACK);
       }
 
       return {

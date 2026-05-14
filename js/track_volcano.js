@@ -1126,13 +1126,13 @@ window.createTrackVolcano = function () {
     const CONTINUITY_FREE_RANGE = 14;
     const CONTINUITY_WEIGHT = 1.6;
     const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
-    const wrappedHint = hintIdx >= 0 ? (hintIdx % n) : -1;
+    const wrappedHintIdx = hintIdx >= 0 ? (hintIdx % n) : -1;
     const continuityPenaltyAt = (i) => {
-      if (wrappedHint < 0) return 0;
-      const raw = Math.abs(i - wrappedHint);
-      const cyc = Math.min(raw, n - raw);
-      if (cyc <= CONTINUITY_FREE_RANGE) return 0;
-      const d = cyc - CONTINUITY_FREE_RANGE;
+      if (wrappedHintIdx < 0) return 0;
+      const absoluteDistance = Math.abs(i - wrappedHintIdx);
+      const cyclicDistance = Math.min(absoluteDistance, n - absoluteDistance);
+      if (cyclicDistance <= CONTINUITY_FREE_RANGE) return 0;
+      const d = cyclicDistance - CONTINUITY_FREE_RANGE;
       return d * d * CONTINUITY_WEIGHT;
     };
     const consider = (i) => {

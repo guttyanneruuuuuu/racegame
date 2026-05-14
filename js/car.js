@@ -96,9 +96,32 @@ class Car {
     this.rewindUsed = false;    // 1レース1回のみ
     this.rewinding = false;     // 巻き戻し演出中
 
-    // アイテム
-    this.item = null;
+    // アイテム (最大2枠)
+    this.itemSlots = [null, null];
     this.itemReady = false;
+    Object.defineProperty(this, 'item', {
+      configurable: true,
+      enumerable: true,
+      get: () => this.itemSlots[0],
+      set: (value) => {
+        if (value == null) {
+          this.itemSlots[0] = this.itemSlots[1];
+          this.itemSlots[1] = null;
+        } else {
+          this.itemSlots[0] = value;
+        }
+        this.itemReady = !!(this.itemSlots[0] || this.itemSlots[1]);
+      },
+    });
+    Object.defineProperty(this, 'itemSecondary', {
+      configurable: true,
+      enumerable: true,
+      get: () => this.itemSlots[1],
+      set: (value) => {
+        this.itemSlots[1] = value || null;
+        this.itemReady = !!(this.itemSlots[0] || this.itemSlots[1]);
+      },
+    });
 
     // 進行管理
     this.lap = 0;
@@ -1303,14 +1326,37 @@ class Car {
     this.gliderTimer = Math.max(this.gliderTimer, seconds);
   }
 
-  setItem(item) {
-    this.item = item;
-    this.itemReady = true;
+  hasItem() {
+    return !!(this.itemSlots[0] || this.itemSlots[1]);
   }
+
+  canHoldItem() {
+    return !this.itemSlots[0] || !this.itemSlots[1];
+  }
+
+  getItemSlots() {
+    return [this.itemSlots[0], this.itemSlots[1]];
+  }
+
+  setItem(item) {
+    if (!item) return false;
+    if (!this.itemSlots[0]) {
+      this.itemSlots[0] = item;
+    } else if (!this.itemSlots[1]) {
+      this.itemSlots[1] = item;
+    } else {
+      return false;
+    }
+    this.itemReady = true;
+    return true;
+  }
+
   consumeItem() {
-    const it = this.item;
-    this.item = null;
-    this.itemReady = false;
+    const it = this.itemSlots[0];
+    if (!it) return null;
+    this.itemSlots[0] = this.itemSlots[1];
+    this.itemSlots[1] = null;
+    this.itemReady = !!this.itemSlots[0];
     return it;
   }
 }

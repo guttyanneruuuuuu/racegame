@@ -28,6 +28,7 @@ window.createTrackVolcano = function () {
   shortcuts: [],
   lavaPools: [],
   boulders: [],
+  forkBarriers: [],
   geysers: [],
 
   wallSegmentsOuter: [],
@@ -88,6 +89,7 @@ window.createTrackVolcano = function () {
     this._buildTrack();
     this._buildCurbs();
     this._buildBarriers();
+    this._buildForkBranchDivider();
     this._buildStartLine();
     this._buildItemBoxes();
     this._buildBoostPads();
@@ -188,7 +190,17 @@ window.createTrackVolcano = function () {
       const dot = a.ux * b.ux + a.uz * b.uz;
       const curveSharp = 1 - Math.max(-1, Math.min(1, dot));
       // ベース 22 + 急カーブで最大 +3 (折り返し点の自己交差防止 & 走りやすさ)
-      this.widthArray[i] = this.width + curveSharp * 2.4;
+      let w = this.width + curveSharp * 2.4;
+      // 中盤に分岐→合流レーンを作るため一時的に拡幅
+      const t = i / n;
+      if (t >= 0.56 && t <= 0.70) {
+        const p = (t - 0.56) / 0.14;
+        const smooth = p < 0.5
+          ? (p * 2) * (p * 2) * (3 - 2 * (p * 2))
+          : (1 - (p - 0.5) * 2) * (1 - (p - 0.5) * 2) * (3 - 2 * (1 - (p - 0.5) * 2));
+        w += 7.5 * smooth;
+      }
+      this.widthArray[i] = w;
     }
     // 平滑化 (急な幅変化を抑制)
     const smoothed = new Array(n);
@@ -752,7 +764,10 @@ window.createTrackVolcano = function () {
       const py = this._getTrackY(i);
       const w = this.widthAt(i);
 
-      const offsets = [-w * 0.55, 0, w * 0.55];
+      const pattern = Math.floor(i / step) % 4;
+      const offsets = (pattern === 1 || pattern === 3)
+        ? [-w * 0.48, w * 0.48]   // たまに2個
+        : [-w * 0.55, 0, w * 0.55];
       offsets.forEach(off => {
         const px = cur.x + nx * off;
         const pz = cur.z + nz * off;
@@ -768,6 +783,35 @@ window.createTrackVolcano = function () {
         this.group.add(beam);
         this.itemBoxes.push({ mesh: m, ring, beam, x: px, z: pz, y: py, active: true, respawn: 0 });
       });
+    }
+  },
+
+  _buildForkBranchDivider() {
+    this.forkBarriers = [];
+    const n = this.pathPoints.length;
+    const startT = 0.58;
+    const endT = 0.67;
+    const count = 9;
+    const geo = this._sharedGeos.smallRock || new THREE.DodecahedronGeometry(1.1, 0);
+    const mat = this._sharedMats.rockLight || new THREE.MeshLambertMaterial({ color: 0x3a3438 });
+
+    for (let k = 0; k < count; k++) {
+      const t = startT + (endT - startT) * (k / (count - 1));
+      const idx = Math.floor(t * n) % n;
+      const p = this.pathPoints[idx];
+      const y = this._getTrackY(idx);
+      const { nx, nz } = this._segNorm[idx];
+      const lateral = (k % 2 === 0 ? -1 : 1) * 0.7;
+      const x = p.x + nx * lateral;
+      const z = p.z + nz * lateral;
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y + 1.1, z);
+      mesh.rotation.set(Math.random() * 0.4, Math.random() * Math.PI * 2, Math.random() * 0.4);
+      mesh.scale.set(1.45, 1.15, 1.45);
+      this.group.add(mesh);
+
+      this.forkBarriers.push({ mesh, x, z, y, radius: 1.85 });
     }
   },
 
@@ -1533,6 +1577,15 @@ window.createTrackVolcano = function () {
   },
 
   checkBoulderHit(car, now) {
+    for (const b of this.forkBarriers) {
+      const dx = car.x - b.x;
+      const dz = car.z - b.z;
+      const d2 = dx * dx + dz * dz;
+      const rr = (b.radius + 1.0);
+      if (d2 < rr * rr && car.y < b.y + 2.0) {
+        return { hit: true, nx: dx / Math.sqrt(d2 || 1), nz: dz / Math.sqrt(d2 || 1) };
+      }
+    }
     for (const b of this.boulders) {
       const dx = car.x - b.mesh.position.x;
       const dz = car.z - b.mesh.position.z;

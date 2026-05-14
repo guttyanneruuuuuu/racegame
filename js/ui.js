@@ -353,18 +353,27 @@ const GameUI = {
     }
   },
 
-  updateItem(item) {
+  updateItem(item, item2 = null) {
     const slot = document.getElementById('hud-item-slot');
-    const box = slot.querySelector('.item-box');
-    if (!item) {
-      box.textContent = '?';
-      box.classList.remove('has-item');
-      box.style.background = '';
-    } else {
-      const d = ItemSystem.getDisplay(item);
-      box.textContent = d.emoji;
-      box.classList.add('has-item');
-      box.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)`;
+    if (!slot) return;
+    const primary = slot.querySelector('.slot-primary') || slot.querySelector('.item-box');
+    const secondary = slot.querySelector('.slot-secondary');
+    const paintBox = (box, it) => {
+      if (!box) return;
+      if (!it) {
+        box.textContent = '?';
+        box.classList.remove('has-item');
+        box.style.background = '';
+      } else {
+        const d = ItemSystem.getDisplay(it);
+        box.textContent = d.emoji;
+        box.classList.add('has-item');
+        box.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)`;
+      }
+    };
+    paintBox(primary, item);
+    paintBox(secondary, item2);
+    if (item || item2) {
       // 取得時にアイテムロール演出
       slot.classList.add('rolling');
       setTimeout(() => slot.classList.remove('rolling'), 600);

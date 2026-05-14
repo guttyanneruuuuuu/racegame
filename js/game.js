@@ -586,9 +586,9 @@ const Game = {
     const absSpeed = Math.abs(c.speed);
 
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
-    const back = Utils.lerp(4.4, 5.6, speedT);
-    const up   = Utils.lerp(2.7, 2.3, speedT);
-    const lookFwd = Utils.lerp(6, 14, speedT);
+    const back = Utils.lerp(4.9, 6.2, speedT);
+    const up   = Utils.lerp(3.6, 3.2, speedT);
+    const lookFwd = Utils.lerp(7, 16, speedT);
 
     let backDir = 1;
     if (c.speed < -1) backDir = -1;
@@ -610,7 +610,7 @@ const Game = {
 
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    const ly = 0.95 + c.y * 0.5;
+    const ly = 1.1 + c.y * 0.5;
 
     let shakeX = 0, shakeY = 0;
     if (this._camShakeTime > 0) {

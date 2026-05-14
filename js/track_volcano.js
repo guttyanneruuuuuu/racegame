@@ -795,8 +795,10 @@ window.createTrackVolcano = function () {
     const count = 9;
     const branchLateralOffset = 0.7;
     const branchBarrierRadius = 1.85;
-    const geo = this._sharedGeos.smallRock || new THREE.DodecahedronGeometry(1.1, 0);
-    const mat = this._sharedMats.rockLight || new THREE.MeshLambertMaterial({ color: 0x3a3438 });
+    if (!this._sharedGeos.smallRock) this._sharedGeos.smallRock = new THREE.DodecahedronGeometry(1.1, 0);
+    if (!this._sharedMats.rockLight) this._sharedMats.rockLight = new THREE.MeshLambertMaterial({ color: 0x3a3438 });
+    const geo = this._sharedGeos.smallRock;
+    const mat = this._sharedMats.rockLight;
 
     for (let k = 0; k < count; k++) {
       const t = startT + (endT - startT) * (k / (count - 1));

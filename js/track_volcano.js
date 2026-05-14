@@ -448,6 +448,7 @@ window.createTrackVolcano = function () {
     const curbWidth = 1.4;
     const wallThickness = 0.6;
     const wallHeight = this.wallHeight;
+    const barrierGapMask = this._buildBarrierGapMask();
 
     for (const side of [1, -1]) {
       const verts = [];
@@ -471,6 +472,7 @@ window.createTrackVolcano = function () {
         for (let k = 0; k < 4; k++) colors.push(c1[0], c1[1], c1[2]);
       }
       for (let i = 0; i < n; i++) {
+        if (barrierGapMask[i] || barrierGapMask[(i + 1) % n]) continue;
         const a = i * 4;
         const b = ((i + 1) % n) * 4;
         idx.push(a + 0, b + 0, a + 3, a + 3, b + 0, b + 3);
@@ -490,17 +492,27 @@ window.createTrackVolcano = function () {
     // 壁上端の溶岩ライン (頂点数を半分にして軽量化)
     const topLineMat = new THREE.LineBasicMaterial({ color: 0xff5722 });
     for (const side of [1, -1]) {
-      const pts = [];
+      let pts = [];
+      const flushTopLine = () => {
+        if (pts.length >= 2) {
+          const geo = new THREE.BufferGeometry().setFromPoints(pts);
+          this.group.add(new THREE.Line(geo, topLineMat));
+        }
+      };
       for (let i = 0; i <= n; i += 2) {
         const idx2 = i % n;
+        if (barrierGapMask[idx2]) {
+          flushTopLine();
+          pts = [];
+          continue;
+        }
         const cur = this.pathPoints[idx2];
         const { nx, nz } = this._segNorm[idx2];
         const w = this.widthAt(idx2);
         const off = side * (w + curbWidth + wallThickness);
         pts.push(new THREE.Vector3(cur.x + nx * off, this._getTrackY(idx2) + wallHeight + 0.05, cur.z + nz * off));
       }
-      const geo = new THREE.BufferGeometry().setFromPoints(pts);
-      this.group.add(new THREE.Line(geo, topLineMat));
+      flushTopLine();
     }
 
     this.wallSegmentsOuter = [];
@@ -512,6 +524,43 @@ window.createTrackVolcano = function () {
       this.wallSegmentsOuter.push({ x: cur.x + nx * w, z: cur.z + nz * w });
       this.wallSegmentsInner.push({ x: cur.x - nx * w, z: cur.z - nz * w });
     }
+  },
+
+  _buildBarrierGapMask() {
+    const n = this.pathPoints.length;
+    const mask = new Array(n).fill(false);
+    const MIN_SEGMENTS_FOR_GAP_DETECTION = 40;
+    if (n < MIN_SEGMENTS_FOR_GAP_DETECTION) return mask;
+
+    // 近接判定は「近すぎる非隣接区間」だけに限定して通常コーナーは維持する。
+    const MIN_ABSOLUTE_SEPARATION = 20;
+    const MIN_SEPARATION_RATIO = 0.08;
+    const NEAR_OVERLAP_THRESHOLD = 6.5;
+    const GAP_MARK_RADIUS = 5;
+
+    const minSep = Math.max(MIN_ABSOLUTE_SEPARATION, Math.floor(n * MIN_SEPARATION_RATIO));
+    const nearDist2 = NEAR_OVERLAP_THRESHOLD * NEAR_OVERLAP_THRESHOLD;
+
+    for (let i = 0; i < n; i++) {
+      const a = this.pathPoints[i];
+      for (let j = i + minSep; j < n; j++) {
+        const sep = j - i;
+        const cyclicSep = Math.min(sep, n - sep);
+        if (cyclicSep < minSep) continue;
+
+        const b = this.pathPoints[j];
+        const dx = a.x - b.x;
+        const dz = a.z - b.z;
+        if (dx * dx + dz * dz > nearDist2) continue;
+
+        for (let off = -GAP_MARK_RADIUS; off <= GAP_MARK_RADIUS; off++) {
+          mask[(i + off + n) % n] = true;
+          mask[(j + off + n) % n] = true;
+        }
+      }
+    }
+
+    return mask;
   },
 
   _buildStartLine() {

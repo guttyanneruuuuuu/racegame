@@ -383,6 +383,8 @@ const Game = {
       ItemSystem.applyGhost(car);
     } else if (action.kind === 'magnet') {
       ItemSystem.applyMagnet(car);
+    } else if (action.kind === 'killer') {
+      ItemSystem.applyKiller(car);
     }
   },
 
@@ -431,6 +433,9 @@ const Game = {
     } else if (item === 'magnet') {
       ItemSystem.applyMagnet(car);
       Net.sendAction({ kind: 'magnet' });
+    } else if (item === 'killer') {
+      ItemSystem.applyKiller(car);
+      Net.sendAction({ kind: 'killer' });
     }
     if (car.isLocal) {
       const d = ItemSystem.getDisplay(item);

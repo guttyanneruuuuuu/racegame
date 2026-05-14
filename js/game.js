@@ -605,7 +605,7 @@ const Game = {
 
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    const ly = 0.75 + c.y * 0.5;
+    const ly = 0.95 + c.y * 0.5;
 
     let shakeX = 0, shakeY = 0;
     if (this._camShakeTime > 0) {

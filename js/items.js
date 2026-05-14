@@ -78,12 +78,12 @@ const ItemSystem = {
     const bx = owner.x - Math.sin(angle) * 3.8;
     const bz = owner.z - Math.cos(angle) * 3.8;
     const mesh = this._mkBanana();
-    mesh.position.set(bx, 0.4, bz);
+    mesh.position.set(bx, 0.55, bz);
     this.scene.add(mesh);
     this.projectiles.push({
       kind: 'banana', x: bx, z: bz, vx: 0, vz: 0,
       ownerId: owner.id, life: 30, mesh,
-      radius: 1.2,
+      radius: 1.55,
     });
   },
 
@@ -200,23 +200,23 @@ const ItemSystem = {
   _mkBanana() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(
-      new THREE.TorusGeometry(0.55, 0.24, 10, 16, Math.PI),
-      new THREE.MeshLambertMaterial({ color: 0xfdd835, emissive: 0x664400, emissiveIntensity: 0.3 })
+      new THREE.TorusGeometry(0.78, 0.32, 10, 18, Math.PI),
+      new THREE.MeshLambertMaterial({ color: 0xfdd835, emissive: 0x664400, emissiveIntensity: 0.45 })
     );
     body.rotation.x = Math.PI / 2;
     g.add(body);
     const tipMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
-    const tip1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), tipMat);
-    tip1.position.set(-0.55, 0, 0);
+    const tip1 = new THREE.Mesh(new THREE.SphereGeometry(0.24, 9, 7), tipMat);
+    tip1.position.set(-0.78, 0, 0);
     const tip2 = tip1.clone();
-    tip2.position.set(0.55, 0, 0);
+    tip2.position.set(0.78, 0, 0);
     g.add(tip1, tip2);
     const halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.7, 1.0, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      new THREE.RingGeometry(1.0, 1.45, 18),
+      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })
     );
     halo.rotation.x = -Math.PI / 2;
-    halo.position.y = -0.3;
+    halo.position.y = -0.25;
     g.add(halo);
     return g;
   },
@@ -344,7 +344,7 @@ const ItemSystem = {
         }
       } else if (p.kind === 'banana') {
         p.mesh.rotation.y += dt * 2;
-        p.mesh.position.y = 0.4 + Math.sin(performance.now() * 0.004) * 0.1;
+        p.mesh.position.y = 0.55 + Math.sin(performance.now() * 0.004) * 0.13;
       } else if (p.kind === 'oil') {
         p.mesh.rotation.y += dt * 0.3;
         if (p.mesh._sheen) {

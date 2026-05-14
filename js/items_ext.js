@@ -10,7 +10,7 @@ const ItemExt = {
     this.installed = true;
 
     // 既存配列に追加
-    const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy'];
+    const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer'];
     for (const it of newItems) {
       if (!ItemSystem.ITEMS.includes(it)) ItemSystem.ITEMS.push(it);
     }
@@ -27,6 +27,7 @@ const ItemExt = {
         case 'teleport':   return { emoji: '🌀', label: 'WARP',        color: '#7C4DFF' };
         case 'emp':        return { emoji: '📡', label: 'EMP JAM',     color: '#00E5FF' };
         case 'decoy':      return { emoji: '👥', label: 'DECOY',       color: '#B388FF' };
+        case 'killer':     return { emoji: '💥', label: 'KILLER',      color: '#FFC107' };
       }
       return origDisp(item);
     };
@@ -59,6 +60,7 @@ const ItemExt = {
         teleport:     Utils.lerp(0.05, 1.6, ratio),  // 下位救済: 前方ワープ
         emp:          Utils.lerp(0.2, 1.4, ratio),   // HUDジャミング + 短い制御不能
         decoy:        Utils.lerp(0.5, 1.0, ratio),   // ロケット囮: 駆け引きアイテム
+        killer:       Utils.lerp(0.01, 2.8, ratio),  // 下位専用の超加速アイテム
       };
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ

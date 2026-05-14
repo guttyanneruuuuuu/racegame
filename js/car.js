@@ -104,12 +104,7 @@ class Car {
       enumerable: true,
       get: () => this.itemSlots[0],
       set: (value) => {
-        if (value === null || value === undefined) {
-          this.itemSlots[0] = this.itemSlots[1];
-          this.itemSlots[1] = null;
-        } else {
-          this.itemSlots[0] = value;
-        }
+        this.itemSlots[0] = value || null;
         this.itemReady = !!(this.itemSlots[0] || this.itemSlots[1]);
       },
     });
@@ -1349,7 +1344,10 @@ class Car {
 
   consumeItem() {
     const it = this.itemSlots[0];
-    if (!it) return null;
+    if (!it) {
+      this.itemReady = !!(this.itemSlots[0] || this.itemSlots[1]);
+      return null;
+    }
     this.itemSlots[0] = this.itemSlots[1];
     this.itemSlots[1] = null;
     this.itemReady = !!this.itemSlots[0];

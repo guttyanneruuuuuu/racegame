@@ -561,6 +561,7 @@ const Game = {
     for (const c of this.cars) {
       if (c.finished) continue;
       let pickupCount = 0;
+      const maxItemPickupsPerFrame = (c.itemSlots && c.itemSlots.length) ? c.itemSlots.length : 2;
       while (c.canHoldItem() && Track.collectItemBox(c.x, c.z, 2.4)) {
         const rank = this._getRank(c);
         const item = ItemSystem.weightedRoll(rank, this.cars.length);
@@ -572,7 +573,7 @@ const Game = {
           showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
           if (window.SFX) SFX.play('pickup');
         }
-        if (pickupCount >= 2) break;
+        if (pickupCount >= maxItemPickupsPerFrame) break;
       }
       if (Track.collectCoin && Track.collectCoin(c.x, c.z, 2.0)) {
         const gained = c.addCoin ? c.addCoin(1) : false;

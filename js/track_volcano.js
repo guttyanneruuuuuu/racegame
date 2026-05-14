@@ -195,9 +195,10 @@ window.createTrackVolcano = function () {
       const t = i / n;
       if (t >= 0.56 && t <= 0.70) {
         const p = (t - 0.56) / 0.14;
-        const smooth = p < 0.5
-          ? (p * 2) * (p * 2) * (3 - 2 * (p * 2))
-          : (1 - (p - 0.5) * 2) * (1 - (p - 0.5) * 2) * (3 - 2 * (1 - (p - 0.5) * 2));
+        const smoothStep = (v) => v * v * (3 - 2 * v);
+        const rampIn = Math.min(1, p * 2);
+        const rampOut = Math.min(1, (1 - p) * 2);
+        const smooth = Math.min(smoothStep(rampIn), smoothStep(rampOut));
         w += 7.5 * smooth;
       }
       this.widthArray[i] = w;
@@ -803,9 +804,9 @@ window.createTrackVolcano = function () {
       const p = this.pathPoints[idx];
       const y = this._getTrackY(idx);
       const { nx, nz } = this._segNorm[idx];
-      const lateralOffset = (k % 2 === 0 ? -1 : 1) * branchLateralOffset;
-      const x = p.x + nx * lateralOffset;
-      const z = p.z + nz * lateralOffset;
+      const signedLateralOffset = (k % 2 === 0 ? -1 : 1) * branchLateralOffset;
+      const x = p.x + nx * signedLateralOffset;
+      const z = p.z + nz * signedLateralOffset;
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y + 1.1, z);

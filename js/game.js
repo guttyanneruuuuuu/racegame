@@ -15,7 +15,12 @@ const Game = {
 
   miniCtx: null,
   miniCanvas: null,
+  miniStaticCanvas: null,
   wrongWayEl: null,
+  _miniNeedsStaticRedraw: true,
+  _miniNextAt: 0,
+  _hudStandingsNextAt: 0,
+  hudEls: null,
 
   mode: 'multi',
   currentMapId: 'grand',
@@ -29,6 +34,7 @@ const Game = {
   init() {
     this._initThree();
     this._initMini();
+    this._cacheHudEls();
     this.wrongWayEl = document.getElementById('wrong-way');
     Input.init();
     if (window.SFX) SFX.init();
@@ -76,6 +82,8 @@ const Game = {
 
     Track.generate(this.scene, this.currentMapId);
     ItemSystem.init(this.scene);
+    this._miniBounds = null;
+    this._miniNeedsStaticRedraw = true;
   },
 
   _initMini() {
@@ -86,6 +94,22 @@ const Game = {
     this.miniCanvas.style.height = '100%';
     document.getElementById('hud-minimap').appendChild(this.miniCanvas);
     this.miniCtx = this.miniCanvas.getContext('2d');
+    this.miniStaticCanvas = document.createElement('canvas');
+    this.miniStaticCanvas.width = this.miniCanvas.width;
+    this.miniStaticCanvas.height = this.miniCanvas.height;
+  },
+
+  _cacheHudEls() {
+    this.hudEls = {
+      time: document.getElementById('hud-time'),
+      lap: document.getElementById('hud-lap'),
+      pos: document.getElementById('hud-pos'),
+      speed: document.getElementById('hud-speed'),
+      best: document.getElementById('hud-best'),
+      steerFill: document.getElementById('steer-fill'),
+      driftCharge: document.getElementById('drift-charge'),
+      standings: document.getElementById('hud-standings'),
+    };
   },
 
   _onResize() {
@@ -176,7 +200,7 @@ const Game = {
     Track.update(dt, now);
     this._updateCamera(dt);
     this._updateHUD(now);
-    this._updateMinimap();
+    this._updateMinimap(now);
 
     this.renderer.render(this.scene, this.camera);
   },
@@ -640,18 +664,19 @@ const Game = {
 
   _updateHUD(now) {
     if (!this.localCar) return;
+    const hud = this.hudEls || {};
     const elapsed = (this.state === 'racing' || this.state === 'finished')
       ? (this.localCar.finished ? this.localCar.finishTime : (now - this.raceStartTime))
       : 0;
-    document.getElementById('hud-time').textContent = Utils.formatTime(elapsed);
+    if (hud.time) hud.time.textContent = Utils.formatTime(elapsed);
     const lapDisp = this.localCar.finished ? this.totalLaps : Math.min(this.localCar.lap + 1, this.totalLaps);
-    document.getElementById('hud-lap').textContent = `${lapDisp}/${this.totalLaps}`;
+    if (hud.lap) hud.lap.textContent = `${lapDisp}/${this.totalLaps}`;
     const rank = this._getRank(this.localCar);
-    document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
+    if (hud.pos) hud.pos.textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
-    document.getElementById('hud-speed').textContent = Math.floor(sp);
+    if (hud.speed) hud.speed.textContent = Math.floor(sp);
 
-    const bestEl = document.getElementById('hud-best');
+    const bestEl = hud.best;
     if (bestEl) {
       if (isFinite(this.localCar.bestLap)) {
         bestEl.textContent = 'BEST ' + Utils.formatTime(this.localCar.bestLap);
@@ -662,7 +687,7 @@ const Game = {
     }
 
     // ステアインジケーター
-    const fill = document.getElementById('steer-fill');
+    const fill = hud.steerFill;
     if (fill) {
       const s = Input.steer;
       const w = Math.abs(s) * 50;
@@ -671,7 +696,7 @@ const Game = {
     }
 
     // ドリフトチャージ表示
-    const dc = document.getElementById('drift-charge');
+    const dc = hud.driftCharge;
     if (dc) {
       const ch = this.localCar.driftCharge;
       if (this.localCar.driftActive && ch > 0) {
@@ -688,7 +713,7 @@ const Game = {
     }
 
     // 最終ラップ装飾
-    const hudLap = document.getElementById('hud-lap');
+    const hudLap = hud.lap;
     if (hudLap) {
       if (this.localCar.lap === this.totalLaps - 1 && !this.localCar.finished) {
         hudLap.parentElement.classList.add('final-lap');
@@ -697,11 +722,14 @@ const Game = {
       }
     }
 
-    this._updateStandings();
+    if (now >= this._hudStandingsNextAt) {
+      this._hudStandingsNextAt = now + 180;
+      this._updateStandings();
+    }
   },
 
   _updateStandings() {
-    const el = document.getElementById('hud-standings');
+    const el = this.hudEls ? this.hudEls.standings : document.getElementById('hud-standings');
     if (!el) return;
     const sorted = [...this.cars].sort((a, b) => {
       if (a.finished && b.finished) return a.finishTime - b.finishTime;
@@ -727,12 +755,13 @@ const Game = {
     return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   },
 
-  _updateMinimap() {
+  _updateMinimap(now = performance.now()) {
     if (!this.miniCtx) return;
+    if (now < this._miniNextAt) return;
+    this._miniNextAt = now + 50;
     const ctx = this.miniCtx;
     const W = this.miniCanvas.width;
     const H = this.miniCanvas.height;
-    ctx.clearRect(0, 0, W, H);
     if (!this._miniBounds) {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const p of Track.pathPoints) {
@@ -748,55 +777,70 @@ const Game = {
     const toX = (x) => (x - b.minX) * sx;
     const toZ = (z) => H - (z - b.minZ) * sz;
 
-    ctx.lineWidth = 11;
-    ctx.strokeStyle = '#666';
-    ctx.beginPath();
-    Track.pathPoints.forEach((p, i) => {
-      const x = toX(p.x), y = toZ(p.z);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
-    ctx.stroke();
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#bbb';
-    ctx.stroke();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = '#fff';
-    ctx.setLineDash([4, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (this._miniNeedsStaticRedraw && this.miniStaticCanvas) {
+      const sctx = this.miniStaticCanvas.getContext('2d');
+      sctx.clearRect(0, 0, W, H);
+      sctx.lineWidth = 11;
+      sctx.strokeStyle = '#666';
+      sctx.beginPath();
+      Track.pathPoints.forEach((p, i) => {
+        const x = toX(p.x), y = toZ(p.z);
+        if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+      });
+      sctx.closePath();
+      sctx.stroke();
+      sctx.lineWidth = 8;
+      sctx.strokeStyle = '#bbb';
+      sctx.stroke();
+      sctx.lineWidth = 1.2;
+      sctx.strokeStyle = '#fff';
+      sctx.setLineDash([4, 4]);
+      sctx.stroke();
+      sctx.setLineDash([]);
 
-    const sp = Track.pathPoints[0];
-    ctx.fillStyle = '#C62828';
-    ctx.beginPath();
-    ctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
-    ctx.fill();
+      const sp = Track.pathPoints[0];
+      sctx.fillStyle = '#C62828';
+      sctx.beginPath();
+      sctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
+      sctx.fill();
 
-    if (Track.boostPads) {
-      ctx.fillStyle = '#FF9800';
-      for (const p of Track.boostPads) {
-        ctx.beginPath();
-        ctx.arc(toX(p.x), toZ(p.z), 2.2, 0, Math.PI * 2);
-        ctx.fill();
+      if (Track.boostPads) {
+        sctx.fillStyle = '#FF9800';
+        for (const p of Track.boostPads) {
+          sctx.beginPath();
+          sctx.arc(toX(p.x), toZ(p.z), 2.2, 0, Math.PI * 2);
+          sctx.fill();
+        }
       }
-    }
-    if (Track.jumpPads) {
-      ctx.fillStyle = '#FFAB40';  // 間欠泉=オレンジ
-      for (const p of Track.jumpPads) {
-        ctx.beginPath();
-        ctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
-        ctx.fill();
+      if (Track.jumpPads) {
+        sctx.fillStyle = '#FFAB40';
+        for (const p of Track.jumpPads) {
+          sctx.beginPath();
+          sctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
+          sctx.fill();
+        }
       }
-    }
-    // 溶岩プール
-    if (Track.lavaPools) {
-      ctx.fillStyle = '#FF3D00';
-      for (const lp of Track.lavaPools) {
-        ctx.beginPath();
-        ctx.arc(toX(lp.x), toZ(lp.z), 2.8, 0, Math.PI * 2);
-        ctx.fill();
+      if (Track.lavaPools) {
+        sctx.fillStyle = '#FF3D00';
+        for (const lp of Track.lavaPools) {
+          sctx.beginPath();
+          sctx.arc(toX(lp.x), toZ(lp.z), 2.8, 0, Math.PI * 2);
+          sctx.fill();
+        }
       }
+      if (Track.coins) {
+        sctx.fillStyle = '#FFD54F';
+        for (const coin of Track.coins) {
+          sctx.beginPath();
+          sctx.arc(toX(coin.x), toZ(coin.z), 1.8, 0, Math.PI * 2);
+          sctx.fill();
+        }
+      }
+      this._miniNeedsStaticRedraw = false;
     }
+    ctx.clearRect(0, 0, W, H);
+    if (this.miniStaticCanvas) ctx.drawImage(this.miniStaticCanvas, 0, 0);
+
     // 転がる岩 (動的位置)
     if (Track.boulders) {
       ctx.fillStyle = '#5D4037';

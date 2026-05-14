@@ -23,6 +23,7 @@ window.createTrackVolcano = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  coins: [],
   oilPads: [],
   shortcuts: [],
   lavaPools: [],
@@ -96,6 +97,7 @@ window.createTrackVolcano = function () {
     this._buildShortcuts();
     this._buildLavaPools();
     this._buildBoulders();
+    this._buildCoins();
     this._buildDecorations();
 
     return this;
@@ -114,11 +116,22 @@ window.createTrackVolcano = function () {
     this._sharedMats.boulder = new THREE.MeshLambertMaterial({
       color: 0x3a2820, emissive: 0x5a1500, emissiveIntensity: 0.4,
     });
+    this._sharedMats.coinFace = new THREE.MeshLambertMaterial({
+      color: 0xffd54f, emissive: 0xb28c00, emissiveIntensity: 0.45,
+    });
+    this._sharedMats.coinEdge = new THREE.MeshLambertMaterial({
+      color: 0xffec8b, emissive: 0xc79a00, emissiveIntensity: 0.35,
+    });
+    this._sharedMats.coinRing = new THREE.MeshBasicMaterial({
+      color: 0xffe082, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false,
+    });
     // ジオメトリ
     this._sharedGeos.rockPillar   = new THREE.ConeGeometry(2.2, 6, 5);
     this._sharedGeos.smallRock    = new THREE.DodecahedronGeometry(1.1, 0);
     this._sharedGeos.crystalShard = new THREE.OctahedronGeometry(1.4, 0);
     this._sharedGeos.boulder      = new THREE.IcosahedronGeometry(1.6, 0);
+    this._sharedGeos.coin         = new THREE.CylinderGeometry(0.5, 0.5, 0.14, 12);
+    this._sharedGeos.coinRing     = new THREE.RingGeometry(0.66, 0.88, 12);
     // ガイドリング/矢印共有
     this._sharedGeos.guideRing    = new THREE.TorusGeometry(1.6, 0.18, 6, 14);
     this._sharedGeos.guideArrow   = new THREE.ConeGeometry(1.0, 2.4, 4);
@@ -1051,6 +1064,51 @@ window.createTrackVolcano = function () {
     }
   },
 
+  _buildCoins() {
+    const n = this.pathPoints.length;
+    const step = 9;
+    const coinGeo = this._sharedGeos.coin;
+    const ringGeo = this._sharedGeos.coinRing;
+    const coinMats = [this._sharedMats.coinEdge, this._sharedMats.coinFace, this._sharedMats.coinFace];
+    const ringMat = this._sharedMats.coinRing;
+
+    let pattern = 0;
+    for (let i = 10; i < n; i += step) {
+      const cur = this.pathPoints[i];
+      const { nx, nz } = this._segNorm[i];
+      const py = this._getTrackY(i);
+      const w = this.widthAt(i);
+      const p = pattern % 3;
+      const offsets = (p === 0) ? [0] : (p === 1 ? [-w * 0.38, w * 0.38] : [-w * 0.4, 0, w * 0.4]);
+
+      for (const off of offsets) {
+        const px = cur.x + nx * off;
+        const pz = cur.z + nz * off;
+        const coin = new THREE.Mesh(coinGeo, coinMats);
+        coin.position.set(px, py + 1.1, pz);
+        coin.rotation.x = Math.PI / 2;
+        this.group.add(coin);
+
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(px, py + 0.05, pz);
+        this.group.add(ring);
+
+        this.coins.push({
+          mesh: coin,
+          ring,
+          x: px,
+          z: pz,
+          y: py,
+          active: true,
+          respawn: 0,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      pattern++;
+    }
+  },
+
   _buildDecorations() {
     const n = this.pathPoints.length;
     const pillarMat = this._sharedMats.rock;
@@ -1351,6 +1409,17 @@ window.createTrackVolcano = function () {
         // glow マテリアルも共有なので個別 opacity 変更はスキップ
       }
     }
+    for (const c of this.coins) {
+      if (c.active) {
+        c.mesh.rotation.z += dt * 3.2;
+        c.mesh.position.y = c.y + 1.1 + Math.sin(now * 0.004 + c.phase) * 0.16;
+        if (c.ring) c.ring.material.opacity = 0.36 + Math.sin(now * 0.005 + c.phase) * 0.14;
+      } else if (now > c.respawn) {
+        c.active = true;
+        c.mesh.visible = true;
+        if (c.ring) c.ring.visible = true;
+      }
+    }
     // 転がる岩 (Y を path 上で連続補間して、横移動時の段差を解消)
     for (const b of this.boulders) {
       b.phase += dt * b.speed;
@@ -1417,6 +1486,20 @@ window.createTrackVolcano = function () {
       }
     }
     return { hit: false };
+  },
+
+  collectCoin(x, z, radius = 2.0) {
+    for (const c of this.coins) {
+      if (!c.active) continue;
+      if (Utils.dist2(x, z, c.x, c.z) < radius) {
+        c.active = false;
+        c.mesh.visible = false;
+        if (c.ring) c.ring.visible = false;
+        c.respawn = performance.now() + 5500;
+        return true;
+      }
+    }
+    return false;
   },
 
   collectItemBox(x, z, radius = 2.2) {

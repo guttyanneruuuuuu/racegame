@@ -1120,12 +1120,13 @@ window.createTrackVolcano = function () {
     const hasY = Number.isFinite(y);
     // 高架/地上の近接交差で誤レーンを避けるため、縦 1m 差を平面距離 3m 相当として扱う (3^2=9)。
     const HEIGHT_WEIGHT = 9.0;
+    const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
     const consider = (i) => {
       const p = this.pathPoints[i];
       const dxq = p.x - x, dzq = p.z - z;
       const d = dxq * dxq + dzq * dzq;
       const dy = hasY ? (this._getTrackY(i) - y) : 0;
-      const score = d + (hasY ? (dy * dy * HEIGHT_WEIGHT) : 0);
+      const score = d + dy * dy * heightWeight;
       if (score < bestScore || (score === bestScore && d < bestD)) {
         bestScore = score;
         bestD = d;

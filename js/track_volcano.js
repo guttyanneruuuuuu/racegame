@@ -1204,7 +1204,7 @@ window.createTrackVolcano = function () {
 
     const n = this.pathPoints.length;
     // 探索範囲拡大: -4..+4 → -6..+6 (急カーブ + 高速での見落とし防止)
-    for (let k = -8; k <= 8; k++) {
+    for (let k = -7; k <= 7; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
       const pj = this.pathPoints[j];

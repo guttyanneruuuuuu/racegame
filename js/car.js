@@ -777,6 +777,7 @@ class Car {
   // メッシュ更新
   updateMesh() {
     const killerActive = this.killerTimer > 0;
+    const now = performance.now();
     const rescueActive = this.wrongWayRescueTimer > 0;
     const rescueProgress = rescueActive
       ? Utils.clamp(1 - (this.wrongWayRescueTimer / this.wrongWayRescueDuration), 0, 1)
@@ -878,7 +879,7 @@ class Car {
       this.gliderMesh.visible = showG;
       if (showG) {
         // 軽く揺れる
-        this.gliderMesh.rotation.x = Math.sin(performance.now() * 0.006) * 0.08;
+        this.gliderMesh.rotation.x = Math.sin(now * 0.006) * 0.08;
       }
     }
     if (this.coinFlashTimer > 0) this.coinFlashTimer -= 0.016;
@@ -888,7 +889,7 @@ class Car {
     if (this.shieldMesh.visible) {
       this.shieldMesh.rotation.y += 0.08;
       this.shieldMesh.rotation.x += 0.03;
-      this.shieldMesh.material.opacity = 0.25 + Math.sin(performance.now() * 0.01) * 0.1;
+      this.shieldMesh.material.opacity = 0.25 + Math.sin(now * 0.01) * 0.1;
     }
 
     this._updateSmoke();
@@ -900,13 +901,15 @@ class Car {
     if (this.killerCannonMesh) {
       this.killerCannonMesh.visible = killerActive;
       if (killerActive) {
-        const t = performance.now() * 0.01;
+        const t = now * 0.01;
         this.killerCannonMesh.position.y = Math.sin(t) * 0.08;
         this.killerCannonMesh.rotation.z = Math.sin(t * 0.45) * 0.03;
         this.killerCannonMesh.scale.set(1.02 + Math.sin(t * 0.7) * 0.03, 1, 1.02);
         if (this.killerTrailMesh) {
-          this.killerTrailMesh.scale.set(1 + Math.random() * 0.28, 1 + Math.random() * 0.18, 1);
-          this.killerTrailMesh.material.opacity = 0.7 + Math.random() * 0.3;
+          const sx = 1 + (Math.sin(t * 4.0) * 0.5 + 0.5) * 0.28;
+          const sy = 1 + (Math.sin(t * 5.8 + 1.2) * 0.5 + 0.5) * 0.18;
+          this.killerTrailMesh.scale.set(sx, sy, 1);
+          this.killerTrailMesh.material.opacity = 0.7 + (Math.sin(t * 6.2 + 0.8) * 0.5 + 0.5) * 0.3;
         }
         if (this.killerMuzzleMesh) {
           this.killerMuzzleMesh.material.opacity = 0.5 + Math.sin(t * 1.3) * 0.25;

@@ -106,9 +106,9 @@ window.createTrackVolcano = function () {
     this._sharedMats.rock      = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
     this._sharedMats.rockLight = new THREE.MeshLambertMaterial({ color: 0x3a3438 });
     this._sharedMats.lava      = new THREE.MeshBasicMaterial({ color: 0xff5500 });
-    this._sharedMats.lavaGlow  = new THREE.MeshBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.7 });
+    this._sharedMats.lavaGlow  = new THREE.MeshBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.7, depthWrite: false });
     this._sharedMats.crystal   = new THREE.MeshLambertMaterial({
-      color: 0xff7043, emissive: 0xc63d10, emissiveIntensity: 0.6, transparent: true, opacity: 0.85,
+      color: 0xff7043, emissive: 0xc63d10, emissiveIntensity: 0.6, transparent: true, opacity: 0.85, depthWrite: false,
     });
     // ボルダー用も共有 (前はインライン生成していた)
     this._sharedMats.boulder = new THREE.MeshLambertMaterial({
@@ -380,7 +380,7 @@ window.createTrackVolcano = function () {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     this.group.add(mesh);
   },
@@ -614,7 +614,7 @@ window.createTrackVolcano = function () {
 
     // 遠景の溶岩湖
     const lavaGeo = new THREE.RingGeometry(280, 360, 24);
-    const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff4500, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+    const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff4500, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
     const lava = new THREE.Mesh(lavaGeo, lavaMat);
     lava.rotation.x = -Math.PI / 2;
     lava.position.y = -0.02;
@@ -681,8 +681,8 @@ window.createTrackVolcano = function () {
     const ringGeo = new THREE.RingGeometry(1.4, 1.85, 12);
     const beamGeo = new THREE.CylinderGeometry(0.15, 0.15, 4, 6, 1, true);
     // ring/beam マテリアルも共有
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-    const beamMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0xFFEB3B, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
 
     for (let i = 4; i < n; i += step) {
       const cur = this.pathPoints[i];
@@ -716,7 +716,7 @@ window.createTrackVolcano = function () {
     const padGeo = new THREE.PlaneGeometry(6, 8);
     const arrowGeo = new THREE.ConeGeometry(2.0, 0.4, 4);
     // 共有マテリアル (装飾色は同じ)
-    const padMat = new THREE.MeshBasicMaterial({ map: padTex, transparent: true });
+    const padMat = new THREE.MeshBasicMaterial({ map: padTex, transparent: true, depthWrite: false });
 
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -734,14 +734,14 @@ window.createTrackVolcano = function () {
         const pz = cur.z + nz * off;
         const mesh = new THREE.Mesh(padGeo, padMat);
         mesh.rotation.x = -Math.PI / 2;
-        mesh.position.set(px, py + 0.08, pz);
+        mesh.position.set(px, py + 0.12, pz);
         mesh.rotation.z = Math.atan2(dirX, dirZ);
         this.group.add(mesh);
 
         // 矢印は個別マテリアル (アニメするため)
-        const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.7 });
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.7, depthWrite: false });
         const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-        arrow.position.set(px, py + 0.22, pz);
+        arrow.position.set(px, py + 0.26, pz);
         arrow.rotation.x = -Math.PI / 2;
         arrow.rotation.z = Math.atan2(dirX, dirZ);
         this.group.add(arrow);
@@ -815,7 +815,7 @@ window.createTrackVolcano = function () {
 
       // 蒸気エフェクトは個別マテリアル (アニメ用)
       const steamMat = new THREE.MeshBasicMaterial({
-        color: 0xffccaa, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+        color: 0xffccaa, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false,
       });
       const steam = new THREE.Mesh(steamGeo, steamMat);
       steam.position.set(px, py + 3.0, pz);
@@ -842,10 +842,10 @@ window.createTrackVolcano = function () {
     // 共有素材
     const pillarGeo = new THREE.CylinderGeometry(0.35, 0.35, 14, 6, 1, true);
     const pillarMat = new THREE.MeshBasicMaterial({
-      color: 0xffe082, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+      color: 0xffe082, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false,
     });
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.85 });
-    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffca28, transparent: true, opacity: 0.95 });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.85, depthWrite: false });
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffca28, transparent: true, opacity: 0.95, depthWrite: false });
 
     for (const p of this.jumpPads) {
       const baseIdx = p.idx || 0;
@@ -913,7 +913,7 @@ window.createTrackVolcano = function () {
       { from: Math.floor(n * 0.55), to: Math.floor(n * 0.63) },
     ];
     const tex = this._makeFissureTexture();
-    const fissureMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.95 });
+    const fissureMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.95, depthWrite: false });
     for (const sc of shortcuts) {
       const a = this.pathPoints[sc.from];
       const b = this.pathPoints[sc.to];
@@ -932,7 +932,7 @@ window.createTrackVolcano = function () {
       const m = new THREE.Mesh(geo, fissureMat);
       m.rotation.x = -Math.PI / 2;
       m.rotation.z = ang;
-      m.position.set(cx, ((this._getTrackY(sc.from) + this._getTrackY(sc.to)) * 0.5) + 0.03, cz);
+      m.position.set(cx, ((this._getTrackY(sc.from) + this._getTrackY(sc.to)) * 0.5) + 0.06, cz);
       this.group.add(m);
 
       this.shortcuts.push({
@@ -974,7 +974,7 @@ window.createTrackVolcano = function () {
     const lavaMat = new THREE.MeshBasicMaterial({ map: lavaTex });
     const lavaGeo = new THREE.CircleGeometry(2.4, 10);
     const glowGeo = new THREE.RingGeometry(2.4, 3.0, 12);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
 
     for (const t of positions) {
       const idx = Math.floor(t * n);
@@ -1180,9 +1180,9 @@ window.createTrackVolcano = function () {
   // - 押し戻し inset/extra を Grand と同程度に強化 (再すり抜け防止)
   // - 隣接セグメント法線平均で押し戻し方向を安定化 (急カーブで折れない)
   resolveWalls(x, z, radius, hintIdx = -1) {
-    const MAX_TANGENT_DISTANCE = 28;
-    const WALL_COLLISION_INSET = 0.22;
-    const WALL_EXTRA_PUSHBACK = 0.30;
+    const MAX_TANGENT_DISTANCE = 34;
+    const WALL_COLLISION_INSET = 0.28;
+    const WALL_EXTRA_PUSHBACK = 0.38;
     const prog = this.getProgress(x, z, hintIdx);
     const idx = prog.index;
     const cur = this.pathPoints[idx];
@@ -1204,7 +1204,7 @@ window.createTrackVolcano = function () {
 
     const n = this.pathPoints.length;
     // 探索範囲拡大: -4..+4 → -6..+6 (急カーブ + 高速での見落とし防止)
-    for (let k = -6; k <= 6; k++) {
+    for (let k = -8; k <= 8; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
       const pj = this.pathPoints[j];
@@ -1240,6 +1240,21 @@ window.createTrackVolcano = function () {
       let newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + WALL_COLLISION_INSET);
       newX -= bestSeg.sign * avgNx * WALL_EXTRA_PUSHBACK;
       newZ -= bestSeg.sign * avgNz * WALL_EXTRA_PUSHBACK;
+
+      const verify = this.getProgress(newX, newZ, bestSeg.index);
+      const vIdx = verify.index;
+      const vCur = this.pathPoints[vIdx];
+      const vNorm = this._segNorm[vIdx];
+      const vrx = newX - vCur.x;
+      const vrz = newZ - vCur.z;
+      const vLateral = vrx * vNorm.nx + vrz * vNorm.nz;
+      const vLimit = this.widthAt(vIdx) - radius - 0.02;
+      if (Math.abs(vLateral) > vLimit && !this.isOnShortcut(newX, newZ)) {
+        const vSign = vLateral >= 0 ? 1 : -1;
+        const vExcess = Math.abs(vLateral) - vLimit;
+        newX -= vSign * vNorm.nx * (vExcess + 0.16);
+        newZ -= vSign * vNorm.nz * (vExcess + 0.16);
+      }
 
       return {
         x: newX, z: newZ, hit: true,

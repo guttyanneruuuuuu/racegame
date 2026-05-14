@@ -46,8 +46,8 @@ const CameraExt = {
     const c = Game.localCar;
     const absSpeed = Math.abs(c.speed);
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
-    const back = Utils.lerp(4.2, 5.4, speedT) * (lookBack ? -1 : 1);
-      const up = Utils.lerp(2.5, 2.2, speedT);
+    const back = Utils.lerp(4.4, 5.6, speedT) * (lookBack ? -1 : 1);
+      const up = Utils.lerp(3.0, 2.6, speedT);
     const lookFwd = Utils.lerp(6, 14, speedT) * (lookBack ? -1 : 1);
     let backDir = c.speed < -1 ? -1 : 1;
     if (lookBack) backDir = -backDir;
@@ -62,7 +62,7 @@ const CameraExt = {
     }
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    Game.camera.lookAt(lx, 0.9 + c.y * 0.5, lz);
+    Game.camera.lookAt(lx, 0.85 + c.y * 0.5, lz);
     const baseFov = 52;
     let targetFov = baseFov + Math.min(14, absSpeed * 0.22);
     if (c.boostTimer > 0) targetFov = 78;

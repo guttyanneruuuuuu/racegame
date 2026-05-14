@@ -875,7 +875,7 @@ class Car {
 
     // グライダー翼の表示
     if (this.gliderMesh) {
-      const showG = this.glider && this.gliderTimer > 0 && this.y > this._groundHeight() + 0.5;
+      const showG = !killerActive && this.glider && this.gliderTimer > 0 && this.y > this._groundHeight() + 0.5;
       this.gliderMesh.visible = showG;
       if (showG) {
         // 軽く揺れる
@@ -896,7 +896,10 @@ class Car {
     this._updateSparks();
 
     if (this._baseCarMeshes) {
-      for (const m of this._baseCarMeshes) m.visible = !killerActive;
+      for (const m of this._baseCarMeshes) {
+        if (m === this.gliderMesh) continue;
+        m.visible = !killerActive;
+      }
     }
     if (this.killerCannonMesh) {
       this.killerCannonMesh.visible = killerActive;

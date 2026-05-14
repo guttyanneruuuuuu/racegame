@@ -62,7 +62,7 @@ const CameraExt = {
     }
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    Game.camera.lookAt(lx, 0.85 + c.y * 0.5, lz);
+    Game.camera.lookAt(lx, 0.95 + c.y * 0.5, lz);
     const baseFov = 52;
     let targetFov = baseFov + Math.min(14, absSpeed * 0.22);
     if (c.boostTimer > 0) targetFov = 78;

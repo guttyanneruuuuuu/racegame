@@ -32,12 +32,15 @@ window.addEventListener('load', () => {
     }
 
     // BGM は SFX の AudioContext が初期化されるのを待つ
+    let bgmInitRetries = 0;
+    const maxBgmInitRetries = 25;
     const initBgm = () => {
-      if (typeof BGM !== 'undefined' && BGM.init && SFX && SFX.ctx) {
+      if (typeof BGM !== 'undefined' && BGM.init && window.SFX && SFX.ctx) {
         BGM.init(SFX.ctx);
         BGM.play('menu');
       } else {
-        setTimeout(initBgm, 400);
+        bgmInitRetries++;
+        if (bgmInitRetries <= maxBgmInitRetries) setTimeout(initBgm, 400);
       }
     };
     setTimeout(initBgm, 800);

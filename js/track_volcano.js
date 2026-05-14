@@ -1133,6 +1133,7 @@ window.createTrackVolcano = function () {
       const cyclicDistance = Math.min(absoluteDistance, n - absoluteDistance);
       if (cyclicDistance <= CONTINUITY_FREE_RANGE) return 0;
       const d = cyclicDistance - CONTINUITY_FREE_RANGE;
+      // 二乗で効かせることで、小さな揺れは許容しつつ大ジャンプだけ強く抑制する。
       return d * d * CONTINUITY_WEIGHT;
     };
     const consider = (i) => {

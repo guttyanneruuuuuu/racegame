@@ -73,6 +73,7 @@ class Car {
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
     this.killerTimer = 0;         // キラー(自動高速走行)
+    this.killerVisualBlend = 0;
 
     // コイン (1枚で+2%最高速, 上限10枚)
     this.coins = 0;
@@ -131,68 +132,70 @@ class Car {
   _buildMesh() {
     const group = new THREE.Group();
     const colorHex = parseInt(this.color.replace('#',''), 16);
+    this._baseCarMeshes = [];
+    const markBaseMesh = (m) => { this._baseCarMeshes.push(m); return m; };
 
     // ボディ（下）
-    const body = new THREE.Mesh(
+    const body = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.55, 3.4),
       new THREE.MeshLambertMaterial({ color: colorHex })
-    );
+    ));
     body.position.y = 0.5;
     body.castShadow = true;
     group.add(body);
     this._bodyMesh = body;
 
     // ボディ前部（テーパー）
-    const nose = new THREE.Mesh(
+    const nose = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.6, 0.4, 0.8),
       new THREE.MeshLambertMaterial({ color: colorHex })
-    );
+    ));
     nose.position.set(0, 0.45, 1.85);
     group.add(nose);
 
     // ボディ（上 - キャビン）
-    const cabin = new THREE.Mesh(
+    const cabin = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.35, 0.65, 1.7),
       new THREE.MeshLambertMaterial({ color: 0xfafafa })
-    );
+    ));
     cabin.position.set(0, 1.1, -0.15);
     cabin.castShadow = true;
     group.add(cabin);
 
     // フロントウィンドウ
-    const win = new THREE.Mesh(
+    const win = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.3, 0.5, 0.1),
       new THREE.MeshLambertMaterial({ color: 0x29384a })
-    );
+    ));
     win.position.set(0, 1.1, 0.75);
     group.add(win);
-    const winR = win.clone();
+    const winR = markBaseMesh(win.clone());
     winR.position.set(0, 1.1, -1.05);
     group.add(winR);
 
     // スポイラー
-    const spoiler = new THREE.Mesh(
+    const spoiler = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.12, 0.4),
       new THREE.MeshLambertMaterial({ color: 0x222222 })
-    );
+    ));
     spoiler.position.set(0, 1.2, -1.65);
     group.add(spoiler);
-    const spStandL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15),
-      new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    const spStandL = markBaseMesh(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15),
+      new THREE.MeshLambertMaterial({ color: 0x222222 })));
     spStandL.position.set(-0.7, 1.0, -1.55);
-    const spStandR = spStandL.clone(); spStandR.position.x = 0.7;
+    const spStandR = markBaseMesh(spStandL.clone()); spStandR.position.x = 0.7;
     group.add(spStandL, spStandR);
 
     // ヘッドライト
     const lightGeo = new THREE.BoxGeometry(0.32, 0.22, 0.1);
     const lightMat = new THREE.MeshBasicMaterial({ color: 0xfffae6 });
-    const hl1 = new THREE.Mesh(lightGeo, lightMat); hl1.position.set(-0.55, 0.52, 2.22); group.add(hl1);
-    const hl2 = new THREE.Mesh(lightGeo, lightMat); hl2.position.set( 0.55, 0.52, 2.22); group.add(hl2);
+    const hl1 = markBaseMesh(new THREE.Mesh(lightGeo, lightMat)); hl1.position.set(-0.55, 0.52, 2.22); group.add(hl1);
+    const hl2 = markBaseMesh(new THREE.Mesh(lightGeo, lightMat)); hl2.position.set( 0.55, 0.52, 2.22); group.add(hl2);
 
     // テールライト
     const tlMat = new THREE.MeshBasicMaterial({ color: 0xd32f2f });
-    const tl1 = new THREE.Mesh(lightGeo, tlMat); tl1.position.set(-0.55, 0.52, -1.78); group.add(tl1);
-    const tl2 = new THREE.Mesh(lightGeo, tlMat); tl2.position.set( 0.55, 0.52, -1.78); group.add(tl2);
+    const tl1 = markBaseMesh(new THREE.Mesh(lightGeo, tlMat)); tl1.position.set(-0.55, 0.52, -1.78); group.add(tl1);
+    const tl2 = markBaseMesh(new THREE.Mesh(lightGeo, tlMat)); tl2.position.set( 0.55, 0.52, -1.78); group.add(tl2);
 
     // タイヤ
     const tireGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.42, 14);
@@ -207,7 +210,7 @@ class Car {
     ];
     this.tires = [];
     tirePos.forEach(p => {
-      const tg = new THREE.Group();
+      const tg = markBaseMesh(new THREE.Group());
       const t = new THREE.Mesh(tireGeo, tireMat);
       t.rotation.z = Math.PI / 2;
       t.castShadow = true;
@@ -298,6 +301,42 @@ class Car {
     wingGrp.visible = false;
     group.add(wingGrp);
     this.gliderMesh = wingGrp;
+    this._baseCarMeshes.push(wingGrp);
+
+    // ===== キラー時の大砲モデル =====
+    const cannon = new THREE.Group();
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.65, 0.85, 4.2, 18),
+      new THREE.MeshLambertMaterial({ color: 0x212121, emissive: 0xffb300, emissiveIntensity: 0.22 })
+    );
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.y = 0.9;
+    cannon.add(barrel);
+    const muzzle = new THREE.Mesh(
+      new THREE.TorusGeometry(0.72, 0.1, 10, 22),
+      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.85 })
+    );
+    muzzle.position.set(0, 0.9, 2.08);
+    cannon.add(muzzle);
+    const rear = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.95, 0.95, 0.9, 16),
+      new THREE.MeshLambertMaterial({ color: colorHex, emissive: 0x330000, emissiveIntensity: 0.35 })
+    );
+    rear.rotation.x = Math.PI / 2;
+    rear.position.set(0, 0.9, -2.0);
+    cannon.add(rear);
+    const trail = new THREE.Mesh(
+      new THREE.ConeGeometry(0.55, 1.7, 10),
+      new THREE.MeshBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.95 })
+    );
+    trail.rotation.x = -Math.PI / 2;
+    trail.position.set(0, 0.9, -3.0);
+    cannon.add(trail);
+    cannon.visible = false;
+    group.add(cannon);
+    this.killerCannonMesh = cannon;
+    this.killerTrailMesh = trail;
+    this.killerMuzzleMesh = muzzle;
 
     // ===== コインカウンター表示 (車の上に小さく) =====
     this.coinIcon = null;
@@ -738,6 +777,11 @@ class Car {
 
   // メッシュ更新
   updateMesh() {
+    const killerActive = this.killerTimer > 0;
+    const targetBlend = killerActive ? 1 : 0;
+    const blendSpeed = killerActive ? 0.26 : 0.2;
+    this.killerVisualBlend = Utils.lerp(this.killerVisualBlend, targetBlend, blendSpeed);
+
     const rescueActive = this.wrongWayRescueTimer > 0;
     const rescueProgress = rescueActive
       ? Utils.clamp(1 - (this.wrongWayRescueTimer / this.wrongWayRescueDuration), 0, 1)
@@ -768,7 +812,10 @@ class Car {
 
     // 壁ヒット時に赤フラッシュ
     if (this._bodyMesh) {
-      if (this.wallHitFlash > 0) {
+      if (killerActive) {
+        this._bodyMesh.material.emissive = new THREE.Color(0.2, 0.1, 0);
+        this._bodyMesh.material.emissiveIntensity = 0.35;
+      } else if (this.wallHitFlash > 0) {
         const intensity = this.wallHitFlash / 0.28;
         this._bodyMesh.material.emissive = new THREE.Color(intensity * 0.85, 0, 0);
         this._bodyMesh.material.emissiveIntensity = intensity;
@@ -816,7 +863,7 @@ class Car {
     // 炎エフェクト (ブースト/ミニターボ時)
     const boostShow = this.boostTimer > 0;
     const miniShow = this.miniTurboTimer > 0;
-    const showFlame = boostShow || miniShow;
+    const showFlame = (boostShow || miniShow) && !killerActive;
     for (const f of this.flames) {
       f.visible = showFlame;
       if (showFlame) {
@@ -851,6 +898,32 @@ class Car {
 
     this._updateSmoke();
     this._updateSparks();
+
+    if (this._baseCarMeshes) {
+      const showCar = !killerActive;
+      for (const m of this._baseCarMeshes) m.visible = showCar;
+    }
+    if (this.killerCannonMesh) {
+      const showCannon = killerActive;
+      this.killerCannonMesh.visible = showCannon;
+      if (showCannon) {
+        const t = performance.now() * 0.01;
+        this.killerCannonMesh.position.y = Math.sin(t) * 0.08;
+        this.killerCannonMesh.rotation.z = Math.sin(t * 0.45) * 0.03;
+        this.killerCannonMesh.scale.set(1.02 + Math.sin(t * 0.7) * 0.03, 1, 1.02);
+        if (this.killerTrailMesh) {
+          this.killerTrailMesh.scale.set(1 + Math.random() * 0.28, 1 + Math.random() * 0.18, 1);
+          this.killerTrailMesh.material.opacity = 0.7 + Math.random() * 0.3;
+        }
+        if (this.killerMuzzleMesh) {
+          this.killerMuzzleMesh.material.opacity = 0.5 + Math.sin(t * 1.3) * 0.25;
+        }
+      } else {
+        this.killerCannonMesh.position.y = 0;
+        this.killerCannonMesh.rotation.z = 0;
+        this.killerCannonMesh.scale.set(1, 1, 1);
+      }
+    }
   }
 
   _updateSmoke() {
@@ -1179,6 +1252,7 @@ class Car {
 
   activateKiller(seconds = 4.5) {
     this.killerTimer = Math.max(this.killerTimer, seconds);
+    this.killerVisualBlend = 1;
     this.boostTimer = Math.max(this.boostTimer, seconds);
     this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
     this.lockedTimer = 0;

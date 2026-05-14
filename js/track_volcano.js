@@ -1137,10 +1137,10 @@ window.createTrackVolcano = function () {
       // 高速時のすり抜け対策: 近傍範囲を 30 → 40 に拡張
       const range = 40;
       // 交差点で遠いインデックスへ飛ぶのを抑える (近傍継続を優先)
-      const JUMP_PENALTY_PER_STEP2 = 0.12;
+      const JUMP_PENALTY_PER_SQUARED_STEP = 0.12;
       for (let k = -range; k <= range; k++) {
         const i = ((hintIdx + k) % n + n) % n;
-        consider(i, k * k * JUMP_PENALTY_PER_STEP2);
+        consider(i, k * k * JUMP_PENALTY_PER_SQUARED_STEP);
       }
     } else {
       for (let i = 0; i < n; i++) {

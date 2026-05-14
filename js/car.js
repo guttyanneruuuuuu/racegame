@@ -28,6 +28,14 @@ const CarTypeStats = {
   heavy:     { maxSpeed: 1.08, accel: 0.78, steer: 0.78, weight: 1.50, friction: 0.90 },
 };
 const LAP_CHECKPOINT_RATIOS = Object.freeze([0.25, 0.5, 0.75]);
+const WrongWayRescue = Object.freeze({
+  TRIGGER_TIME: 1.6,
+  EFFECT_DURATION: 1.2,
+  RESPAWN_PHASE: 0.55,
+  COOLDOWN_MS: 4000,
+  SPIN_TURNS: 4.5,
+  LIFT_HEIGHT: 3.2,
+});
 
 class Car {
   constructor(opts = {}) {
@@ -104,6 +112,9 @@ class Car {
     this.wrongWayTimer = 0;     // 逆走時間累積
     this.stuckTimer = 0;        // 停滞時間累積
     this.lastRespawnTime = 0;
+    this.wrongWayRescueTimer = 0;
+    this.wrongWayRescueDuration = WrongWayRescue.EFFECT_DURATION;
+    this.wrongWayRescueRespawned = false;
 
     this.lastWallHit = 0;        // 壁ヒット時刻
     this.consecutiveWallHits = 0; // 連続壁ヒット数
@@ -338,6 +349,21 @@ class Car {
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
     this.wallImpactStrength = 0;
+    if (this.wrongWayRescueTimer > 0) {
+      this.wrongWayRescueTimer = Math.max(0, this.wrongWayRescueTimer - dt);
+      const respawnRemain = this.wrongWayRescueDuration * (1 - WrongWayRescue.RESPAWN_PHASE);
+      if (!this.wrongWayRescueRespawned && this.wrongWayRescueTimer <= respawnRemain) {
+        this.respawn({ preserveWrongWayRescue: true });
+        this.wrongWayRescueRespawned = true;
+      }
+      if (this.wrongWayRescueTimer <= 0) {
+        this.wrongWayRescueRespawned = false;
+      }
+      this.speed = 0;
+      this.vy = 0;
+      this._tickEffects(dt);
+      return;
+    }
     // ロック中(雷など)
     if (this.lockedTimer > 0) {
       this.lockedTimer -= dt;
@@ -684,18 +710,32 @@ class Car {
 
   // メッシュ更新
   updateMesh() {
-    this.mesh.position.set(this.x, this.y, this.z);
-    this.mesh.rotation.y = this.angle;
-    // ロール(ステアに応じて少し傾ける)
-    let rollExtra = 0;
-    if (this.driftActive) rollExtra = -this.driftDir * 0.18;
-    this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
-    // 空中時はピッチ
-    if (this.y > this._groundHeight() + 0.05) {
-      const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
-      this.mesh.rotation.x = pitchAmt;
+    const rescueActive = this.wrongWayRescueTimer > 0;
+    const rescueProgress = rescueActive
+      ? Utils.clamp(1 - (this.wrongWayRescueTimer / this.wrongWayRescueDuration), 0, 1)
+      : 0;
+    const rescueLift = rescueActive
+      ? Math.sin(rescueProgress * Math.PI) * WrongWayRescue.LIFT_HEIGHT
+      : 0;
+
+    this.mesh.position.set(this.x, this.y + rescueLift, this.z);
+    if (rescueActive) {
+      this.mesh.rotation.y = this.angle + rescueProgress * Math.PI * 2 * WrongWayRescue.SPIN_TURNS;
+      this.mesh.rotation.z = Math.sin(rescueProgress * Math.PI * 4) * 0.16;
+      this.mesh.rotation.x = Math.cos(rescueProgress * Math.PI * 2) * 0.06;
     } else {
-      this.mesh.rotation.x = 0;
+      this.mesh.rotation.y = this.angle;
+      // ロール(ステアに応じて少し傾ける)
+      let rollExtra = 0;
+      if (this.driftActive) rollExtra = -this.driftDir * 0.18;
+      this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
+      // 空中時はピッチ
+      if (this.y > this._groundHeight() + 0.05) {
+        const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
+        this.mesh.rotation.x = pitchAmt;
+      } else {
+        this.mesh.rotation.x = 0;
+      }
     }
 
     // 壁ヒット時に赤フラッシュ
@@ -948,6 +988,13 @@ class Car {
     } else {
       this.wrongWayTimer = Math.max(0, this.wrongWayTimer - dtSec * WRONG_WAY_DECAY_RATE);
     }
+    if (
+      this.wrongWayTimer > WrongWayRescue.TRIGGER_TIME &&
+      this.wrongWayRescueTimer <= 0 &&
+      now - this.lastRespawnTime > WrongWayRescue.COOLDOWN_MS
+    ) {
+      this._startWrongWayRescue();
+    }
 
     // スタック検知 (動いてないのに時間経過)
     if (Math.abs(this.speed) < CarPhysics.STUCK_SPEED) {
@@ -962,7 +1009,7 @@ class Car {
   }
 
   // 路上の中央へ復活 (進行方向を向ける)
-  respawn() {
+  respawn(opts = {}) {
     const idx = this.lastProgressIdx;
     const p = Track.pathPoints[idx];
     const next = Track.pathPoints[(idx + 2) % Track.pathPoints.length];
@@ -978,7 +1025,24 @@ class Car {
     this.wrongWayTimer = 0;
     this.consecutiveWallHits = 0;
     this.lastRespawnTime = performance.now();
+    if (!opts.preserveWrongWayRescue) {
+      this.wrongWayRescueTimer = 0;
+      this.wrongWayRescueRespawned = false;
+    }
     this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
+  }
+
+  _startWrongWayRescue() {
+    this.wrongWayRescueTimer = this.wrongWayRescueDuration;
+    this.wrongWayRescueRespawned = false;
+    this.speed = 0;
+    this.vy = 0;
+    this.driftActive = false;
+    this.driftCharge = 0;
+    this.stuckTimer = 0;
+    if (this.isLocal && typeof showToast === 'function') {
+      showToast('🛟 逆走補正中…', 900);
+    }
   }
 
   initProgress() {
@@ -994,6 +1058,8 @@ class Car {
     this.lastProgressTime = performance.now();
     this.stuckTimer = 0;
     this.wrongWayTimer = 0;
+    this.wrongWayRescueTimer = 0;
+    this.wrongWayRescueRespawned = false;
   }
 
   applyBoost(seconds = 2.5) {

@@ -187,7 +187,7 @@ window.createTrackVolcano = function () {
     return this._getTrackY(prog.index);
   },
 
-  widthAt() {
+  widthAt(_i = 0) {
     return this.width;
   },
 
@@ -1112,6 +1112,9 @@ window.createTrackVolcano = function () {
   },
 
   resolveWalls(x, z, radius, hintIdx = -1) {
+    const MAX_TANGENT_DISTANCE = 24;
+    const WALL_COLLISION_INSET = 0.18;
+    const WALL_EXTRA_PUSHBACK = 0.22;
     const prog = this.getProgress(x, z, hintIdx);
     const idx = prog.index;
     const cur = this.pathPoints[idx];
@@ -1127,7 +1130,7 @@ window.createTrackVolcano = function () {
     if (Math.abs(lateral) > limit) {
       if (!this.isOnShortcut(x, z)) {
         bestExcess = Math.abs(lateral) - limit;
-        bestSeg = { sign: Math.sign(lateral) || 1, nx, nz, lateral, index: idx };
+        bestSeg = { sign: lateral >= 0 ? 1 : -1, nx, nz, lateral, index: idx };
       }
     }
 
@@ -1143,13 +1146,13 @@ window.createTrackVolcano = function () {
       const limj = wj - radius;
       const segDir = this._segDir[j];
       const tang = Math.abs(rxj * segDir.ux + rzj * segDir.uz);
-      if (tang > 24) continue;
+      if (tang > MAX_TANGENT_DISTANCE) continue;
       if (Math.abs(latj) > limj) {
         if (this.isOnShortcut(x, z)) continue;
         const excess = Math.abs(latj) - limj;
         if (excess > bestExcess) {
           bestExcess = excess;
-          bestSeg = { sign: Math.sign(latj) || 1, nx: seg.nx, nz: seg.nz, lateral: latj, index: j };
+          bestSeg = { sign: latj >= 0 ? 1 : -1, nx: seg.nx, nz: seg.nz, lateral: latj, index: j };
         }
       }
     }
@@ -1163,12 +1166,10 @@ window.createTrackVolcano = function () {
       const avgLen = Math.hypot(avgNx, avgNz) || 1;
       avgNx /= avgLen; avgNz /= avgLen;
 
-      const inset = 0.18;
-      let newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + inset);
-      let newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + inset);
-      const extra = 0.22;
-      newX -= bestSeg.sign * avgNx * extra;
-      newZ -= bestSeg.sign * avgNz * extra;
+      let newX = x - bestSeg.sign * bestSeg.nx * (bestExcess + WALL_COLLISION_INSET);
+      let newZ = z - bestSeg.sign * bestSeg.nz * (bestExcess + WALL_COLLISION_INSET);
+      newX -= bestSeg.sign * avgNx * WALL_EXTRA_PUSHBACK;
+      newZ -= bestSeg.sign * avgNz * WALL_EXTRA_PUSHBACK;
 
       return {
         x: newX, z: newZ, hit: true,

@@ -1121,12 +1121,23 @@ window.createTrackVolcano = function () {
     // 高架/地上の近接交差で誤レーンを避けるため、縦 1m 差を平面距離 3m 相当として扱う (3^2=9)。
     const HEIGHT_WEIGHT = 9.0;
     const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
+    const wrappedHint = hintIdx >= 0 ? ((hintIdx % n) + n) % n : -1;
+    const continuityPenaltyAt = (i) => {
+      if (wrappedHint < 0) return 0;
+      const raw = Math.abs(i - wrappedHint);
+      const cyc = Math.min(raw, n - raw);
+      // 交差区間で別レーンへ誤スナップしにくくするため、進行連続性に緩いペナルティを追加
+      const freeRange = 14;
+      if (cyc <= freeRange) return 0;
+      const d = cyc - freeRange;
+      return d * d * 1.6;
+    };
     const consider = (i) => {
       const p = this.pathPoints[i];
       const dxq = p.x - x, dzq = p.z - z;
       const d = dxq * dxq + dzq * dzq;
       const dy = hasY ? (this._getTrackY(i) - y) : 0;
-      const score = d + dy * dy * heightWeight;
+      const score = d + dy * dy * heightWeight + continuityPenaltyAt(i);
       if (score < bestScore || (score === bestScore && d < bestD)) {
         bestScore = score;
         bestD = d;

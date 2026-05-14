@@ -1327,15 +1327,11 @@ class Car {
   }
 
   hasItem() {
-    return !!(this.itemSlots[0] || this.itemSlots[1]);
+    return this.itemReady;
   }
 
   canHoldItem() {
     return !this.itemSlots[0] || !this.itemSlots[1];
-  }
-
-  getItemSlots() {
-    return [this.itemSlots[0], this.itemSlots[1]];
   }
 
   setItem(item) {

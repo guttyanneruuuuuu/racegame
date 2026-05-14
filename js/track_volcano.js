@@ -801,9 +801,9 @@ window.createTrackVolcano = function () {
       const p = this.pathPoints[idx];
       const y = this._getTrackY(idx);
       const { nx, nz } = this._segNorm[idx];
-      const lateral = (k % 2 === 0 ? -1 : 1) * 0.7;
-      const x = p.x + nx * lateral;
-      const z = p.z + nz * lateral;
+      const lateralOffset = (k % 2 === 0 ? -1 : 1) * 0.7;
+      const x = p.x + nx * lateralOffset;
+      const z = p.z + nz * lateralOffset;
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y + 1.1, z);

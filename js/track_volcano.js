@@ -1120,13 +1120,28 @@ window.createTrackVolcano = function () {
     const hasY = Number.isFinite(y);
     // 高架/地上の近接交差で誤レーンを避けるため、縦 1m 差を平面距離 3m 相当として扱う (3^2=9)。
     const HEIGHT_WEIGHT = 9.0;
+    // 交差区間で別レーンへ飛び移る誤スナップを抑えるための連続性パラメータ。
+    // freeRange: 通常走行で許容するインデックス移動幅
+    // continuityWeight: freeRange を超えた移動に対する二乗ペナルティ強度
+    const CONTINUITY_FREE_RANGE = 14;
+    const CONTINUITY_WEIGHT = 1.6;
     const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
+    const wrappedHintIdx = hintIdx >= 0 ? (hintIdx % n) : -1;
+    const continuityPenaltyAt = (i) => {
+      if (wrappedHintIdx < 0) return 0;
+      const absoluteDistance = Math.abs(i - wrappedHintIdx);
+      const cyclicDistance = Math.min(absoluteDistance, n - absoluteDistance);
+      if (cyclicDistance <= CONTINUITY_FREE_RANGE) return 0;
+      const d = cyclicDistance - CONTINUITY_FREE_RANGE;
+      // 二乗で効かせることで、小さな揺れは許容しつつ大ジャンプだけ強く抑制する。
+      return d * d * CONTINUITY_WEIGHT;
+    };
     const consider = (i) => {
       const p = this.pathPoints[i];
       const dxq = p.x - x, dzq = p.z - z;
       const d = dxq * dxq + dzq * dzq;
       const dy = hasY ? (this._getTrackY(i) - y) : 0;
-      const score = d + dy * dy * heightWeight;
+      const score = d + dy * dy * heightWeight + continuityPenaltyAt(i);
       if (score < bestScore || (score === bestScore && d < bestD)) {
         bestScore = score;
         bestD = d;

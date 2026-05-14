@@ -40,7 +40,7 @@ window.addEventListener('load', () => {
         BGM.play('menu');
       } else {
         bgmInitRetries++;
-        if (bgmInitRetries <= maxBgmInitRetries) setTimeout(initBgm, 400);
+        if (bgmInitRetries < maxBgmInitRetries) setTimeout(initBgm, 400);
       }
     };
     setTimeout(initBgm, 800);

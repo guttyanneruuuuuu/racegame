@@ -151,7 +151,9 @@ const Net = {
         const info = data.info;
         if (!info || !info.id) return;
         const alreadyJoined = this.players.has(info.id);
-        if (!alreadyJoined && this.players.size >= this.MAX_PLAYERS) {
+        const currentPlayers = this.players.size;
+        // MAX_PLAYERS は参加後の総人数の上限（新規参加者を含む）として扱う
+        if (!alreadyJoined && currentPlayers >= this.MAX_PLAYERS) {
           try { conn.send({ type: 'reject', reason: 'full' }); } catch (_) {}
           return;
         }

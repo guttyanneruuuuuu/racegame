@@ -150,14 +150,20 @@ const Net = {
       case 'hello': {
         const info = data.info;
         if (!info || !info.id) return;
-        if (!this.players.has(info.id) && this.players.size >= this.MAX_PLAYERS) {
+        const alreadyJoined = this.players.has(info.id);
+        if (!alreadyJoined && this.players.size >= this.MAX_PLAYERS) {
           try { conn.send({ type: 'reject', reason: 'full' }); } catch (_) {}
           return;
         }
-        const alreadyJoined = this.players.has(info.id);
         this.players.set(info.id, { ...info, isHost: false });
         // welcome: 全員のプレイヤー情報を送る
-        conn.send({ type: 'welcome', players: this._playerList(), yourId: info.id });
+        try {
+          conn.send({ type: 'welcome', players: this._playerList(), yourId: info.id });
+        } catch (e) {
+          console.warn('welcome send failed', e);
+          this._onClientLeave(info.id);
+          return;
+        }
         if (!alreadyJoined) {
           // 既存メンバーに参加通知
           this._broadcast({ type: 'playerJoined', player: this.players.get(info.id) }, info.id);

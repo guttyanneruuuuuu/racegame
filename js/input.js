@@ -15,6 +15,7 @@ const Input = {
   _smoothed: 0,        // ローパスフィルタ後
   _gyroOrientHandler: null,
   _fallbackLandscapeSign: 1,
+  _safeStorage: null,
 
   // ジャイロ感度設定
   sensitivity: 18,
@@ -28,9 +29,10 @@ const Input = {
   _touchSteerActive: false,
 
   init() {
-    const saved = parseFloat(localStorage.getItem('gyrorush-sensitivity'));
+    this._safeStorage = this._getStorage();
+    const saved = parseFloat(this._storageGet('gyrorush-sensitivity'));
     if (!isNaN(saved) && saved > 5 && saved < 60) this.sensitivity = saved;
-    const invSaved = localStorage.getItem('gyrorush-invert');
+    const invSaved = this._storageGet('gyrorush-invert');
     if (invSaved === '1') this.invert = true;
 
     this._bindKeys();
@@ -40,11 +42,7 @@ const Input = {
 
   // ゲーム開始直後に自動キャリブレーション
   autoCalibrateOnStart() {
-    this.gyroCalibrated = false;
-    this.gyroSamples = [];
-    this.gyroLastSampleTime = 0;
-    this._smoothed = 0;
-    this._fallbackLandscapeSign = 1;
+    this._resetGyroTracking();
   },
 
   _setupAutoCalibrate() {
@@ -52,20 +50,12 @@ const Input = {
     if (screen.orientation) {
       try {
         screen.orientation.addEventListener('change', () => {
-          this.gyroCalibrated = false;
-          this.gyroSamples = [];
-          this.gyroLastSampleTime = 0;
-          this._smoothed = 0;
-          this._fallbackLandscapeSign = 1;
+          this._resetGyroTracking();
         });
       } catch (_) {}
     }
     window.addEventListener('orientationchange', () => {
-      this.gyroCalibrated = false;
-      this.gyroSamples = [];
-      this.gyroLastSampleTime = 0;
-      this._smoothed = 0;
-      this._fallbackLandscapeSign = 1;
+      this._resetGyroTracking();
     });
   },
 
@@ -242,11 +232,7 @@ const Input = {
     window.removeEventListener('deviceorientation', this._gyroOrientHandler);
     window.addEventListener('deviceorientation', this._gyroOrientHandler);
     this.gyroEnabled = true;
-    this.gyroCalibrated = false;
-    this.gyroSamples = [];
-    this.gyroLastSampleTime = 0;
-    this._smoothed = 0;
-    this._fallbackLandscapeSign = 1;
+    this._resetGyroTracking();
     return true;
   },
 
@@ -331,6 +317,10 @@ const Input = {
   },
 
   recalibrate() {
+    this._resetGyroTracking();
+  },
+
+  _resetGyroTracking() {
     this.gyroCalibrated = false;
     this.gyroSamples = [];
     this.gyroLastSampleTime = 0;
@@ -340,11 +330,23 @@ const Input = {
 
   setSensitivity(deg) {
     this.sensitivity = Utils.clamp(deg, 6, 50);
-    localStorage.setItem('gyrorush-sensitivity', String(this.sensitivity));
+    this._storageSet('gyrorush-sensitivity', String(this.sensitivity));
   },
 
   setInvert(v) {
     this.invert = !!v;
-    localStorage.setItem('gyrorush-invert', this.invert ? '1' : '0');
+    this._storageSet('gyrorush-invert', this.invert ? '1' : '0');
+  },
+
+  _getStorage() {
+    try { return window.localStorage; } catch (_) { return null; }
+  },
+
+  _storageGet(key) {
+    try { return this._safeStorage ? this._safeStorage.getItem(key) : null; } catch (_) { return null; }
+  },
+
+  _storageSet(key, value) {
+    try { if (this._safeStorage) this._safeStorage.setItem(key, value); } catch (_) {}
   },
 };

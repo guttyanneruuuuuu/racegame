@@ -74,11 +74,12 @@ const AIDriver = {
       // 攻撃系/ブースト系は即使用
       if (itm === 'boost' || itm === 'tripleBoost' || itm === 'shield' ||
           itm === 'rocket' || itm === 'tripleRocket' || itm === 'lightning' ||
-          itm === 'ghost' || itm === 'magnet') {
+          itm === 'ghost' || itm === 'magnet' || itm === 'killer' || itm === 'megaShield' ||
+          itm === 'mini' || itm === 'boomerang' || itm === 'fog') {
         use = true;
       }
       // 設置系: 後ろから迫られている / 自分より遅い場合に撒く
-      else if (itm === 'banana' || itm === 'oil' || itm === 'mine') {
+      else if (itm === 'banana' || itm === 'oil' || itm === 'mine' || itm === 'block') {
         const threat = this._threatBehind(car, allCars);
         use = threat || car.totalProgress < this._leaderProgress(allCars) || Math.random() < 0.35;
       }
@@ -86,11 +87,52 @@ const AIDriver = {
       else if (itm === 'ink') {
         use = this._hasRivalAhead(car, allCars) || Math.random() < 0.4;
       }
+      // === 新規アイテムの判断 ===
+      // ワープ: 直前で危険(後ろから接近)or前にライバル
+      else if (itm === 'teleport') {
+        use = this._threatBehind(car, allCars) || this._hasRivalAhead(car, allCars) || Math.random() < 0.5;
+      }
+      // EMPは周囲に敵が複数いる時 (範囲攻撃の効率)
+      else if (itm === 'emp') {
+        use = this._enemiesNearby(car, allCars, 14) >= 1 || Math.random() < 0.4;
+      }
+      // デコイ: 後ろから狙われている (ロケットの囮になる) or 戦略的設置
+      else if (itm === 'decoy') {
+        use = this._threatBehind(car, allCars) || Math.random() < 0.3;
+      }
+      // フリーズ: 周囲に複数の敵がいる時 (範囲攻撃)
+      else if (itm === 'freeze') {
+        use = this._enemiesNearby(car, allCars, 14) >= 1 || Math.random() < 0.35;
+      }
+      // ショックウェーブ: 至近の敵を弾く (混戦時)
+      else if (itm === 'shockwave') {
+        use = this._enemiesNearby(car, allCars, 10) >= 1 || this._threatBehind(car, allCars) || Math.random() < 0.3;
+      }
+      // スワップ: 前にライバルがいる時 (順位逆転)
+      else if (itm === 'swap') {
+        use = this._hasRivalAhead(car, allCars) || Math.random() < 0.25;
+      }
+      // フェーズシフト: 後ろから狙われている or 接近時に脱出用
+      else if (itm === 'phaseShift') {
+        use = this._threatBehind(car, allCars) || this._enemiesNearby(car, allCars, 8) >= 1 || Math.random() < 0.4;
+      }
       if (use) {
         Game.useItem(car, allCars);
         st.itemCooldown = 2.5 + Math.random() * 2.5;
       }
     }
+  },
+
+  _enemiesNearby(car, allCars, r) {
+    let n = 0;
+    const r2 = r * r;
+    for (const o of allCars) {
+      if (o.id === car.id) continue;
+      if (o.finished) continue;
+      const dx = o.x - car.x, dz = o.z - car.z;
+      if (dx*dx + dz*dz < r2) n++;
+    }
+    return n;
   },
 
   // 後方近距離に追跡してくる車がいるか?

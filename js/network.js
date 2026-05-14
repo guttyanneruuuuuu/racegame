@@ -14,6 +14,12 @@ const Net = {
 
   on(event, fn) { (this.callbacks[event] ||= []).push(fn); },
   _emit(event, ...args) { (this.callbacks[event] || []).forEach(fn => fn(...args)); },
+  _off(event, fn) {
+    const list = this.callbacks[event];
+    if (!list) return;
+    const i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  },
 
   _newPeer(id) {
     return new Peer(id, {
@@ -24,6 +30,7 @@ const Net = {
 
   createRoom(myInfo) {
     return new Promise((resolve, reject) => {
+      this._resetSessionState();
       this.isHost = true;
       this.roomCode = Utils.genRoomCode();
       const peerId = this.ROOM_PREFIX + this.roomCode;
@@ -31,6 +38,7 @@ const Net = {
       this.myId = peerId;
 
       const timeout = setTimeout(() => {
+        try { if (this.peer) this.peer.destroy(); } catch (_) {}
         reject(new Error('接続タイムアウト'));
       }, 15000);
 
@@ -75,11 +83,21 @@ const Net = {
 
   joinRoom(code, myInfo) {
     return new Promise((resolve, reject) => {
+      this._resetSessionState();
       this.isHost = false;
       this.roomCode = code.toUpperCase();
       this.peer = this._newPeer();
+      let onWelcome = null;
+      const cleanup = () => {
+        if (onWelcome) {
+          this._off('welcome', onWelcome);
+          onWelcome = null;
+        }
+      };
 
       const timeout = setTimeout(() => {
+        cleanup();
+        try { if (this.peer) this.peer.destroy(); } catch (_) {}
         reject(new Error('部屋に接続できませんでした'));
       }, 15000);
 
@@ -94,21 +112,26 @@ const Net = {
         });
         conn.on('data', (data) => this._onClientReceive(data));
         conn.on('close', () => {
+          cleanup();
           this._emit('disconnected', 'host left');
         });
         conn.on('error', (err) => {
+          cleanup();
           clearTimeout(timeout);
           reject(err);
         });
 
-        // helloに対するwelcomeを待つ
-        this.on('welcome', () => {
+        // helloに対するwelcomeを待つ（1回だけ）
+        onWelcome = () => {
+          cleanup();
           clearTimeout(timeout);
           resolve();
-        });
+        };
+        this.on('welcome', onWelcome);
       });
 
       this.peer.on('error', (err) => {
+        cleanup();
         clearTimeout(timeout);
         console.error(err);
         reject(err);
@@ -117,14 +140,7 @@ const Net = {
   },
 
   leave() {
-    try { if (this.peer) this.peer.destroy(); } catch (_) {}
-    this.peer = null;
-    this.conns.clear();
-    this.hostConn = null;
-    this.players.clear();
-    this.isHost = false;
-    this.roomCode = null;
-    this.myId = null;
+    this._resetSessionState();
   },
 
   // ====== ホスト処理 ======
@@ -134,12 +150,27 @@ const Net = {
       case 'hello': {
         const info = data.info;
         if (!info || !info.id) return;
+        const alreadyJoined = this.players.has(info.id);
+        const currentPlayers = this.players.size;
+        // MAX_PLAYERS は参加後の総人数の上限（新規参加者を含む）として扱う
+        if (!alreadyJoined && currentPlayers >= this.MAX_PLAYERS) {
+          try { conn.send({ type: 'reject', reason: 'full' }); } catch (_) {}
+          return;
+        }
         this.players.set(info.id, { ...info, isHost: false });
         // welcome: 全員のプレイヤー情報を送る
-        conn.send({ type: 'welcome', players: this._playerList(), yourId: info.id });
-        // 既存メンバーに参加通知
-        this._broadcast({ type: 'playerJoined', player: this.players.get(info.id) }, info.id);
-        this._emit('playersChanged', this._playerList());
+        try {
+          conn.send({ type: 'welcome', players: this._playerList(), yourId: info.id });
+        } catch (e) {
+          console.warn('welcome send failed', e);
+          this._onClientLeave(info.id);
+          return;
+        }
+        if (!alreadyJoined) {
+          // 既存メンバーに参加通知
+          this._broadcast({ type: 'playerJoined', player: this.players.get(info.id) }, info.id);
+          this._emit('playersChanged', this._playerList());
+        }
         break;
       }
       case 'state': {
@@ -207,7 +238,7 @@ const Net = {
         break;
       }
       case 'startRace': {
-        this._emit('startRace', data.seed, data.startTime);
+        this._emit('startRace', data.seed, data.startTime, data.mapId);
         break;
       }
       case 'state': {
@@ -226,11 +257,11 @@ const Net = {
   },
 
   // ====== 公開API ======
-  startRace(seed) {
+  startRace(seed, mapId) {
     if (!this.isHost) return;
     const startTime = Date.now() + 3500;
-    this._broadcast({ type: 'startRace', seed, startTime });
-    this._emit('startRace', seed, startTime);
+    this._broadcast({ type: 'startRace', seed, startTime, mapId });
+    this._emit('startRace', seed, startTime, mapId);
   },
 
   sendState(state) {
@@ -263,5 +294,17 @@ const Net = {
 
   _playerList() {
     return Array.from(this.players.values());
+  },
+
+  _resetSessionState() {
+    try { if (this.hostConn) this.hostConn.close(); } catch (_) {}
+    try { if (this.peer) this.peer.destroy(); } catch (_) {}
+    this.peer = null;
+    this.conns.clear();
+    this.hostConn = null;
+    this.players.clear();
+    this.isHost = false;
+    this.roomCode = null;
+    this.myId = null;
   },
 };

@@ -2,7 +2,7 @@
 const ItemSystem = {
   ITEMS: [
     'boost', 'tripleBoost', 'rocket', 'tripleRocket', 'banana', 'lightning',
-    'shield', 'oil', 'ink', 'mine', 'ghost', 'magnet'
+    'shield', 'oil', 'ink', 'mine', 'ghost', 'magnet', 'killer'
   ],
 
   // 順位によって出やすさを変える(1位は弱め、後ろはレア出やすい)
@@ -23,7 +23,13 @@ const ItemSystem = {
       rocket:       Utils.lerp(0.8, 2.4, ratio),
       tripleRocket: Utils.lerp(0.05, 1.4, ratio),
       lightning:    Utils.lerp(0.05, 1.6, ratio),
+      killer:       Utils.lerp(0.02, 2.2, ratio),
     };
+    if (totalPlayers <= 2) {
+      // 2人対戦ではロケット系を出しやすくする
+      weights.rocket = Math.max(weights.rocket, Utils.lerp(2.2, 3.8, ratio));
+      weights.tripleRocket = Math.max(weights.tripleRocket, Utils.lerp(0.45, 1.8, ratio));
+    }
     let sum = 0;
     for (const k in weights) sum += weights[k];
     let r = Math.random() * sum;
@@ -48,6 +54,7 @@ const ItemSystem = {
       case 'mine':         return { emoji: '💣', label: 'MINE',        color: '#37474F' };
       case 'ghost':        return { emoji: '👻', label: 'GHOST',       color: '#B0BEC5' };
       case 'magnet':       return { emoji: '🧲', label: 'MAGNET',      color: '#EF5350' };
+      case 'killer':       return { emoji: '💥', label: 'KILLER',      color: '#FFC107' };
       default: return { emoji: '?', label: '', color: '#999' };
     }
   },
@@ -73,12 +80,12 @@ const ItemSystem = {
     const bx = owner.x - Math.sin(angle) * 3.8;
     const bz = owner.z - Math.cos(angle) * 3.8;
     const mesh = this._mkBanana();
-    mesh.position.set(bx, 0.4, bz);
+    mesh.position.set(bx, 0.55, bz);
     this.scene.add(mesh);
     this.projectiles.push({
       kind: 'banana', x: bx, z: bz, vx: 0, vz: 0,
       ownerId: owner.id, life: 30, mesh,
-      radius: 1.2,
+      radius: 1.55,
     });
   },
 
@@ -192,26 +199,33 @@ const ItemSystem = {
     owner.magnetTimer = 5.0;
   },
 
+  // ===== キラー (大砲演出 + 一定時間の自動爆速走行) =====
+  applyKiller(owner) {
+    if (!owner || !owner.activateKiller) return;
+    owner.activateKiller(4.5);
+    this._spawnShockwave(owner.x, owner.z, 12, 0xffc107);
+  },
+
   _mkBanana() {
     const g = new THREE.Group();
     const body = new THREE.Mesh(
-      new THREE.TorusGeometry(0.55, 0.24, 10, 16, Math.PI),
-      new THREE.MeshLambertMaterial({ color: 0xfdd835, emissive: 0x664400, emissiveIntensity: 0.3 })
+      new THREE.TorusGeometry(0.78, 0.32, 10, 18, Math.PI),
+      new THREE.MeshLambertMaterial({ color: 0xfdd835, emissive: 0x664400, emissiveIntensity: 0.45 })
     );
     body.rotation.x = Math.PI / 2;
     g.add(body);
     const tipMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
-    const tip1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), tipMat);
-    tip1.position.set(-0.55, 0, 0);
+    const tip1 = new THREE.Mesh(new THREE.SphereGeometry(0.24, 9, 7), tipMat);
+    tip1.position.set(-0.78, 0, 0);
     const tip2 = tip1.clone();
-    tip2.position.set(0.55, 0, 0);
+    tip2.position.set(0.78, 0, 0);
     g.add(tip1, tip2);
     const halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.7, 1.0, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      new THREE.RingGeometry(1.0, 1.45, 18),
+      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })
     );
     halo.rotation.x = -Math.PI / 2;
-    halo.position.y = -0.3;
+    halo.position.y = -0.25;
     g.add(halo);
     return g;
   },
@@ -339,7 +353,7 @@ const ItemSystem = {
         }
       } else if (p.kind === 'banana') {
         p.mesh.rotation.y += dt * 2;
-        p.mesh.position.y = 0.4 + Math.sin(performance.now() * 0.004) * 0.1;
+        p.mesh.position.y = 0.55 + Math.sin(performance.now() * 0.004) * 0.13;
       } else if (p.kind === 'oil') {
         p.mesh.rotation.y += dt * 0.3;
         if (p.mesh._sheen) {

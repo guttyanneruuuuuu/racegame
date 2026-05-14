@@ -9,18 +9,24 @@ const Game = {
   localCar: null,
   state: 'idle',
   raceStartTime: 0,
-  totalLaps: 3,    // 3周のレース
+  totalLaps: 3,
   lastSendTime: 0,
   netSendInterval: 50,
 
   miniCtx: null,
   miniCanvas: null,
+  miniStaticCanvas: null,
+  wrongWayEl: null,
+  _miniNeedsStaticRedraw: true,
+  _miniNextAt: 0,
+  _hudStandingsNextAt: 0,
+  hudEls: null,
 
   mode: 'multi',
+  currentMapId: 'grand',
 
   _camShakeTime: 0,
   _camShakeAmp: 0,
-  _lastWallShakeTime: 0,
 
   // 順位変動通知用
   _prevRanks: new Map(),
@@ -28,6 +34,8 @@ const Game = {
   init() {
     this._initThree();
     this._initMini();
+    this._cacheHudEls();
+    this.wrongWayEl = document.getElementById('wrong-way');
     Input.init();
     if (window.SFX) SFX.init();
     window.addEventListener('resize', () => this._onResize());
@@ -35,35 +43,47 @@ const Game = {
 
   _initThree() {
     const canvas = document.getElementById('game-canvas');
-    // 軽量化: アンチエイリアスは画面サイズに応じて切替、ピクセル比は1.5に制限
-    const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-    const aa = !isMobile;
-    this.renderer = new THREE.WebGLRenderer({
-      canvas, antialias: aa, powerPreference: 'high-performance',
-      stencil: false, depth: true,
-    });
-    const pr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
-    this.renderer.setPixelRatio(pr);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
-
-    this.scene = new THREE.Scene();
-    // 描画距離をやや短く (フォグも同調)
-    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.4, 700);
+    this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.3, 900);
     this.camera.position.set(0, 2, -5);
     this.camera.lookAt(0, 1, 0);
 
-    const hemi = new THREE.HemisphereLight(0xfff5e0, 0x6cb35a, 1.0);
-    this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(100, 150, 80);
-    this.scene.add(dir);
-    // fill light を削減 (軽量化)
-
     this.clock = new THREE.Clock();
+    const initialMap = (window.GameUI && GameUI.getSelectedMap) ? GameUI.getSelectedMap() : 'grand';
+    this._buildScene(initialMap);
+  },
 
-    Track.generate(this.scene);
+  _buildScene(mapId) {
+    this.currentMapId = (window.Track && Track.normalizeMapId) ? Track.normalizeMapId(mapId) : (mapId || 'grand');
+    this.scene = new THREE.Scene();
+
+    if (this.currentMapId === 'volcano') {
+      const hemi = new THREE.HemisphereLight(0xff8866, 0x3a1a14, 0.9);
+      this.scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffd0a0, 0.8);
+      dir.position.set(100, 150, 80);
+      this.scene.add(dir);
+      const fill = new THREE.DirectionalLight(0xff5522, 0.35);
+      fill.position.set(-80, 30, -50);
+      this.scene.add(fill);
+    } else {
+      const hemi = new THREE.HemisphereLight(0xf5fbff, 0x67a55c, 1.0);
+      this.scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+      dir.position.set(120, 150, 90);
+      this.scene.add(dir);
+      const fill = new THREE.DirectionalLight(0x90caf9, 0.18);
+      fill.position.set(-90, 45, -40);
+      this.scene.add(fill);
+    }
+
+    Track.generate(this.scene, this.currentMapId);
     ItemSystem.init(this.scene);
+    this._miniBounds = null;
+    this._miniNeedsStaticRedraw = true;
   },
 
   _initMini() {
@@ -74,6 +94,22 @@ const Game = {
     this.miniCanvas.style.height = '100%';
     document.getElementById('hud-minimap').appendChild(this.miniCanvas);
     this.miniCtx = this.miniCanvas.getContext('2d');
+    this.miniStaticCanvas = document.createElement('canvas');
+    this.miniStaticCanvas.width = this.miniCanvas.width;
+    this.miniStaticCanvas.height = this.miniCanvas.height;
+  },
+
+  _cacheHudEls() {
+    this.hudEls = {
+      time: document.getElementById('hud-time'),
+      lap: document.getElementById('hud-lap'),
+      pos: document.getElementById('hud-pos'),
+      speed: document.getElementById('hud-speed'),
+      best: document.getElementById('hud-best'),
+      steerFill: document.getElementById('steer-fill'),
+      driftCharge: document.getElementById('drift-charge'),
+      standings: document.getElementById('hud-standings'),
+    };
   },
 
   _onResize() {
@@ -82,11 +118,12 @@ const Game = {
     this.camera.updateProjectionMatrix();
   },
 
-  setupRace(playersList, localId, mode) {
+  setupRace(playersList, localId, mode, mapId) {
     this.mode = mode || 'multi';
-    for (const c of this.cars) this.scene.remove(c.mesh);
-    this.cars = [];
     ItemSystem.reset();
+    this._buildScene(mapId || this.currentMapId);
+    this.cars = [];
+    this.localCar = null;
 
     const numCars = playersList.length;
     const positions = Track.getStartPositions(numCars);
@@ -94,15 +131,10 @@ const Game = {
     for (let i = 0; i < playersList.length; i++) {
       const p = playersList[i];
       const pos = positions[i];
-      // AI車にもランダムな車種を割り当て (毎レース多様性)
       let cType = p.carType;
-      if (!cType) {
-        if (p.isAI) {
-          const types = ['balanced','speed','accel','handling','heavy'];
-          cType = types[Math.floor(Math.random() * types.length)];
-        } else {
-          cType = 'balanced';
-        }
+      if (!cType && p.isAI) {
+        const types = ['balanced', 'speed', 'accel', 'handling', 'heavy', 'drift', 'stunt', 'offroad', 'turbo'];
+        cType = types[Math.floor(Math.random() * types.length)];
       }
       const car = new Car({
         id: p.id,
@@ -122,21 +154,17 @@ const Game = {
 
     if (this.localCar) {
       this._updateCamera(0, true);
+      if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
+    }
+    if (this.wrongWayEl) {
+      this.wrongWayEl.classList.remove('show', 'rescue');
+      this.wrongWayEl.dataset.mode = 'off';
+      this.wrongWayEl.textContent = '⚠ 逆走中！';
     }
 
     this.state = 'countdown';
     this.lapTimes = {};
     this._prevRanks.clear();
-
-    // 巻き戻しHUDのリセット
-    const hud = document.getElementById('hud-rewind');
-    if (hud) {
-      hud.classList.remove('used', 'active');
-      const st = document.getElementById('rewind-state');
-      if (st) st.textContent = 'READY';
-    }
-    const rwBtn = document.getElementById('ctrl-rewind');
-    if (rwBtn) rwBtn.classList.remove('used');
   },
 
   startCountdown(startTime) {
@@ -157,7 +185,6 @@ const Game = {
     if (this.state === 'racing' || this.state === 'finished') {
       this._updateLocal(dt);
       this._updateAIs(dt);
-      this.updateRemoteInterpolation(dt);
       this._handleCollisions();
       this._sendNetwork(now);
       this._updateMagnet(dt);
@@ -173,40 +200,46 @@ const Game = {
     Track.update(dt, now);
     this._updateCamera(dt);
     this._updateHUD(now);
-    this._updateMinimap();
+    this._updateMinimap(now);
 
     this.renderer.render(this.scene, this.camera);
   },
 
   _updateLocal(dt) {
     if (!this.localCar) return;
-    Input.update(dt);
-    const now = performance.now();
     if (this.localCar.finished) {
       this.localCar.applyInput(0, false, true, dt);
     } else {
       this.localCar.applyInput(Input.steer, Input.accel, Input.brake, dt);
-      this.localCar.updateProgress(now);
+      this.localCar.updateProgress(performance.now());
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
       // 壁ヒットでカメラ揺れ
-      const wallImpact = this.localCar.consumeWallImpact();
-      if (wallImpact > 0) {
-        if (now - this._lastWallShakeTime > 180) {
-          this._camShakeTime = 0.04 + wallImpact * 0.12;
-          this._camShakeAmp = wallImpact * 0.3;
-          this._lastWallShakeTime = now;
-          if (window.SFX) SFX.play('wall');
-        }
+      if (this.localCar.wallHitFlash > 0.2) {
+        this._camShakeTime = 0.3;
+        this._camShakeAmp = 0.4;
+        if (window.SFX) SFX.play('wall');
       }
       // 逆走警告
-      if (this.localCar.wrongWayTimer > 1.0) {
-        const wrongEl = document.getElementById('wrong-way');
-        if (wrongEl) wrongEl.classList.add('show');
-      } else {
-        const wrongEl = document.getElementById('wrong-way');
-        if (wrongEl) wrongEl.classList.remove('show');
+      if (this.wrongWayEl) {
+        const mode = this.localCar.wrongWayRescueTimer > 0
+          ? 'rescue'
+          : (this.localCar.wrongWayTimer > 1.0 ? 'warn' : 'off');
+        if (this.wrongWayEl.dataset.mode !== mode) {
+          this.wrongWayEl.dataset.mode = mode;
+          if (mode === 'rescue') {
+            this.wrongWayEl.classList.add('show', 'rescue');
+            this.wrongWayEl.textContent = '🛟 方向修正中…';
+          } else if (mode === 'warn') {
+            this.wrongWayEl.classList.add('show');
+            this.wrongWayEl.classList.remove('rescue');
+            this.wrongWayEl.textContent = '⚠ 逆走中！';
+          } else {
+            this.wrongWayEl.classList.remove('show', 'rescue');
+            this.wrongWayEl.textContent = '⚠ 逆走中！';
+          }
+        }
       }
       if (this.localCar.lap >= this.totalLaps && !this.localCar.finished) {
         this.localCar.finished = true;
@@ -267,24 +300,16 @@ const Game = {
         const d = Math.hypot(dx, dz);
         const minD = 2.5;
         if (d < minD && d > 0.001) {
-          // 車種別重量で押し戻し量を非対称に
-          const wa = (a.stats && a.stats.weight) || 1;
-          const wb = (b.stats && b.stats.weight) || 1;
-          const totalW = wa + wb;
-          // 軽い方がより押される
-          const overlap = (minD - d);
-          const aShare = wb / totalW;
-          const bShare = wa / totalW;
+          const overlap = (minD - d) / 2;
           const nx = dx / d, nz = dz / d;
-          a.x -= nx * overlap * aShare;
-          a.z -= nz * overlap * aShare;
-          b.x += nx * overlap * bShare;
-          b.z += nz * overlap * bShare;
-          // 速度: 重い方が運動量を保つ
+          a.x -= nx * overlap;
+          a.z -= nz * overlap;
+          b.x += nx * overlap;
+          b.z += nz * overlap;
           const ra = a.speed * 0.7;
           const rb = b.speed * 0.7;
-          a.speed = ra * (0.5 + bShare * 0.2) + rb * (0.5 - bShare * 0.2);
-          b.speed = ra * (0.5 - aShare * 0.2) + rb * (0.5 + aShare * 0.2);
+          a.speed = ra * 0.55 + rb * 0.45;
+          b.speed = ra * 0.45 + rb * 0.55;
           // 衝撃音
           if ((a.isLocal || b.isLocal) && window.SFX && Math.abs(ra - rb) > 6) SFX.play('bump');
         }
@@ -332,49 +357,11 @@ const Game = {
   applyRemoteState(id, state) {
     const car = this.cars.find(c => c.id === id);
     if (!car || car.isLocal) return;
-    const now = performance.now();
-    // === デッドレコニング: 受信時刻 + 速度/角度から将来位置を予測し、
-    //     ローカルでは予測ターゲットへ滑らかに補間する ===
-    if (!car._net) {
-      car._net = {
-        targetX: state.x, targetZ: state.z, targetY: state.y || 0,
-        targetAngle: state.angle, targetSpeed: state.speed,
-        lastRecvTime: now,
-        // 受信ごとに更新される推定速度ベクトル
-        vx: Math.sin(state.angle) * state.speed,
-        vz: Math.cos(state.angle) * state.speed,
-        // 初回は即座にスナップ
-        x: state.x, z: state.z, y: state.y || 0, angle: state.angle,
-      };
-      car.x = state.x; car.z = state.z; car.y = state.y || 0; car.angle = state.angle;
-    } else {
-      const net = car._net;
-      // 受信間隔(秒)
-      const recvDt = Math.max(0.01, (now - net.lastRecvTime) / 1000);
-      // 前回のターゲットと今回の実測値の差から実速度を推定
-      const obsVx = (state.x - net.targetX) / recvDt;
-      const obsVz = (state.z - net.targetZ) / recvDt;
-      // ノイズ除去: 観測 + 送信元の speed/angle のブレンド
-      const reportedVx = Math.sin(state.angle) * state.speed;
-      const reportedVz = Math.cos(state.angle) * state.speed;
-      // 異常な瞬間移動(>40m/フレーム)はクランプして観測を破棄
-      const jumpDist = Math.hypot(state.x - net.targetX, state.z - net.targetZ);
-      if (jumpDist > 40) {
-        // テレポート扱い: 即座にスナップ
-        net.vx = reportedVx; net.vz = reportedVz;
-        car.x = state.x; car.z = state.z;
-      } else {
-        // 70%観測, 30%報告 のブレンドで速度ベクトル更新
-        net.vx = obsVx * 0.7 + reportedVx * 0.3;
-        net.vz = obsVz * 0.7 + reportedVz * 0.3;
-      }
-      net.targetX = state.x;
-      net.targetZ = state.z;
-      net.targetY = state.y !== undefined ? state.y : net.targetY;
-      net.targetAngle = state.angle;
-      net.targetSpeed = state.speed;
-      net.lastRecvTime = now;
-    }
+    car.x = Utils.lerp(car.x, state.x, 0.55);
+    car.z = Utils.lerp(car.z, state.z, 0.55);
+    if (state.y !== undefined) car.y = Utils.lerp(car.y, state.y, 0.5);
+    const diff = Utils.angDiff(state.angle, car.angle);
+    car.angle += diff * 0.5;
     car.speed = state.speed;
     car.lap = state.lap;
     car.totalProgress = state.totalProgress;
@@ -383,33 +370,6 @@ const Game = {
     car.invincibleTimer = state.shield ? 0.2 : car.invincibleTimer;
     car.squishTimer = state.squish ? 0.2 : 0;
     car.ghostTimer = state.ghost ? 0.2 : 0;
-  },
-
-  // 毎フレーム呼ばれる: リモート車の補間とデッドレコニング適用
-  updateRemoteInterpolation(dt) {
-    if (this.mode !== 'multi') return;
-    const now = performance.now();
-    for (const car of this.cars) {
-      if (car.isLocal || car.isAI) continue;
-      const net = car._net;
-      if (!net) continue;
-      // 受信からの経過(秒)
-      const sinceRecv = Math.max(0, (now - net.lastRecvTime) / 1000);
-      // 予測位置 = 最後のターゲット + 速度ベクトル * 経過時間
-      // ただし古すぎる(>0.5s)外挿はクランプ
-      const extrapT = Math.min(0.5, sinceRecv);
-      const predX = net.targetX + net.vx * extrapT;
-      const predZ = net.targetZ + net.vz * extrapT;
-      const predY = net.targetY;
-      // 現在位置から予測位置へ exponential smoothing (時間定数 ~80ms)
-      const tau = 0.08;
-      const alpha = 1 - Math.exp(-dt / tau);
-      car.x = Utils.lerp(car.x, predX, alpha);
-      car.z = Utils.lerp(car.z, predZ, alpha);
-      car.y = Utils.lerp(car.y, predY, alpha);
-      const aDiff = Utils.angDiff(net.targetAngle, car.angle);
-      car.angle += aDiff * alpha;
-    }
   },
 
   applyRemoteAction(action) {
@@ -447,6 +407,8 @@ const Game = {
       ItemSystem.applyGhost(car);
     } else if (action.kind === 'magnet') {
       ItemSystem.applyMagnet(car);
+    } else if (action.kind === 'killer') {
+      ItemSystem.applyKiller(car);
     }
   },
 
@@ -495,6 +457,9 @@ const Game = {
     } else if (item === 'magnet') {
       ItemSystem.applyMagnet(car);
       Net.sendAction({ kind: 'magnet' });
+    } else if (item === 'killer') {
+      ItemSystem.applyKiller(car);
+      Net.sendAction({ kind: 'killer' });
     }
     if (car.isLocal) {
       const d = ItemSystem.getDisplay(item);
@@ -554,11 +519,39 @@ const Game = {
       }
       if (r.jump) {
         c.applyJump(18);
-        // ジャンプ盤ではグライダーを展開
         c.deployGlider(3.5);
         if (c.isLocal) {
-          showToast('🪂 GLIDER!', 800);
+          showToast('💨 GEYSER!', 700);
           if (window.SFX) SFX.play('jump');
+        }
+      }
+      if (r.lava) {
+        // 溶岩プール: スリップ + 軽い炎上ダメージ
+        if (c.hitOilSplash) c.hitOilSplash();
+        c.speed *= 0.55;
+        if (c.isLocal) {
+          this._camShakeTime = 0.25;
+          this._camShakeAmp = 0.35;
+          showToast('🔥 LAVA!', 700);
+          if (window.SFX) SFX.play('wall');
+          GameUI.flashScreen && GameUI.flashScreen('#ff3300', 220);
+        }
+      }
+      // 転がる溶岩岩との衝突
+      if (Track.checkBoulderHit) {
+        const bh = Track.checkBoulderHit(c, now);
+        if (bh.hit) {
+          // 跳ね返し
+          c.speed *= 0.45;
+          c.x += bh.nx * 0.8;
+          c.z += bh.nz * 0.8;
+          c.wallHitFlash = 0.6;
+          if (c.isLocal) {
+            this._camShakeTime = 0.35;
+            this._camShakeAmp = 0.5;
+            showToast('🪨 BOULDER!', 700);
+            if (window.SFX) SFX.play('bump');
+          }
         }
       }
     }
@@ -579,11 +572,10 @@ const Game = {
           }
         }
       }
-      // コイン取得 (1枚で+2%加速)
-      if (Track.collectCoin(c.x, c.z, 2.0)) {
-        const gained = c.addCoin(1);
-        if (c.isLocal && gained) {
-          GameUI.updateCoins && GameUI.updateCoins(c.coins);
+      if (Track.collectCoin && Track.collectCoin(c.x, c.z, 2.0)) {
+        const gained = c.addCoin ? c.addCoin(1) : false;
+        if (c.isLocal && gained && GameUI.updateCoins) {
+          GameUI.updateCoins(c.coins);
           if (window.SFX) SFX.play('pickup');
         }
       }
@@ -612,45 +604,15 @@ const Game = {
     this._checkRaceEnd();
   },
 
-  // ===== ユニーク機能: 時間巻き戻し (3秒前) =====
-  triggerRewind() {
-    if (this.state !== 'racing') return false;
-    if (!this.localCar || this.localCar.finished) return false;
-    const ok = this.localCar.doRewind();
-    if (ok) {
-      if (typeof showToast === 'function') showToast('⏪ TIME REWIND!', 1200);
-      if (window.SFX) try { SFX.play('item'); } catch (_) {}
-      // HUD更新
-      const hud = document.getElementById('hud-rewind');
-      if (hud) {
-        hud.classList.add('used');
-        const st = document.getElementById('rewind-state');
-        if (st) st.textContent = 'USED';
-      }
-      const btn = document.getElementById('ctrl-rewind');
-      if (btn) btn.classList.add('used');
-      // ネット同期 (他クライアントには瞬間移動として伝わるが、dead-reckoningで吸収される)
-      if (window.Net && Net.sendAction) {
-        try { Net.sendAction({ kind: '_rewind' }); } catch (_) {}
-      }
-      // カメラを即時スナップ
-      if (typeof this._updateCamera === 'function') this._updateCamera(0, true);
-      return true;
-    } else {
-      if (typeof showToast === 'function') showToast('⏪ 巻き戻しは使用済み', 900);
-      return false;
-    }
-  },
-
   _updateCamera(dt, snap = false) {
     if (!this.localCar) return;
     const c = this.localCar;
     const absSpeed = Math.abs(c.speed);
 
     const speedT = Utils.clamp(absSpeed / CarPhysics.MAX_SPEED, 0, 1);
-    const back = Utils.lerp(4.2, 5.4, speedT);
-    const up   = Utils.lerp(2.2, 1.8, speedT);
-    const lookFwd = Utils.lerp(6, 14, speedT);
+    const back = Utils.lerp(4.9, 6.2, speedT);
+    const up   = Utils.lerp(3.6, 3.2, speedT);
+    const lookFwd = Utils.lerp(7, 16, speedT);
 
     let backDir = 1;
     if (c.speed < -1) backDir = -1;
@@ -672,7 +634,7 @@ const Game = {
 
     const lx = c.x + Math.sin(c.angle) * lookFwd * backDir;
     const lz = c.z + Math.cos(c.angle) * lookFwd * backDir;
-    const ly = 0.9 + c.y * 0.5;
+    const ly = 1.1 + c.y * 0.5;
 
     let shakeX = 0, shakeY = 0;
     if (this._camShakeTime > 0) {
@@ -702,20 +664,19 @@ const Game = {
 
   _updateHUD(now) {
     if (!this.localCar) return;
+    const hud = this.hudEls || {};
     const elapsed = (this.state === 'racing' || this.state === 'finished')
       ? (this.localCar.finished ? this.localCar.finishTime : (now - this.raceStartTime))
       : 0;
-    document.getElementById('hud-time').textContent = Utils.formatTime(elapsed);
+    if (hud.time) hud.time.textContent = Utils.formatTime(elapsed);
     const lapDisp = this.localCar.finished ? this.totalLaps : Math.min(this.localCar.lap + 1, this.totalLaps);
-    document.getElementById('hud-lap').textContent = `${lapDisp}/${this.totalLaps}`;
+    if (hud.lap) hud.lap.textContent = `${lapDisp}/${this.totalLaps}`;
     const rank = this._getRank(this.localCar);
-    document.getElementById('hud-pos').textContent = `${rank}/${this.cars.length}`;
+    if (hud.pos) hud.pos.textContent = `${rank}/${this.cars.length}`;
     const sp = Math.abs(this.localCar.speed) * 3.6;
-    document.getElementById('hud-speed').textContent = Math.floor(sp);
-    // コイン枚数HUD更新
-    if (GameUI.updateCoins) GameUI.updateCoins(this.localCar.coins || 0);
+    if (hud.speed) hud.speed.textContent = Math.floor(sp);
 
-    const bestEl = document.getElementById('hud-best');
+    const bestEl = hud.best;
     if (bestEl) {
       if (isFinite(this.localCar.bestLap)) {
         bestEl.textContent = 'BEST ' + Utils.formatTime(this.localCar.bestLap);
@@ -726,7 +687,7 @@ const Game = {
     }
 
     // ステアインジケーター
-    const fill = document.getElementById('steer-fill');
+    const fill = hud.steerFill;
     if (fill) {
       const s = Input.steer;
       const w = Math.abs(s) * 50;
@@ -735,7 +696,7 @@ const Game = {
     }
 
     // ドリフトチャージ表示
-    const dc = document.getElementById('drift-charge');
+    const dc = hud.driftCharge;
     if (dc) {
       const ch = this.localCar.driftCharge;
       if (this.localCar.driftActive && ch > 0) {
@@ -751,22 +712,24 @@ const Game = {
       }
     }
 
-    // 最終ラップ装飾 (現在の周回が最終周回 = lap+1 === totalLaps の時のみ点滅)
-    const hudLap = document.getElementById('hud-lap');
+    // 最終ラップ装飾
+    const hudLap = hud.lap;
     if (hudLap) {
-      const currentLap = this.localCar.lap + 1;
-      if (currentLap === this.totalLaps && !this.localCar.finished && this.state === 'racing') {
+      if (this.localCar.lap === this.totalLaps - 1 && !this.localCar.finished) {
         hudLap.parentElement.classList.add('final-lap');
       } else {
         hudLap.parentElement.classList.remove('final-lap');
       }
     }
 
-    this._updateStandings();
+    if (now >= this._hudStandingsNextAt) {
+      this._hudStandingsNextAt = now + 180;
+      this._updateStandings();
+    }
   },
 
   _updateStandings() {
-    const el = document.getElementById('hud-standings');
+    const el = this.hudEls ? this.hudEls.standings : document.getElementById('hud-standings');
     if (!el) return;
     const sorted = [...this.cars].sort((a, b) => {
       if (a.finished && b.finished) return a.finishTime - b.finishTime;
@@ -792,12 +755,13 @@ const Game = {
     return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   },
 
-  _updateMinimap() {
+  _updateMinimap(now = performance.now()) {
     if (!this.miniCtx) return;
+    if (now < this._miniNextAt) return;
+    this._miniNextAt = now + 50;
     const ctx = this.miniCtx;
     const W = this.miniCanvas.width;
     const H = this.miniCanvas.height;
-    ctx.clearRect(0, 0, W, H);
     if (!this._miniBounds) {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const p of Track.pathPoints) {
@@ -813,44 +777,80 @@ const Game = {
     const toX = (x) => (x - b.minX) * sx;
     const toZ = (z) => H - (z - b.minZ) * sz;
 
-    ctx.lineWidth = 11;
-    ctx.strokeStyle = '#666';
-    ctx.beginPath();
-    Track.pathPoints.forEach((p, i) => {
-      const x = toX(p.x), y = toZ(p.z);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
-    ctx.stroke();
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#bbb';
-    ctx.stroke();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = '#fff';
-    ctx.setLineDash([4, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (this._miniNeedsStaticRedraw && this.miniStaticCanvas) {
+      const sctx = this.miniStaticCanvas.getContext('2d');
+      sctx.clearRect(0, 0, W, H);
+      sctx.lineWidth = 11;
+      sctx.strokeStyle = '#666';
+      sctx.beginPath();
+      Track.pathPoints.forEach((p, i) => {
+        const x = toX(p.x), y = toZ(p.z);
+        if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+      });
+      sctx.closePath();
+      sctx.stroke();
+      sctx.lineWidth = 8;
+      sctx.strokeStyle = '#bbb';
+      sctx.stroke();
+      sctx.lineWidth = 1.2;
+      sctx.strokeStyle = '#fff';
+      sctx.setLineDash([4, 4]);
+      sctx.stroke();
+      sctx.setLineDash([]);
 
-    const sp = Track.pathPoints[0];
-    ctx.fillStyle = '#C62828';
-    ctx.beginPath();
-    ctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
-    ctx.fill();
+      const sp = Track.pathPoints[0];
+      sctx.fillStyle = '#C62828';
+      sctx.beginPath();
+      sctx.arc(toX(sp.x), toZ(sp.z), 5, 0, Math.PI * 2);
+      sctx.fill();
 
-    if (Track.boostPads) {
-      ctx.fillStyle = '#FF9800';
-      for (const p of Track.boostPads) {
-        ctx.beginPath();
-        ctx.arc(toX(p.x), toZ(p.z), 2.2, 0, Math.PI * 2);
-        ctx.fill();
+      if (Track.boostPads) {
+        sctx.fillStyle = '#FF9800';
+        for (const p of Track.boostPads) {
+          sctx.beginPath();
+          sctx.arc(toX(p.x), toZ(p.z), 2.2, 0, Math.PI * 2);
+          sctx.fill();
+        }
       }
+      if (Track.jumpPads) {
+        sctx.fillStyle = '#FFAB40';
+        for (const p of Track.jumpPads) {
+          sctx.beginPath();
+          sctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
+          sctx.fill();
+        }
+      }
+      if (Track.lavaPools) {
+        sctx.fillStyle = '#FF3D00';
+        for (const lp of Track.lavaPools) {
+          sctx.beginPath();
+          sctx.arc(toX(lp.x), toZ(lp.z), 2.8, 0, Math.PI * 2);
+          sctx.fill();
+        }
+      }
+      if (Track.coins) {
+        sctx.fillStyle = '#FFD54F';
+        for (const coin of Track.coins) {
+          sctx.beginPath();
+          sctx.arc(toX(coin.x), toZ(coin.z), 1.8, 0, Math.PI * 2);
+          sctx.fill();
+        }
+      }
+      this._miniNeedsStaticRedraw = false;
     }
-    if (Track.jumpPads) {
-      ctx.fillStyle = '#42A5F5';
-      for (const p of Track.jumpPads) {
+    ctx.clearRect(0, 0, W, H);
+    if (this.miniStaticCanvas) ctx.drawImage(this.miniStaticCanvas, 0, 0);
+
+    // 転がる岩 (動的位置)
+    if (Track.boulders) {
+      ctx.fillStyle = '#5D4037';
+      ctx.strokeStyle = '#FF6F00';
+      ctx.lineWidth = 1.2;
+      for (const b of Track.boulders) {
         ctx.beginPath();
-        ctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
+        ctx.arc(toX(b.mesh.position.x), toZ(b.mesh.position.z), 3.0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
       }
     }
 

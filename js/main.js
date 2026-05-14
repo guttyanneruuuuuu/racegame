@@ -15,13 +15,32 @@ window.addEventListener('load', () => {
     if (typeof GameExt !== 'undefined' && GameExt.install) GameExt.install();
     if (typeof UIExt !== 'undefined' && UIExt.install) UIExt.install();
     if (typeof ItemExt !== 'undefined' && ItemExt.hookGameUseItem) ItemExt.hookGameUseItem();
+
+    // PartyExt は後付けファイルとして読み込み、6人プレイ向けの
+    // パーティゲート/追加アイテム/エモート/ジャイロ補助HUDを差し込む。
+    const installPartyExt = () => {
+      if (typeof PartyExt !== 'undefined' && PartyExt.install) PartyExt.install();
+    };
+    if (typeof PartyExt !== 'undefined') {
+      installPartyExt();
+    } else {
+      const partyScript = document.createElement('script');
+      partyScript.src = 'js/party_ext.js';
+      partyScript.onload = installPartyExt;
+      partyScript.onerror = () => console.warn('party_ext.js load failed');
+      document.body.appendChild(partyScript);
+    }
+
     // BGM は SFX の AudioContext が初期化されるのを待つ
+    let bgmInitRetries = 0;
+    const maxBgmInitRetries = 25;
     const initBgm = () => {
-      if (typeof BGM !== 'undefined' && BGM.init && SFX && SFX.ctx) {
+      if (typeof BGM !== 'undefined' && BGM.init && window.SFX && SFX.ctx) {
         BGM.init(SFX.ctx);
         BGM.play('menu');
       } else {
-        setTimeout(initBgm, 400);
+        bgmInitRetries++;
+        if (bgmInitRetries < maxBgmInitRetries) setTimeout(initBgm, 400);
       }
     };
     setTimeout(initBgm, 800);
@@ -47,11 +66,11 @@ window.addEventListener('load', () => {
     Net.leave();
     GameUI.showScreen('screen-title');
   });
-  Net.on('startRace', async (seed, startTime) => {
+  Net.on('startRace', async (seed, startTime, mapId) => {
     const players = Array.from(Net.players.values()).map(p => ({
-      id: p.id, name: p.name, color: p.color, isAI: false,
+      id: p.id, name: p.name, color: p.color, carType: p.carType, isAI: false,
     }));
-    await GameUI._beginRace(players, Net.myId, 'multi');
+    await GameUI._beginRace(players, Net.myId, 'multi', mapId);
     // ネットワーク同期カウントダウン
     Game.startCountdown(startTime);
   });

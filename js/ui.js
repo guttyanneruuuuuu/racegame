@@ -2,8 +2,12 @@
 const GameUI = {
   selectedColor: '#E53935',
   selectedCarType: 'balanced',
+  selectedMap: 'grand',
+  _safeStorage: null,
+  _speedLineTimerId: null,
 
   init() {
+    this._safeStorage = this._getStorage();
     // 色選択
     document.querySelectorAll('.car-option').forEach(el => {
       el.addEventListener('click', () => {
@@ -25,11 +29,22 @@ const GameUI = {
     });
     // localStorage から復元
     try {
-      const savedType = localStorage.getItem('gr_carType');
+      const savedType = this._storageGet('gr_carType');
       if (savedType) {
         const el = document.querySelector(`.cartype-option[data-type="${savedType}"]`);
         if (el) el.click();
       }
+    } catch (_) {}
+
+    // マップ選択
+    document.querySelectorAll('.map-option').forEach(el => {
+      el.addEventListener('click', () => {
+        this.setSelectedMap(el.dataset.map);
+      });
+    });
+    try {
+      const savedMap = this._storageGet('gr_mapId');
+      if (savedMap) this.setSelectedMap(savedMap, false);
     } catch (_) {}
 
     // タイトル画面ボタン
@@ -104,11 +119,11 @@ const GameUI = {
     // ミュートボタン
     const muteBtn = document.getElementById('btn-mute');
     if (muteBtn) {
-      let muted = localStorage.getItem('gyrorush-muted') === '1';
+      let muted = this._storageGet('gyrorush-muted') === '1';
       const apply = () => {
         if (window.SFX) SFX.setMuted(muted);
         muteBtn.textContent = muted ? '🔇' : '🔊';
-        localStorage.setItem('gyrorush-muted', muted ? '1' : '0');
+        this._storageSet('gyrorush-muted', muted ? '1' : '0');
       };
       apply();
       const fire = (e) => {
@@ -122,7 +137,7 @@ const GameUI = {
 
     // 名前入力
     const nameEl = document.getElementById('player-name');
-    const saved = localStorage.getItem('gyrorush-name');
+    const saved = this._storageGet('gyrorush-name');
     if (saved) nameEl.value = saved;
 
     // スピードライン更新ループ
@@ -131,7 +146,8 @@ const GameUI = {
 
   _startSpeedLineLoop() {
     const lines = document.getElementById('speed-lines');
-    setInterval(() => {
+    if (this._speedLineTimerId) clearInterval(this._speedLineTimerId);
+    this._speedLineTimerId = setInterval(() => {
       if (!lines) return;
       const c = Game.localCar;
       if (!c) { lines.classList.remove('show'); return; }
@@ -162,9 +178,24 @@ const GameUI = {
     let name = document.getElementById('player-name').value.trim();
     if (!name) name = 'プレイヤー' + Math.floor(Math.random() * 100);
     if (name.length > 10) name = name.slice(0, 10);
-    localStorage.setItem('gyrorush-name', name);
-    try { localStorage.setItem('gr_carType', this.selectedCarType); } catch (_) {}
+    this._storageSet('gyrorush-name', name);
+    this._storageSet('gr_carType', this.selectedCarType);
     return { name, color: this.selectedColor, carType: this.selectedCarType };
+  },
+
+  setSelectedMap(mapId, persist = true) {
+    const normalized = (window.Track && Track.normalizeMapId) ? Track.normalizeMapId(mapId) : (mapId || 'grand');
+    this.selectedMap = normalized;
+    document.querySelectorAll('.map-option').forEach(el => {
+      el.classList.toggle('active', el.dataset.map === normalized);
+    });
+    if (persist) {
+      this._storageSet('gr_mapId', normalized);
+    }
+  },
+
+  getSelectedMap() {
+    return this.selectedMap || 'grand';
   },
 
   async _onCreateRoom() {
@@ -208,16 +239,17 @@ const GameUI = {
     for (let i = 0; i < 5; i++) {
       players.push({ id: 'ai-' + i, name: aiNames[i], color: aiColors[i] || '#888', isAI: true });
     }
-    await this._beginRace(players, localId, 'solo');
+    await this._beginRace(players, localId, 'solo', this.getSelectedMap());
   },
 
-  async _beginRace(players, localId, mode) {
+  async _beginRace(players, localId, mode, mapId) {
     if (this._isMobile() && !Input.gyroEnabled) {
       await this._askGyro();
     }
+    if (mapId) this.setSelectedMap(mapId, mode !== 'multi');
     this.showScreen('screen-game');
     Input.autoCalibrateOnStart();
-    Game.setupRace(players, localId, mode);
+    Game.setupRace(players, localId, mode, this.getSelectedMap());
     Game.startCountdown(Date.now() + 3500);
   },
 
@@ -246,7 +278,7 @@ const GameUI = {
   _onStartRace() {
     const players = Array.from(Net.players.values());
     if (players.length < 1) return;
-    Net.startRace(Math.floor(Math.random() * 1e9));
+    Net.startRace(Math.floor(Math.random() * 1e9), this.getSelectedMap());
   },
 
   _onLeaveRoom() {
@@ -264,15 +296,25 @@ const GameUI = {
     }
   },
 
-  _copyCode() {
+  async _copyCode() {
     const code = Net.roomCode;
     if (!code) return;
     try {
-      navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(code);
       showToast('コピーしました', 1200);
     } catch (e) {
       showToast(code, 2000);
     }
+  },
+
+  _getStorage() {
+    try { return window.localStorage; } catch (_) { return null; }
+  },
+  _storageGet(key) {
+    try { return this._safeStorage ? this._safeStorage.getItem(key) : null; } catch (_) { return null; }
+  },
+  _storageSet(key, value) {
+    try { if (this._safeStorage) this._safeStorage.setItem(key, value); } catch (_) {}
   },
 
   updateLobby(players) {
@@ -284,7 +326,8 @@ const GameUI = {
 
     // プレイヤー数表示
     const countEl = document.getElementById('player-count');
-    if (countEl) countEl.textContent = `${players.length} / 6`;
+    const maxPlayers = (window.Net && Number.isInteger(Net.MAX_PLAYERS) && Net.MAX_PLAYERS > 0) ? Net.MAX_PLAYERS : 6;
+    if (countEl) countEl.textContent = `${players.length} / ${maxPlayers}`;
 
     for (const p of players) {
       const row = document.createElement('div');

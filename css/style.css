@@ -77,8 +77,8 @@ input { font-family: inherit; outline: none; }
 .title-content .game-title { grid-area: title; margin-bottom: 4px; line-height: 1; }
 .title-content .name-input-wrap { grid-area: name; margin: 0; }
 .title-content .car-select { grid-area: car; margin: 0; }
+.title-content .map-select { grid-area: extras; margin: 0; }
 .title-content .title-buttons { grid-area: buttons; margin-top: 0; align-self: center; }
-.title-content .title-extras { grid-area: extras; margin-top: 4px; }
 .title-content .hint { grid-area: hint; margin-top: 2px; }
 
 .title-main {
@@ -144,7 +144,8 @@ input { font-family: inherit; outline: none; }
 
 /* ===== マシンタイプ選択 ===== */
 .car-type-select { margin: 12px 0; }
-.car-type-select label {
+.car-type-select label,
+.map-select label {
   font-size: 13px; color: #2b1d10; font-weight: 700;
   display: flex; align-items: center; gap: 8px;
 }
@@ -181,6 +182,46 @@ input { font-family: inherit; outline: none; }
   .cartype-options { grid-template-columns: repeat(5, 1fr); gap: 3px; }
   .cartype-option .ctt-stats { font-size: 7px; }
   .cartype-option .ctt-name { font-size: 10px; }
+}
+
+/* ===== マップ選択 ===== */
+.map-select { text-align: left; }
+.map-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.map-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.14);
+  background: rgba(255,255,255,0.92);
+  text-align: left;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.map-option:hover { transform: translateY(-2px); }
+.map-option.active {
+  border-color: #ff7043;
+  background: linear-gradient(135deg, #fff8e1, #ffe0b2);
+  box-shadow: 0 6px 14px rgba(255,112,67,0.2);
+}
+.map-option-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #2b1d10;
+}
+.map-option-sub {
+  font-size: 11px;
+  color: #6d4c41;
+  font-weight: 700;
+}
+@media (max-width: 600px) {
+  .map-options { grid-template-columns: 1fr; }
+  .map-option-title { font-size: 12px; }
 }
 
 .title-buttons {
@@ -350,17 +391,52 @@ input { font-family: inherit; outline: none; }
 .hud-top {
   position: absolute;
   top: 8px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 12px;
-  background: rgba(25, 35, 55, 0.78);
-  padding: 8px 18px;
-  border-radius: 16px;
+  display: flex; gap: 14px;
+  background: linear-gradient(135deg, rgba(18, 28, 48, 0.82), rgba(34, 52, 88, 0.74));
+  padding: 9px 20px;
+  border-radius: 18px;
   font-weight: 900;
   font-size: 14px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.18);
   color: #fff;
   border: 2px solid rgba(255,255,255,0.85);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+}
+
+/* ===== 墨スクランブル: 情報妨害エフェクト ===== */
+#hud.ink-scramble .hud-top,
+#hud.ink-scramble .hud-speed {
+  animation: inkJitter 0.18s infinite steps(2);
+  filter: hue-rotate(220deg) blur(0.3px);
+  text-shadow: 0 0 8px rgba(60, 0, 120, 0.9), 0 0 14px rgba(120, 0, 200, 0.6);
+}
+#hud.ink-scramble #hud-lap,
+#hud.ink-scramble #hud-pos,
+#hud.ink-scramble #hud-speed {
+  color: #c5b3ff !important;
+  letter-spacing: 1px;
+}
+#hud.ink-scramble .hud-mini {
+  filter: invert(0.5) hue-rotate(200deg) blur(1.5px);
+  opacity: 0.7;
+}
+@keyframes inkJitter {
+  0%   { transform: translate(0, 0) translateX(-50%); }
+  25%  { transform: translate(1px, -1px) translateX(-50%); }
+  50%  { transform: translate(-1px, 1px) translateX(-50%); }
+  75%  { transform: translate(1px, 1px) translateX(-50%); }
+  100% { transform: translate(-1px, -1px) translateX(-50%); }
+}
+#hud.ink-scramble .hud-speed {
+  animation: inkJitterRight 0.18s infinite steps(2);
+}
+@keyframes inkJitterRight {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(1px, -1px); }
+  50%  { transform: translate(-1px, 1px); }
+  75%  { transform: translate(1px, 1px); }
+  100% { transform: translate(-1px, -1px); }
 }
 .hud-top > div { white-space: nowrap; }
 .hud-lap span, .hud-pos span { color: #FFD54F; }
@@ -370,14 +446,14 @@ input { font-family: inherit; outline: none; }
 .hud-speed {
   position: absolute;
   right: 14px; bottom: 100px;
-  background: rgba(25, 35, 55, 0.78);
-  padding: 8px 18px;
-  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(18, 28, 48, 0.82), rgba(34, 52, 88, 0.74));
+  padding: 10px 20px;
+  border-radius: 18px;
   text-align: center;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.18);
   border: 2px solid rgba(255,255,255,0.85);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
   color: #fff;
 }
 .speed-val { font-size: 36px; font-weight: 900; color: #FFEB3B; line-height: 1; font-family: 'Courier New', monospace; text-shadow: 0 2px 0 rgba(0,0,0,0.4), 0 0 12px rgba(255,235,59,0.5); }
@@ -871,6 +947,40 @@ input { font-family: inherit; outline: none; }
 @keyframes wwBlink {
   0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
+}
+.wrong-way.show.rescue {
+  animation: wwRescuePulse 0.55s ease-in-out infinite alternate;
+  background: rgba(30, 136, 229, 0.92);
+  border-color: #fff176;
+  box-shadow: 0 6px 20px rgba(30,136,229,0.55), 0 0 24px rgba(255,241,118,0.55);
+}
+.wrong-way.rescue::before {
+  content: '🪝';
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  transform: translateX(-50%);
+  font-size: 24px;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
+  animation: wwHookBob 0.45s ease-in-out infinite alternate;
+}
+.wrong-way.rescue::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -16px;
+  width: 2px;
+  height: 16px;
+  background: rgba(255,255,255,0.92);
+  transform: translateX(-50%);
+}
+@keyframes wwRescuePulse {
+  0% { opacity: 0.88; transform: translate(-50%, -50%) scale(0.98); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+}
+@keyframes wwHookBob {
+  0% { transform: translateX(-50%) translateY(0); }
+  100% { transform: translateX(-50%) translateY(3px); }
 }
 
 /* ============= 追加: インクスプラッシュ (弱体化: 視界を奪いすぎない) ============= */

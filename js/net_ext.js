@@ -36,8 +36,10 @@ const NetExt = {
 
     // --- 公開API: sendChat ---
     Net.sendChat = (text) => {
+      const cleaned = String(text == null ? '' : text).trim().slice(0, 120);
+      if (!cleaned) return;
       const name = (Net.players.get(Net.myId) || {}).name || 'me';
-      const msg = { type: 'chat', from: Net.myId, name, text: String(text).slice(0, 120), t: Date.now() };
+      const msg = { type: 'chat', from: Net.myId, name, text: cleaned, t: Date.now() };
       if (Net.isHost) {
         Net._broadcast(msg, null);
         this._emitChat(msg);
@@ -86,7 +88,9 @@ const NetExt = {
       case 'pong': {
         const rtt = Date.now() - data.t;
         this.rttMap.set(data.from, rtt);
-        this.pingCallbacks.forEach(fn => fn(data.from, rtt));
+        this.pingCallbacks.forEach(fn => {
+          try { fn(data.from, rtt); } catch (_) {}
+        });
         return true;
       }
       case 'sysmsg': {

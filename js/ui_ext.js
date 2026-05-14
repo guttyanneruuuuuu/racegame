@@ -351,6 +351,14 @@ const UIExt = {
       mini:         { rarity: '中',  desc: '自分を小さく+ハンドリング上昇' },
       boomerang:    { rarity: 'レア', desc: '前方に飛び、戻ってくる飛び道具' },
       megaShield:   { rarity: '超レア', desc: '10秒間 周囲全員を弾き飛ばす' },
+      killer:       { rarity: '超レア', desc: '大砲に入り、4.5秒間 自動で爆速前進' },
+      teleport:     { rarity: 'レア', desc: '前方28mへ瞬間ワープ + 短い無敵' },
+      emp:          { rarity: 'レア', desc: '半径16m以内のHUDをジャム + 操作鈍化' },
+      decoy:        { rarity: '中',  desc: '停車中のクローンを残置。ロケットの囮' },
+      freeze:       { rarity: 'レア', desc: '周囲14mを1.4秒凍結 + 強減速' },
+      shockwave:    { rarity: 'レア', desc: '周囲10mを強烈に弾き飛ばす + 自分ブースト' },
+      swap:         { rarity: '超レア', desc: '前方の最も近いライバルと位置交換！' },
+      phaseShift:   { rarity: '超レア', desc: '2.5秒透過 + ブースト + 短無敵' },
     };
     for (const it of ItemSystem.ITEMS) {
       const d = ItemSystem.getDisplay(it);

@@ -3,6 +3,7 @@ const CarPhysics = {
   MAX_SPEED: 54,            // m/s (約195km/h)
   MAX_SPEED_BOOST: 88,
   MAX_SPEED_MINI: 68,       // ミニターボ時
+  KILLER_SPEED: 102,        // キラー中の最低巡航速度
   ACCEL: 38,                // 加速向上 (より楽しく)
   BRAKE: 58,
   REVERSE_ACCEL: 18,
@@ -26,7 +27,21 @@ const CarTypeStats = {
   accel:     { maxSpeed: 0.92, accel: 1.40, steer: 1.05, weight: 0.85, friction: 1.10 },
   handling:  { maxSpeed: 0.98, accel: 0.95, steer: 1.30, weight: 0.90, friction: 1.05 },
   heavy:     { maxSpeed: 1.08, accel: 0.78, steer: 0.78, weight: 1.50, friction: 0.90 },
+  // === 新規追加 ===
+  drift:     { maxSpeed: 1.02, accel: 0.92, steer: 1.18, weight: 0.92, friction: 0.78, driftBonus: 1.35 },  // ドリフト特化 (低摩擦 + ミニターボ強化)
+  stunt:     { maxSpeed: 1.00, accel: 1.10, steer: 1.10, weight: 0.80, friction: 1.00, airBonus: 1.30 },    // 空中ボーナス + 軽量で着地強い
+  offroad:   { maxSpeed: 0.95, accel: 1.05, steer: 1.00, weight: 1.20, friction: 1.20, offBonus: 1.50 },    // オフロード/ラフ路で減速少
+  turbo:     { maxSpeed: 1.10, accel: 1.20, steer: 0.92, weight: 0.95, friction: 0.92, boostBonus: 1.40 },  // ブースト効果増大
 };
+const LAP_CHECKPOINT_RATIOS = Object.freeze([0.25, 0.5, 0.75]);
+const WrongWayRescue = Object.freeze({
+  TRIGGER_TIME: 1.6,
+  EFFECT_DURATION: 1.2,
+  RESPAWN_PHASE: 0.55,
+  COOLDOWN_MS: 4000,
+  SPIN_TURNS: 4.5,
+  LIFT_HEIGHT: 3.2,
+});
 
 class Car {
   constructor(opts = {}) {
@@ -40,7 +55,7 @@ class Car {
 
     this.x = opts.x || 0;
     this.z = opts.z || 0;
-    this.y = 0;
+    this.y = (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z) : 0;
     this.vy = 0;
     this.airTime = 0;
     this.angle = opts.angle || 0;
@@ -60,8 +75,10 @@ class Car {
     this.slowTimer = 0;           // オイル等の減速デバフ
     this.slowMul = 1.0;
     this.confuseTimer = 0;        // 逆操作デバフ (墨)
+    this.inkScrambleTimer = 0;    // HUD/ミニマップスクランブル (新墨効果)
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
+    this.killerTimer = 0;         // キラー(自動高速走行)
 
     // コイン (1枚で+2%最高速, 上限10枚)
     this.coins = 0;
@@ -93,11 +110,18 @@ class Car {
     this.lapStartTime = 0;
     this.bestLap = Infinity;
     this.lastLap = 0;
+    this.lapCountReady = false;
+    this.lapCheckpointStep = 0;
+    this._lapCheckpointMarks = [];
+    this._lapCheckpointPathLen = 0;
     this.lastProgressTime = 0;
     this.maxProgress = 0;       // ハイウォーターマーク (逆走検知用)
     this.wrongWayTimer = 0;     // 逆走時間累積
     this.stuckTimer = 0;        // 停滞時間累積
     this.lastRespawnTime = 0;
+    this.wrongWayRescueTimer = 0;
+    this.wrongWayRescueDuration = WrongWayRescue.EFFECT_DURATION;
+    this.wrongWayRescueRespawned = false;
 
     this.lastWallHit = 0;        // 壁ヒット時刻
     this.consecutiveWallHits = 0; // 連続壁ヒット数
@@ -113,68 +137,70 @@ class Car {
   _buildMesh() {
     const group = new THREE.Group();
     const colorHex = parseInt(this.color.replace('#',''), 16);
+    this._baseCarMeshes = [];
+    const markBaseMesh = (m) => { this._baseCarMeshes.push(m); return m; };
 
     // ボディ（下）
-    const body = new THREE.Mesh(
+    const body = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.55, 3.4),
       new THREE.MeshLambertMaterial({ color: colorHex })
-    );
+    ));
     body.position.y = 0.5;
     body.castShadow = true;
     group.add(body);
     this._bodyMesh = body;
 
     // ボディ前部（テーパー）
-    const nose = new THREE.Mesh(
+    const nose = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.6, 0.4, 0.8),
       new THREE.MeshLambertMaterial({ color: colorHex })
-    );
+    ));
     nose.position.set(0, 0.45, 1.85);
     group.add(nose);
 
     // ボディ（上 - キャビン）
-    const cabin = new THREE.Mesh(
+    const cabin = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.35, 0.65, 1.7),
       new THREE.MeshLambertMaterial({ color: 0xfafafa })
-    );
+    ));
     cabin.position.set(0, 1.1, -0.15);
     cabin.castShadow = true;
     group.add(cabin);
 
     // フロントウィンドウ
-    const win = new THREE.Mesh(
+    const win = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.3, 0.5, 0.1),
       new THREE.MeshLambertMaterial({ color: 0x29384a })
-    );
+    ));
     win.position.set(0, 1.1, 0.75);
     group.add(win);
-    const winR = win.clone();
+    const winR = markBaseMesh(win.clone());
     winR.position.set(0, 1.1, -1.05);
     group.add(winR);
 
     // スポイラー
-    const spoiler = new THREE.Mesh(
+    const spoiler = markBaseMesh(new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.12, 0.4),
       new THREE.MeshLambertMaterial({ color: 0x222222 })
-    );
+    ));
     spoiler.position.set(0, 1.2, -1.65);
     group.add(spoiler);
-    const spStandL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15),
-      new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    const spStandL = markBaseMesh(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.15),
+      new THREE.MeshLambertMaterial({ color: 0x222222 })));
     spStandL.position.set(-0.7, 1.0, -1.55);
-    const spStandR = spStandL.clone(); spStandR.position.x = 0.7;
+    const spStandR = markBaseMesh(spStandL.clone()); spStandR.position.x = 0.7;
     group.add(spStandL, spStandR);
 
     // ヘッドライト
     const lightGeo = new THREE.BoxGeometry(0.32, 0.22, 0.1);
     const lightMat = new THREE.MeshBasicMaterial({ color: 0xfffae6 });
-    const hl1 = new THREE.Mesh(lightGeo, lightMat); hl1.position.set(-0.55, 0.52, 2.22); group.add(hl1);
-    const hl2 = new THREE.Mesh(lightGeo, lightMat); hl2.position.set( 0.55, 0.52, 2.22); group.add(hl2);
+    const hl1 = markBaseMesh(new THREE.Mesh(lightGeo, lightMat)); hl1.position.set(-0.55, 0.52, 2.22); group.add(hl1);
+    const hl2 = markBaseMesh(new THREE.Mesh(lightGeo, lightMat)); hl2.position.set( 0.55, 0.52, 2.22); group.add(hl2);
 
     // テールライト
     const tlMat = new THREE.MeshBasicMaterial({ color: 0xd32f2f });
-    const tl1 = new THREE.Mesh(lightGeo, tlMat); tl1.position.set(-0.55, 0.52, -1.78); group.add(tl1);
-    const tl2 = new THREE.Mesh(lightGeo, tlMat); tl2.position.set( 0.55, 0.52, -1.78); group.add(tl2);
+    const tl1 = markBaseMesh(new THREE.Mesh(lightGeo, tlMat)); tl1.position.set(-0.55, 0.52, -1.78); group.add(tl1);
+    const tl2 = markBaseMesh(new THREE.Mesh(lightGeo, tlMat)); tl2.position.set( 0.55, 0.52, -1.78); group.add(tl2);
 
     // タイヤ
     const tireGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.42, 14);
@@ -189,7 +215,7 @@ class Car {
     ];
     this.tires = [];
     tirePos.forEach(p => {
-      const tg = new THREE.Group();
+      const tg = markBaseMesh(new THREE.Group());
       const t = new THREE.Mesh(tireGeo, tireMat);
       t.rotation.z = Math.PI / 2;
       t.castShadow = true;
@@ -280,6 +306,42 @@ class Car {
     wingGrp.visible = false;
     group.add(wingGrp);
     this.gliderMesh = wingGrp;
+    this._baseCarMeshes.push(wingGrp);
+
+    // ===== キラー時の大砲モデル =====
+    const cannon = new THREE.Group();
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.65, 0.85, 4.2, 18),
+      new THREE.MeshLambertMaterial({ color: 0x212121, emissive: 0xffb300, emissiveIntensity: 0.22 })
+    );
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.y = 0.9;
+    cannon.add(barrel);
+    const muzzle = new THREE.Mesh(
+      new THREE.TorusGeometry(0.72, 0.1, 10, 22),
+      new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.85 })
+    );
+    muzzle.position.set(0, 0.9, 2.08);
+    cannon.add(muzzle);
+    const rear = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.95, 0.95, 0.9, 16),
+      new THREE.MeshLambertMaterial({ color: colorHex, emissive: 0x330000, emissiveIntensity: 0.35 })
+    );
+    rear.rotation.x = Math.PI / 2;
+    rear.position.set(0, 0.9, -2.0);
+    cannon.add(rear);
+    const trail = new THREE.Mesh(
+      new THREE.ConeGeometry(0.55, 1.7, 10),
+      new THREE.MeshBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.95 })
+    );
+    trail.rotation.x = -Math.PI / 2;
+    trail.position.set(0, 0.9, -3.0);
+    cannon.add(trail);
+    cannon.visible = false;
+    group.add(cannon);
+    this.killerCannonMesh = cannon;
+    this.killerTrailMesh = trail;
+    this.killerMuzzleMesh = muzzle;
 
     // ===== コインカウンター表示 (車の上に小さく) =====
     this.coinIcon = null;
@@ -291,26 +353,19 @@ class Car {
     const c = document.createElement('canvas');
     c.width = 256; c.height = 64;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    const r = 14;
-    ctx.beginPath();
-    ctx.moveTo(r, 0); ctx.lineTo(256 - r, 0); ctx.quadraticCurveTo(256, 0, 256, r);
-    ctx.lineTo(256, 64 - r); ctx.quadraticCurveTo(256, 64, 256 - r, 64);
-    ctx.lineTo(r, 64); ctx.quadraticCurveTo(0, 64, 0, 64 - r);
-    ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
-    ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.fillStyle = '#2b1d10';
-    ctx.font = 'bold 30px sans-serif';
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
+    ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.strokeText(name, 128, 33);
     ctx.fillText(name, 128, 33);
     const tex = new THREE.CanvasTexture(c);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
     const sp = new THREE.Sprite(mat);
-    sp.scale.set(3.2, 0.8, 1);
+    sp.scale.set(2.8, 0.65, 1);
     sp.renderOrder = 999;
     return sp;
   }
@@ -325,13 +380,63 @@ class Car {
     this.mesh.add(this.nameSprite);
   }
 
+  _groundHeight(hintIdx = this.lastProgressIdx) {
+    return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx, this.y) : 0;
+  }
+
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
     this.wallImpactStrength = 0;
+    if (this.wrongWayRescueTimer > 0) {
+      this.wrongWayRescueTimer = Math.max(0, this.wrongWayRescueTimer - dt);
+      const respawnRemain = this.wrongWayRescueDuration * (1 - WrongWayRescue.RESPAWN_PHASE);
+      if (!this.wrongWayRescueRespawned && this.wrongWayRescueTimer <= respawnRemain) {
+        this.respawn({ preserveWrongWayRescue: true });
+        this.wrongWayRescueRespawned = true;
+      }
+      if (this.wrongWayRescueTimer <= 0) {
+        this.wrongWayRescueRespawned = false;
+      }
+      this.speed = 0;
+      this.vy = 0;
+      this._tickEffects(dt);
+      return;
+    }
     // ロック中(雷など)
     if (this.lockedTimer > 0) {
       this.lockedTimer -= dt;
       steer = 0; accel = false; brake = false;
+    }
+    const killerActive = this.killerTimer > 0;
+    if (killerActive) {
+      this.killerTimer = Math.max(0, this.killerTimer - dt);
+      // キラー中は操作不能 + 自動操舵
+      accel = true;
+      brake = false;
+      this.lockedTimer = 0;
+      this.spinTimer = 0;
+      this.confuseTimer = 0;
+      this.slowTimer = 0;
+      this.slowMul = 1.0;
+      this.driftActive = false;
+      this.driftCharge = 0;
+      this.invincibleTimer = Math.max(this.invincibleTimer, 0.25);
+      this.boostTimer = Math.max(this.boostTimer, 0.2);
+      let idx = this.lastProgressIdx;
+      if (window.Track && Track.getProgress) {
+        const p = Track.getProgress(this.x, this.z, this.lastProgressIdx, this.y);
+        if (p && Number.isFinite(p.index)) idx = p.index;
+      }
+      const n = Track.pathPoints.length;
+      if (n > 2) {
+        const tgt = Track.pathPoints[(idx + 6) % n];
+        const targetAng = Math.atan2(tgt.x - this.x, tgt.z - this.z);
+        const diff = Utils.angDiff(targetAng, this.angle);
+        steer = Utils.clamp(diff * 2.0, -1, 1);
+      } else {
+        steer = 0;
+      }
+      this.speed = Math.max(this.speed, CarPhysics.KILLER_SPEED * 0.96);
     }
     // スピン中
     if (this.spinTimer > 0) {
@@ -370,10 +475,11 @@ class Car {
       if (Math.abs(this.speed) < 0.2) this.speed = 0;
     }
 
-    // コース外摩擦
-    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx)) {
+    // コース外摩擦 (オフロード車種は減速ペナルティを軽減)
+    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx, this.y)) {
       const sign = Math.sign(this.speed);
-      this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt;
+      const offMul = this.stats.offBonus ? (1 / this.stats.offBonus) : 1;
+      this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt * offMul;
     }
 
     // スロー(オイル)デバフ
@@ -388,10 +494,14 @@ class Car {
     let maxSp = CarPhysics.MAX_SPEED;
     if (this.boostTimer > 0) maxSp = CarPhysics.MAX_SPEED_BOOST;
     else if (this.miniTurboTimer > 0) maxSp = CarPhysics.MAX_SPEED_MINI;
+    if (killerActive) maxSp = Math.max(maxSp, CarPhysics.KILLER_SPEED);
     // コインボーナス: 1枚で+2% (最大10枚 = +20%) + 車種別 maxSpeed 倍率
     const coinMul = 1 + Math.min(10, this.coins) * 0.02;
     maxSp *= coinMul * (this.stats.maxSpeed || 1);
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
+    if (killerActive) {
+      this.speed = Math.max(this.speed, Math.min(maxSp, CarPhysics.KILLER_SPEED * 0.96));
+    }
 
     // === ドリフト処理 ===
     // ブレーキ + 移動中 + ある程度の速度 = ドリフト発動
@@ -407,8 +517,9 @@ class Car {
       } else if (!brake) {
         this._releaseDrift();
       } else {
-        // ドリフト中はチャージ蓄積
-        this.driftCharge = Math.min(3, this.driftCharge + dt * (0.85 + Math.abs(steer) * 0.6));
+        // ドリフト中はチャージ蓄積 (ドリフター車種はチャージ率増加)
+        const dBonus = this.stats.driftBonus || 1.0;
+        this.driftCharge = Math.min(3, this.driftCharge + dt * (0.85 + Math.abs(steer) * 0.6) * dBonus);
       }
     }
 
@@ -430,10 +541,12 @@ class Car {
 
     this._tickEffects(dt);
 
+    const groundY = this._groundHeight();
+
     // 重力 & ジャンプ
-    if (this.y > 0 || this.vy > 0) {
+    if (this.y > groundY || this.vy > 0) {
       // 空中で一定以上の高さがあり、かつ落下中ならグライダーを自動展開
-      if (this.y > 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
+      if (this.y > groundY + 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
         this.deployGlider(3.0);
       }
       // グライダー有効中は重力が弱く前進推進が付く
@@ -448,15 +561,17 @@ class Car {
         this.gliderTimer -= dt;
         this.speed = Math.min(this.speed + 14 * dt, CarPhysics.MAX_SPEED * 1.05);
       }
-      if (this.y <= 0) {
-        this.y = 0; this.vy = 0;
+      if (this.y <= groundY) {
+        this.y = groundY; this.vy = 0;
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
+        // スタント車種は空中ボーナス増加
+        const airBonus = this.stats.airBonus || 1.0;
         if (this.airTime > 0.5 && !this.driftActive) {
-          this.applyMiniTurbo(0.5 + Math.min(0.8, this.airTime * 0.35));
+          this.applyMiniTurbo((0.5 + Math.min(0.8, this.airTime * 0.35)) * airBonus);
         }
         // 長時間滞空時のグライダーボーナス
         if (this.glider && this.airTime > 1.5) {
-          this.applyBoost(0.8);
+          this.applyBoost(0.8 * airBonus);
           if (this.isLocal && typeof showToast === 'function') showToast('🪂 GLIDE BOOST!', 800);
         }
         this.glider = false;
@@ -465,6 +580,7 @@ class Car {
       }
     } else {
       // 地上ではグライダー解除
+      this.y = groundY;
       if (this.glider) {
         this.glider = false;
         this.gliderTimer = 0;
@@ -474,7 +590,7 @@ class Car {
     this._integratePos(dt);
 
     // 空中時は壁チェックを緩和
-    if (this.y > 0.3) {
+    if (this.y > groundY + 0.3) {
       return;
     }
 
@@ -483,10 +599,10 @@ class Car {
     let wr = this._pendingWallHit;
     this._pendingWallHit = null;
     if (!wr || !wr.hit) {
-      wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+      wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
     } else {
       // 念のためもう一度押し戻し (まだめり込んでいる可能性)
-      const wr2 = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+      const wr2 = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
       if (wr2.hit) { this.x = wr2.x; this.z = wr2.z; }
     }
     if (wr.hit) {
@@ -571,6 +687,7 @@ class Car {
     if (this.squishTimer > 0) this.squishTimer -= dt;
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
     if (this.ghostTimer > 0) this.ghostTimer -= dt;
+    if (this.inkScrambleTimer > 0) this.inkScrambleTimer -= dt;
     // 巻き戻しバッファに状態を保存 (ローカルのみで十分だが全車保存しても軽量)
     this._recordRewindSnapshot(dt);
   }
@@ -606,7 +723,7 @@ class Car {
     this.speed = Math.max(snap.speed * 0.7, 8); // 少し落とす (連打防止)
     this.lastProgressIdx = snap.lastProgressIdx;
     // 状態リセット (悪い状態から逃れるため)
-    this.spinTimer = 0; this.confuseTimer = 0; this.slowTimer = 0;
+    this.spinTimer = 0; this.confuseTimer = 0; this.slowTimer = 0; this.inkScrambleTimer = 0;
     this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
     this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
     this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
@@ -646,14 +763,15 @@ class Car {
     // サブステップに分割しつつ壁チェックを挟む
     const moveLen = Math.hypot(dx, dz);
     const maxStep = CarPhysics.RADIUS * 0.55; // 半径の半分以下のステップで壁を確実に検出
-    if (this.y <= 0.3 && moveLen > maxStep) {
+    const groundY = this._groundHeight();
+    if (this.y <= groundY + 0.3 && moveLen > maxStep) {
       const n = Math.min(6, Math.ceil(moveLen / maxStep));
       const stepX = dx / n, stepZ = dz / n;
       for (let i = 0; i < n; i++) {
         this.x += stepX;
         this.z += stepZ;
         // サブステップごとに壁にめり込んだら押し戻す
-        const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+        const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
         if (wr.hit) {
           this.x = wr.x; this.z = wr.z;
           this._pendingWallHit = wr;
@@ -669,23 +787,42 @@ class Car {
 
   // メッシュ更新
   updateMesh() {
-    this.mesh.position.set(this.x, this.y, this.z);
-    this.mesh.rotation.y = this.angle;
-    // ロール(ステアに応じて少し傾ける)
-    let rollExtra = 0;
-    if (this.driftActive) rollExtra = -this.driftDir * 0.18;
-    this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
-    // 空中時はピッチ
-    if (this.y > 0.05) {
-      const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
-      this.mesh.rotation.x = pitchAmt;
+    const killerActive = this.killerTimer > 0;
+    const now = performance.now();
+    const rescueActive = this.wrongWayRescueTimer > 0;
+    const rescueProgress = rescueActive
+      ? Utils.clamp(1 - (this.wrongWayRescueTimer / this.wrongWayRescueDuration), 0, 1)
+      : 0;
+    const rescueLift = rescueActive
+      ? Math.sin(rescueProgress * Math.PI) * WrongWayRescue.LIFT_HEIGHT
+      : 0;
+
+    this.mesh.position.set(this.x, this.y + rescueLift, this.z);
+    if (rescueActive) {
+      this.mesh.rotation.y = this.angle + rescueProgress * Math.PI * 2 * WrongWayRescue.SPIN_TURNS;
+      this.mesh.rotation.z = Math.sin(rescueProgress * Math.PI * 4) * 0.16;
+      this.mesh.rotation.x = Math.cos(rescueProgress * Math.PI * 2) * 0.06;
     } else {
-      this.mesh.rotation.x = 0;
+      this.mesh.rotation.y = this.angle;
+      // ロール(ステアに応じて少し傾ける)
+      let rollExtra = 0;
+      if (this.driftActive) rollExtra = -this.driftDir * 0.18;
+      this.mesh.rotation.z = -this.steerAngle * 0.18 * Math.min(1, Math.abs(this.speed) / 30) + rollExtra;
+      // 空中時はピッチ
+      if (this.y > this._groundHeight() + 0.05) {
+        const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
+        this.mesh.rotation.x = pitchAmt;
+      } else {
+        this.mesh.rotation.x = 0;
+      }
     }
 
     // 壁ヒット時に赤フラッシュ
     if (this._bodyMesh) {
-      if (this.wallHitFlash > 0) {
+      if (killerActive) {
+        this._bodyMesh.material.emissive = new THREE.Color(0.2, 0.1, 0);
+        this._bodyMesh.material.emissiveIntensity = 0.35;
+      } else if (this.wallHitFlash > 0) {
         const intensity = this.wallHitFlash / 0.28;
         this._bodyMesh.material.emissive = new THREE.Color(intensity * 0.85, 0, 0);
         this._bodyMesh.material.emissiveIntensity = intensity;
@@ -733,7 +870,7 @@ class Car {
     // 炎エフェクト (ブースト/ミニターボ時)
     const boostShow = this.boostTimer > 0;
     const miniShow = this.miniTurboTimer > 0;
-    const showFlame = boostShow || miniShow;
+    const showFlame = (boostShow || miniShow) && !killerActive;
     for (const f of this.flames) {
       f.visible = showFlame;
       if (showFlame) {
@@ -749,11 +886,11 @@ class Car {
 
     // グライダー翼の表示
     if (this.gliderMesh) {
-      const showG = this.glider && this.gliderTimer > 0 && this.y > 0.5;
+      const showG = !killerActive && this.glider && this.gliderTimer > 0 && this.y > this._groundHeight() + 0.5;
       this.gliderMesh.visible = showG;
       if (showG) {
         // 軽く揺れる
-        this.gliderMesh.rotation.x = Math.sin(performance.now() * 0.006) * 0.08;
+        this.gliderMesh.rotation.x = Math.sin(now * 0.006) * 0.08;
       }
     }
     if (this.coinFlashTimer > 0) this.coinFlashTimer -= 0.016;
@@ -763,11 +900,40 @@ class Car {
     if (this.shieldMesh.visible) {
       this.shieldMesh.rotation.y += 0.08;
       this.shieldMesh.rotation.x += 0.03;
-      this.shieldMesh.material.opacity = 0.25 + Math.sin(performance.now() * 0.01) * 0.1;
+      this.shieldMesh.material.opacity = 0.25 + Math.sin(now * 0.01) * 0.1;
     }
 
     this._updateSmoke();
     this._updateSparks();
+
+    if (this._baseCarMeshes) {
+      for (const m of this._baseCarMeshes) {
+        if (m === this.gliderMesh) continue;
+        m.visible = !killerActive;
+      }
+    }
+    if (this.killerCannonMesh) {
+      this.killerCannonMesh.visible = killerActive;
+      if (killerActive) {
+        const t = now * 0.01;
+        this.killerCannonMesh.position.y = Math.sin(t) * 0.08;
+        this.killerCannonMesh.rotation.z = Math.sin(t * 0.45) * 0.03;
+        this.killerCannonMesh.scale.set(1.02 + Math.sin(t * 0.7) * 0.03, 1, 1.02);
+        if (this.killerTrailMesh) {
+          const sx = 1 + (Math.sin(t * 4.0) * 0.5 + 0.5) * 0.28;
+          const sy = 1 + (Math.sin(t * 5.8 + 1.2) * 0.5 + 0.5) * 0.18;
+          this.killerTrailMesh.scale.set(sx, sy, 1);
+          this.killerTrailMesh.material.opacity = 0.7 + (Math.sin(t * 6.2 + 0.8) * 0.5 + 0.5) * 0.3;
+        }
+        if (this.killerMuzzleMesh) {
+          this.killerMuzzleMesh.material.opacity = 0.5 + Math.sin(t * 1.3) * 0.25;
+        }
+      } else {
+        this.killerCannonMesh.position.y = 0;
+        this.killerCannonMesh.rotation.z = 0;
+        this.killerCannonMesh.scale.set(1, 1, 1);
+      }
+    }
   }
 
   _updateSmoke() {
@@ -839,12 +1005,49 @@ class Car {
   // 進行状況更新 → ラップ判定 + 逆走/スタック検知
   updateProgress(now) {
     if (this.finished) return;
-    const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
+    const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx, this.y);
     const n = Track.pathPoints.length;
+    if (this._lapCheckpointPathLen !== n) {
+      const marks = LAP_CHECKPOINT_RATIOS
+        .map(r => Math.floor(n * r))
+        // スタート/ゴール線(0近傍)は周回判定と重なるため、チェックポイント対象から除外
+        .filter((idx) => idx > 0 && idx < n);
+      this._lapCheckpointMarks = [...new Set(marks)].sort((a, b) => a - b);
+      this._lapCheckpointPathLen = n;
+      this.lapCheckpointStep = 0;
+    }
+    if (!this.lapCountReady && prog.index > n * 0.2 && prog.index < n * 0.8) {
+      this.lapCountReady = true;
+    }
+
+    const from = this.lastProgressIdx;
+    const to = prog.index;
+    const forwardStep = (to - from + n) % n;
+    const backwardStep = (from - to + n) % n;
+    const movedForward = forwardStep <= backwardStep;
+    const didCrossMarker = (start, end, mark) => {
+      if (start === end) return false;
+      if (start < end) return start < mark && mark <= end;
+      return mark > start || mark <= end;
+    };
+    if (movedForward && this.lapCheckpointStep < this._lapCheckpointMarks.length) {
+      while (
+        this.lapCheckpointStep < this._lapCheckpointMarks.length &&
+        didCrossMarker(from, to, this._lapCheckpointMarks[this.lapCheckpointStep])
+      ) {
+        this.lapCheckpointStep++;
+      }
+    }
 
     // ラップ判定 (前→後 越境) - コース大型化に伴い境界をやや緩く
-    if (this.lastProgressIdx > n * 0.75 && prog.index < n * 0.15) {
+    if (
+      this.lapCountReady &&
+      this.lapCheckpointStep >= this._lapCheckpointMarks.length &&
+      this.lastProgressIdx > n * 0.75 &&
+      prog.index < n * 0.15
+    ) {
       this.lap++;
+      this.lapCheckpointStep = 0;
       const lapMs = now - this.lapStartTime;
       this.lastLap = lapMs;
       if (lapMs > 2000) this.bestLap = Math.min(this.bestLap, lapMs);
@@ -859,19 +1062,49 @@ class Car {
       }
     } else if (this.lastProgressIdx < n * 0.15 && prog.index > n * 0.75) {
       if (this.lap > 0) this.lap--;
+      this.lapCheckpointStep = 0;
     }
     this.lastProgressIdx = prog.index;
     this.totalProgress = this.lap * Track.pathLength + prog.totalDist;
 
-    // 逆走検知 (進行度が一定期間落ち続けた場合)
-    if (this.totalProgress > this.maxProgress) {
-      this.maxProgress = this.totalProgress;
-      this.wrongWayTimer = 0;
-    } else if (this.totalProgress < this.maxProgress - 8) {
-      // 後退している
-      this.wrongWayTimer += 0.016;
+    // 逆走検知 (進行度の揺れではなく「車速 + 向き」で判定)
+    if (this.totalProgress > this.maxProgress) this.maxProgress = this.totalProgress;
+    const TRACK_POINT_OFFSET = 2;
+    const REVERSE_SPEED_THRESHOLD = -2;
+    const FORWARD_SPEED_THRESHOLD = 4;
+    const WRONG_WAY_HEADING_THRESHOLD = -0.35;
+    const WRONG_WAY_DECAY_RATE = 1.2;
+    const dtSec = this.lastProgressTime > 0
+      ? Utils.clamp((now - this.lastProgressTime) / 1000, 0.001, 0.05)
+      : 0.016;
+    this.lastProgressTime = now;
+
+    let headingDot = 1;
+    if (n > 2) {
+      const prev = Track.pathPoints[(prog.index - TRACK_POINT_OFFSET + n) % n];
+      const next = Track.pathPoints[(prog.index + TRACK_POINT_OFFSET) % n];
+      const tx = next.x - prev.x;
+      const tz = next.z - prev.z;
+      const tLen = Math.hypot(tx, tz) || 1;
+      const ux = tx / tLen;
+      const uz = tz / tLen;
+      const fx = Math.sin(this.angle);
+      const fz = Math.cos(this.angle);
+      headingDot = fx * ux + fz * uz;
+    }
+    const goingBackwardBySpeed = this.speed < REVERSE_SPEED_THRESHOLD;
+    const goingBackwardByHeading = this.speed > FORWARD_SPEED_THRESHOLD && headingDot < WRONG_WAY_HEADING_THRESHOLD;
+    if (goingBackwardBySpeed || goingBackwardByHeading) {
+      this.wrongWayTimer += dtSec;
     } else {
-      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - 0.01);
+      this.wrongWayTimer = Math.max(0, this.wrongWayTimer - dtSec * WRONG_WAY_DECAY_RATE);
+    }
+    if (
+      this.wrongWayTimer > WrongWayRescue.TRIGGER_TIME &&
+      this.wrongWayRescueTimer <= 0 &&
+      now - this.lastRespawnTime > WrongWayRescue.COOLDOWN_MS
+    ) {
+      this._startWrongWayRescue();
     }
 
     // スタック検知 (動いてないのに時間経過)
@@ -887,13 +1120,13 @@ class Car {
   }
 
   // 路上の中央へ復活 (進行方向を向ける)
-  respawn() {
+  respawn(opts = {}) {
     const idx = this.lastProgressIdx;
     const p = Track.pathPoints[idx];
     const next = Track.pathPoints[(idx + 2) % Track.pathPoints.length];
     this.x = p.x;
     this.z = p.z;
-    this.y = 0;
+    this.y = this._groundHeight(idx);
     this.vy = 0;
     this.speed = 0;
     this.angle = Math.atan2(next.x - p.x, next.z - p.z);
@@ -903,33 +1136,60 @@ class Car {
     this.wrongWayTimer = 0;
     this.consecutiveWallHits = 0;
     this.lastRespawnTime = performance.now();
+    if (!opts.preserveWrongWayRescue) {
+      this.wrongWayRescueTimer = 0;
+      this.wrongWayRescueRespawned = false;
+    }
     this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
   }
 
+  _startWrongWayRescue() {
+    this.wrongWayRescueTimer = this.wrongWayRescueDuration;
+    this.wrongWayRescueRespawned = false;
+    this.speed = 0;
+    this.vy = 0;
+    this.driftActive = false;
+    this.driftCharge = 0;
+    this.stuckTimer = 0;
+    if (this.isLocal && typeof showToast === 'function') {
+      showToast('🛟 逆走補正中…', 900);
+    }
+  }
+
   initProgress() {
-    const prog = Track.getProgress(this.x, this.z);
+    const prog = Track.getProgress(this.x, this.z, -1, this.y);
     this.lastProgressIdx = prog.index;
     this.totalProgress = 0;
     this.lap = 0;
+    this.lapCountReady = false;
+    this.lapCheckpointStep = 0;
+    this._lapCheckpointMarks = [];
+    this._lapCheckpointPathLen = 0;
     this.maxProgress = 0;
     this.lastProgressTime = performance.now();
     this.stuckTimer = 0;
     this.wrongWayTimer = 0;
+    this.wrongWayRescueTimer = 0;
+    this.wrongWayRescueRespawned = false;
   }
 
   applyBoost(seconds = 2.5) {
-    this.boostTimer = Math.max(this.boostTimer, seconds);
+    // ターボ車種はブースト時間が伸びる
+    const bMul = this.stats.boostBonus || 1.0;
+    this.boostTimer = Math.max(this.boostTimer, seconds * bMul);
     this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED * 1.05);
   }
   applyMiniTurbo(seconds = 0.7) {
-    this.miniTurboTimer = Math.max(this.miniTurboTimer, seconds);
+    const bMul = this.stats.boostBonus || 1.0;
+    this.miniTurboTimer = Math.max(this.miniTurboTimer, seconds * bMul);
     this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_MINI * 0.92);
   }
 
   applyJump(power = 12) {
-    if (this.y <= 0.1) {
+    const groundY = this._groundHeight();
+    if (this.y <= groundY + 0.1) {
       this.vy = power;
-      this.y = 0.1;
+      this.y = groundY + 0.1;
     }
   }
 
@@ -949,14 +1209,14 @@ class Car {
   }
 
   hitBanana() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.spinTimer = 1.2;
     this.driftActive = false; this.driftCharge = 0;
     this.dropCoins(2);
     return true;
   }
   hitRocket() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 1.6;
     this.lockedTimer = 1.6;
     this.speed = 0;
@@ -964,31 +1224,34 @@ class Car {
     return true;
   }
   hitLightning() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 2.0;
     this.lockedTimer = 1.0;
     this.speed *= 0.3;
     return true;
   }
   hitOilSplash() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.spinTimer = Math.max(this.spinTimer, 0.6);
     this.applySlow(2.5, 0.5);
     return true;
   }
   hitInkSplash() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
-    // 弱体化: 4.0秒 → 1.8秒, 操作反転はやめ"舵が鈍る"程度に
-    this.applyConfuse(1.8);
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
+    // 新仕様: 操作妨害ではなく『HUD/ミニマップを乱す』効果に変更
+    // - confuseTimer は短めに残す (僅かな操作鈍化はキャラ的演出)
+    // - inkScrambleTimer でミニマップ/順位/スピード表示をスクランブル
+    this.applyConfuse(0.6);
+    this.inkScrambleTimer = Math.max(this.inkScrambleTimer || 0, 4.5);
     return true;
   }
   hitMine() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 1.4;
     this.lockedTimer = 1.0;
     this.speed = 0;
     this.vy = 8;
-    this.y = 0.1;
+    this.y = this._groundHeight() + 0.1;
     this.dropCoins(3);
     return true;
   }
@@ -998,6 +1261,20 @@ class Car {
 
   giveShield(seconds = 5) {
     this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
+  }
+
+  activateKiller(seconds = 4.5) {
+    this.killerTimer = Math.max(this.killerTimer, seconds);
+    this.boostTimer = Math.max(this.boostTimer, seconds);
+    this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
+    this.lockedTimer = 0;
+    this.spinTimer = 0;
+    this.confuseTimer = 0;
+    this.slowTimer = 0;
+    this.slowMul = 1.0;
+    this.driftActive = false;
+    this.driftCharge = 0;
+    this.speed = Math.max(this.speed, CarPhysics.KILLER_SPEED * 0.96);
   }
 
   // コイン取得 (上限10枚)

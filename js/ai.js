@@ -100,6 +100,22 @@ const AIDriver = {
       else if (itm === 'decoy') {
         use = this._threatBehind(car, allCars) || Math.random() < 0.3;
       }
+      // フリーズ: 周囲に複数の敵がいる時 (範囲攻撃)
+      else if (itm === 'freeze') {
+        use = this._enemiesNearby(car, allCars, 14) >= 1 || Math.random() < 0.35;
+      }
+      // ショックウェーブ: 至近の敵を弾く (混戦時)
+      else if (itm === 'shockwave') {
+        use = this._enemiesNearby(car, allCars, 10) >= 1 || this._threatBehind(car, allCars) || Math.random() < 0.3;
+      }
+      // スワップ: 前にライバルがいる時 (順位逆転)
+      else if (itm === 'swap') {
+        use = this._hasRivalAhead(car, allCars) || Math.random() < 0.25;
+      }
+      // フェーズシフト: 後ろから狙われている or 接近時に脱出用
+      else if (itm === 'phaseShift') {
+        use = this._threatBehind(car, allCars) || this._enemiesNearby(car, allCars, 8) >= 1 || Math.random() < 0.4;
+      }
       if (use) {
         Game.useItem(car, allCars);
         st.itemCooldown = 2.5 + Math.random() * 2.5;

@@ -27,6 +27,11 @@ const CarTypeStats = {
   accel:     { maxSpeed: 0.92, accel: 1.40, steer: 1.05, weight: 0.85, friction: 1.10 },
   handling:  { maxSpeed: 0.98, accel: 0.95, steer: 1.30, weight: 0.90, friction: 1.05 },
   heavy:     { maxSpeed: 1.08, accel: 0.78, steer: 0.78, weight: 1.50, friction: 0.90 },
+  // === 新規追加 ===
+  drift:     { maxSpeed: 1.02, accel: 0.92, steer: 1.18, weight: 0.92, friction: 0.78, driftBonus: 1.35 },  // ドリフト特化 (低摩擦 + ミニターボ強化)
+  stunt:     { maxSpeed: 1.00, accel: 1.10, steer: 1.10, weight: 0.80, friction: 1.00, airBonus: 1.30 },    // 空中ボーナス + 軽量で着地強い
+  offroad:   { maxSpeed: 0.95, accel: 1.05, steer: 1.00, weight: 1.20, friction: 1.20, offBonus: 1.50 },    // オフロード/ラフ路で減速少
+  turbo:     { maxSpeed: 1.10, accel: 1.20, steer: 0.92, weight: 0.95, friction: 0.92, boostBonus: 1.40 },  // ブースト効果増大
 };
 const LAP_CHECKPOINT_RATIOS = Object.freeze([0.25, 0.5, 0.75]);
 const WrongWayRescue = Object.freeze({
@@ -470,10 +475,11 @@ class Car {
       if (Math.abs(this.speed) < 0.2) this.speed = 0;
     }
 
-    // コース外摩擦
+    // コース外摩擦 (オフロード車種は減速ペナルティを軽減)
     if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx, this.y)) {
       const sign = Math.sign(this.speed);
-      this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt;
+      const offMul = this.stats.offBonus ? (1 / this.stats.offBonus) : 1;
+      this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt * offMul;
     }
 
     // スロー(オイル)デバフ
@@ -511,8 +517,9 @@ class Car {
       } else if (!brake) {
         this._releaseDrift();
       } else {
-        // ドリフト中はチャージ蓄積
-        this.driftCharge = Math.min(3, this.driftCharge + dt * (0.85 + Math.abs(steer) * 0.6));
+        // ドリフト中はチャージ蓄積 (ドリフター車種はチャージ率増加)
+        const dBonus = this.stats.driftBonus || 1.0;
+        this.driftCharge = Math.min(3, this.driftCharge + dt * (0.85 + Math.abs(steer) * 0.6) * dBonus);
       }
     }
 
@@ -557,12 +564,14 @@ class Car {
       if (this.y <= groundY) {
         this.y = groundY; this.vy = 0;
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
+        // スタント車種は空中ボーナス増加
+        const airBonus = this.stats.airBonus || 1.0;
         if (this.airTime > 0.5 && !this.driftActive) {
-          this.applyMiniTurbo(0.5 + Math.min(0.8, this.airTime * 0.35));
+          this.applyMiniTurbo((0.5 + Math.min(0.8, this.airTime * 0.35)) * airBonus);
         }
         // 長時間滞空時のグライダーボーナス
         if (this.glider && this.airTime > 1.5) {
-          this.applyBoost(0.8);
+          this.applyBoost(0.8 * airBonus);
           if (this.isLocal && typeof showToast === 'function') showToast('🪂 GLIDE BOOST!', 800);
         }
         this.glider = false;
@@ -1165,11 +1174,14 @@ class Car {
   }
 
   applyBoost(seconds = 2.5) {
-    this.boostTimer = Math.max(this.boostTimer, seconds);
+    // ターボ車種はブースト時間が伸びる
+    const bMul = this.stats.boostBonus || 1.0;
+    this.boostTimer = Math.max(this.boostTimer, seconds * bMul);
     this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED * 1.05);
   }
   applyMiniTurbo(seconds = 0.7) {
-    this.miniTurboTimer = Math.max(this.miniTurboTimer, seconds);
+    const bMul = this.stats.boostBonus || 1.0;
+    this.miniTurboTimer = Math.max(this.miniTurboTimer, seconds * bMul);
     this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_MINI * 0.92);
   }
 

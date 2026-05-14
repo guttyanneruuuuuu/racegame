@@ -773,7 +773,8 @@ window.createTrackVolcano = function () {
 
   _buildBoostPads() {
     const n = this.pathPoints.length;
-    const positions = [0.08, 0.22, 0.38, 0.54, 0.68, 0.84];
+    // ブーストパッドを増設 (6 → 10) + ストレート区間を意識した配置
+    const positions = [0.06, 0.16, 0.22, 0.35, 0.42, 0.54, 0.62, 0.72, 0.84, 0.92];
     const padTex = this._makeBoostPadTexture();
     const padGeo = new THREE.PlaneGeometry(6, 8);
     const arrowGeo = new THREE.ConeGeometry(2.0, 0.4, 4);
@@ -847,7 +848,8 @@ window.createTrackVolcano = function () {
   // ===== 💨 間欠泉ジャンプ台 =====
   _buildJumpPads() {
     const n = this.pathPoints.length;
-    const positions = [0.18, 0.44, 0.66, 0.90];
+    // ジャンプ台を増設 (4 → 6) で空中アクションを増加
+    const positions = [0.13, 0.26, 0.44, 0.58, 0.74, 0.90];
     const padTex = this._makeGeyserPadTexture();
 
     const ringGeo = new THREE.CylinderGeometry(3.2, 3.6, 0.5, 10);
@@ -1031,20 +1033,24 @@ window.createTrackVolcano = function () {
 
   _buildLavaPools() {
     const n = this.pathPoints.length;
-    const positions = [0.30, 0.50, 0.76];
+    // 溶岩プールを増設 (3 → 5)。位置はジャンプ台/ブーストパッドと重ならないように調整
+    const positions = [0.20, 0.32, 0.48, 0.66, 0.80];
     const lavaTex = this._makeLavaTexture();
     const lavaMat = new THREE.MeshBasicMaterial({ map: lavaTex });
     const lavaGeo = new THREE.CircleGeometry(2.4, 10);
     const glowGeo = new THREE.RingGeometry(2.4, 3.0, 12);
     const glowMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
 
+    // 既存の重なりバグ防止: 位置をパスインデックスで決定的に左右配分する
+    let toggle = 0;
     for (const t of positions) {
       const idx = Math.floor(t * n);
       const cur = this.pathPoints[idx];
       const { nx, nz } = this._segNorm[idx];
       const py = this._getTrackY(idx);
       const w = this.widthAt(idx);
-      const off = (Math.random() < 0.5 ? -1 : 1) * w * 0.55;
+      // 左右交互に配置 (Math.random は決定論的でないため壁/パッド重なりが偶発する問題を回避)
+      const off = (toggle++ % 2 === 0 ? -1 : 1) * w * 0.55;
       const px = cur.x + nx * off;
       const pz = cur.z + nz * off;
 
@@ -1062,6 +1068,8 @@ window.createTrackVolcano = function () {
         mesh: m, glow, x: px, z: pz, y: py, radius: 2.6,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
+        // 周期的に明滅 (脈動) してプレイヤーに事前警告
+        _pulsePhase: Math.random() * Math.PI * 2,
       });
     }
   },

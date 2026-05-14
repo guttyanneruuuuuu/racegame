@@ -54,6 +54,7 @@ const GameExt = {
       if (this.fogTimer > 0) this.fogTimer = Math.max(0, this.fogTimer - dt);
       if (this.miniSizeTimer > 0) this.miniSizeTimer = Math.max(0, this.miniSizeTimer - dt);
       if (this.megaShieldTimer > 0) this.megaShieldTimer = Math.max(0, this.megaShieldTimer - dt);
+      if (this.freezeTimer > 0) this.freezeTimer = Math.max(0, this.freezeTimer - dt);
 
       origUpdateMesh.call(this);
 
@@ -61,6 +62,24 @@ const GameExt = {
       if (this.miniSizeTimer > 0) {
         const s = 0.55;
         this.mesh.scale.set(s, s, s);
+      }
+
+      // フリーズ視覚: 青っぽい色合いとアイス感のため、bodyを覆う氷オーラを表示
+      if (this.freezeTimer > 0) {
+        if (!this._iceAura) {
+          const g = new THREE.SphereGeometry(1.6, 8, 6);
+          const m = new THREE.MeshBasicMaterial({
+            color: 0x81D4FA, transparent: true, opacity: 0.45, wireframe: true, depthWrite: false,
+          });
+          this._iceAura = new THREE.Mesh(g, m);
+          this._iceAura.position.y = 0.9;
+          this.mesh.add(this._iceAura);
+        }
+        this._iceAura.visible = true;
+        this._iceAura.rotation.y += 0.03;
+        this._iceAura.material.opacity = 0.35 + Math.abs(Math.sin(performance.now() * 0.006)) * 0.25;
+      } else if (this._iceAura) {
+        this._iceAura.visible = false;
       }
 
       // メガシールドのオーラ色

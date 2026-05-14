@@ -133,7 +133,7 @@ const Game = {
       const pos = positions[i];
       let cType = p.carType;
       if (!cType && p.isAI) {
-        const types = ['balanced', 'speed', 'accel', 'handling', 'heavy'];
+        const types = ['balanced', 'speed', 'accel', 'handling', 'heavy', 'drift', 'stunt', 'offroad', 'turbo'];
         cType = types[Math.floor(Math.random() * types.length)];
       }
       const car = new Car({

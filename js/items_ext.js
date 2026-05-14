@@ -10,7 +10,8 @@ const ItemExt = {
     this.installed = true;
 
     // 既存配列に追加
-    const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer'];
+    const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer',
+                      'freeze', 'shockwave', 'swap', 'phaseShift'];
     for (const it of newItems) {
       if (!ItemSystem.ITEMS.includes(it)) ItemSystem.ITEMS.push(it);
     }
@@ -28,6 +29,10 @@ const ItemExt = {
         case 'emp':        return { emoji: '📡', label: 'EMP JAM',     color: '#00E5FF' };
         case 'decoy':      return { emoji: '👥', label: 'DECOY',       color: '#B388FF' };
         case 'killer':     return { emoji: '💥', label: 'KILLER',      color: '#FFC107' };
+        case 'freeze':     return { emoji: '❄️', label: 'FREEZE',      color: '#81D4FA' };
+        case 'shockwave':  return { emoji: '🌊', label: 'SHOCKWAVE',   color: '#26C6DA' };
+        case 'swap':       return { emoji: '🔀', label: 'SWAP',        color: '#F06292' };
+        case 'phaseShift': return { emoji: '👻', label: 'PHASE',       color: '#CE93D8' };
       }
       return origDisp(item);
     };
@@ -62,6 +67,15 @@ const ItemExt = {
         decoy:        Utils.lerp(0.5, 1.0, ratio),   // ロケット囮: 駆け引きアイテム
         killer:       Utils.lerp(0.01, 2.8, ratio),  // 下位専用の超加速アイテム
       };
+      // === 新規追加アイテム重み ===
+      // freeze: 周囲を凍結 (中位救済)
+      w.freeze     = Utils.lerp(0.0, 1.0, ratio);
+      // shockwave: 周囲を強力に弾く防御兼攻撃 (中位)
+      w.shockwave  = Utils.lerp(0.2, 1.2, ratio);
+      // swap: 前方のライバルと順位交換 (下位救済)
+      w.swap       = Utils.lerp(0.0, 1.3, ratio);
+      // phaseShift: 短時間の透過 + 速度ブースト (中下位)
+      w.phaseShift = Utils.lerp(0.1, 1.4, ratio);
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
         w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.8, ratio));
@@ -225,6 +239,109 @@ const ItemExt = {
       this._spawnShockwave(owner.x, owner.z, R * 1.0, 0x00E5FF);
       this._spawnShockwave(owner.x, owner.z, R * 0.7, 0x80DEEA);
       return hit;
+    };
+
+    // ===== ❄️ フリーズ (周囲14m以内の敵車を 1.4秒凍結 + 強減速) =====
+    ItemSystem.triggerFreeze = function(owner, allCars) {
+      const R = 14;
+      let hit = 0;
+      for (const c of allCars) {
+        if (c.id === owner.id) continue;
+        if (c.finished) continue;
+        if (c.invincibleTimer > 0 || c.ghostTimer > 0) continue;
+        const d = Utils.dist2(c.x, c.z, owner.x, owner.z);
+        if (d < R) {
+          c.spinTimer = 0;            // フリーズはスピンを上書き(動けないだけ)
+          c.lockedTimer = Math.max(c.lockedTimer || 0, 1.4);
+          c.slowTimer = Math.max(c.slowTimer || 0, 2.5);
+          c.slowMul = Math.min(c.slowMul || 1, 0.55);
+          c.driftActive = false; c.driftCharge = 0;
+          c.speed *= 0.25;
+          c.freezeTimer = Math.max(c.freezeTimer || 0, 1.4);
+          hit++;
+        }
+      }
+      this._spawnShockwave(owner.x, owner.z, R * 1.0, 0x81D4FA);
+      this._spawnShockwave(owner.x, owner.z, R * 0.6, 0xB3E5FC);
+      return hit;
+    };
+
+    // ===== 🌊 ショックウェーブ (周囲10mを強烈に弾き飛ばす + 短スピン) =====
+    ItemSystem.triggerShockwave = function(owner, allCars) {
+      const R = 10;
+      let hit = 0;
+      for (const c of allCars) {
+        if (c.id === owner.id) continue;
+        if (c.finished) continue;
+        if (c.invincibleTimer > 0 || c.ghostTimer > 0) continue;
+        const dx = c.x - owner.x;
+        const dz = c.z - owner.z;
+        const d = Math.hypot(dx, dz) || 1;
+        if (d < R) {
+          const nx = dx / d, nz = dz / d;
+          // 強力な押し出し
+          c.x += nx * 4.5; c.z += nz * 4.5;
+          c.speed *= 0.4;
+          c.spinTimer = Math.max(c.spinTimer || 0, 0.8);
+          c.driftActive = false; c.driftCharge = 0;
+          hit++;
+        }
+      }
+      this._spawnShockwave(owner.x, owner.z, R * 1.3, 0x26C6DA);
+      this._spawnShockwave(owner.x, owner.z, R * 0.9, 0x80DEEA);
+      this._spawnShockwave(owner.x, owner.z, R * 0.5, 0xB2EBF2);
+      // 自分にも軽くブーストご褒美
+      owner.applyBoost(0.7);
+      return hit;
+    };
+
+    // ===== 🔀 スワップ (前方の最も近い敵車と位置を交換) =====
+    // 他レースゲームに無い: 駆け引き要素満点
+    ItemSystem.applySwap = function(owner, allCars) {
+      // 進行度が自分より前で、かつ最も近い敵車を探す
+      let target = null;
+      let bestProg = Infinity;
+      for (const c of allCars) {
+        if (c.id === owner.id) continue;
+        if (c.finished) continue;
+        if (c.invincibleTimer > 0 || c.ghostTimer > 0) continue;
+        // 自分より前 (進行度がより進んでいる)
+        const myTotal = (owner.lap || 0) * 1000 + (owner.lastProgressIdx || 0);
+        const cTotal = (c.lap || 0) * 1000 + (c.lastProgressIdx || 0);
+        if (cTotal <= myTotal) continue;
+        const diff = cTotal - myTotal;
+        if (diff < bestProg) { bestProg = diff; target = c; }
+      }
+      if (!target) {
+        // 前方にいなければ自分にスマイル: 軽いブースト返却
+        owner.applyBoost(1.2);
+        return null;
+      }
+      // 位置交換 (高度も)
+      const ox = owner.x, oz = owner.z, oy = owner.y, oa = owner.angle, op = owner.lastProgressIdx, ol = owner.lap;
+      this._spawnTeleportFX(owner.x, owner.z, 0xF06292);
+      this._spawnTeleportFX(target.x, target.z, 0xEC407A);
+      owner.x = target.x; owner.z = target.z; owner.y = target.y; owner.angle = target.angle;
+      owner.lastProgressIdx = target.lastProgressIdx; owner.lap = target.lap;
+      target.x = ox; target.z = oz; target.y = oy; target.angle = oa;
+      target.lastProgressIdx = op; target.lap = ol;
+      // ターゲットには短いスピンペナルティ
+      target.spinTimer = Math.max(target.spinTimer || 0, 0.6);
+      target.speed *= 0.5;
+      // 自分には短い無敵
+      owner.giveShield(1.2);
+      owner.speed = Math.max(owner.speed, 30);
+      return target;
+    };
+
+    // ===== 👻 フェーズシフト (短時間ゴースト化 + ブースト) =====
+    // 通常のゴーストとは違い、より短いが圧倒的に速い
+    ItemSystem.applyPhaseShift = function(owner) {
+      owner.ghostTimer = Math.max(owner.ghostTimer || 0, 2.5);
+      owner.applyBoost(2.5);
+      owner.invincibleTimer = Math.max(owner.invincibleTimer || 0, 0.5);
+      // 紫煙演出
+      this._spawnShockwave(owner.x, owner.z, 4, 0xCE93D8);
     };
 
     // ===== 👥 デコイ (停車した自分のクローンを残す。ロケット/ブーメランの囮になる) =====
@@ -414,7 +531,8 @@ const ItemExt = {
       // 新規アイテムの処理を先取り
       if (!car.item) return;
       const it = car.item;
-      const isNew = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy'].includes(it);
+      const isNew = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy',
+                     'freeze', 'shockwave', 'swap', 'phaseShift'].includes(it);
       if (!isNew) {
         return origUse(car, allCars);
       }
@@ -449,6 +567,18 @@ const ItemExt = {
       } else if (item === 'decoy') {
         ItemSystem.spawnDecoy(car);
         if (window.Net) Net.sendAction({ kind: 'decoy' });
+      } else if (item === 'freeze') {
+        ItemSystem.triggerFreeze(car, allCars);
+        if (window.Net) Net.sendAction({ kind: 'freeze' });
+      } else if (item === 'shockwave') {
+        ItemSystem.triggerShockwave(car, allCars);
+        if (window.Net) Net.sendAction({ kind: 'shockwave' });
+      } else if (item === 'swap') {
+        const target = ItemSystem.applySwap(car, allCars);
+        if (window.Net) Net.sendAction({ kind: 'swap', targetId: target ? target.id : null });
+      } else if (item === 'phaseShift') {
+        ItemSystem.applyPhaseShift(car);
+        if (window.Net) Net.sendAction({ kind: 'phaseShift' });
       }
       if (car.isLocal) {
         const d = ItemSystem.getDisplay(item);
@@ -479,6 +609,26 @@ const ItemExt = {
         }
         if (action.kind === 'emp')        { ItemSystem.triggerEMP(car, Game.cars); return; }
         if (action.kind === 'decoy')      { ItemSystem.spawnDecoy(car); return; }
+        if (action.kind === 'freeze')     { ItemSystem.triggerFreeze(car, Game.cars); return; }
+        if (action.kind === 'shockwave')  { ItemSystem.triggerShockwave(car, Game.cars); return; }
+        if (action.kind === 'swap')       {
+          // ターゲットIDが提供されていればその車と交換、なければローカル計算
+          if (action.targetId) {
+            const tgt = Game.cars.find(c => c.id === action.targetId);
+            if (tgt) {
+              const ox = car.x, oz = car.z, oy = car.y, oa = car.angle;
+              ItemSystem._spawnTeleportFX(car.x, car.z, 0xF06292);
+              ItemSystem._spawnTeleportFX(tgt.x, tgt.z, 0xEC407A);
+              car.x = tgt.x; car.z = tgt.z; car.y = tgt.y; car.angle = tgt.angle;
+              tgt.x = ox; tgt.z = oz; tgt.y = oy; tgt.angle = oa;
+              tgt.spinTimer = Math.max(tgt.spinTimer || 0, 0.6);
+            }
+          } else {
+            ItemSystem.applySwap(car, Game.cars);
+          }
+          return;
+        }
+        if (action.kind === 'phaseShift') { ItemSystem.applyPhaseShift(car); return; }
       }
       origRemote(action);
     };

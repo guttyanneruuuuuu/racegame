@@ -529,11 +529,17 @@ window.createTrackVolcano = function () {
   _buildBarrierGapMask() {
     const n = this.pathPoints.length;
     const mask = new Array(n).fill(false);
-    if (n < 40) return mask;
+    const MIN_SEGMENTS_FOR_GAP_DETECTION = 40;
+    if (n < MIN_SEGMENTS_FOR_GAP_DETECTION) return mask;
 
-    const minSep = Math.max(20, Math.floor(n * 0.08));
-    const nearDist2 = 6.5 * 6.5;
-    const markRadius = 5;
+    // 近接判定は「近すぎる非隣接区間」だけに限定して通常コーナーは維持する。
+    const MIN_ABSOLUTE_SEPARATION = 20;
+    const MIN_SEPARATION_RATIO = 0.08;
+    const NEAR_OVERLAP_THRESHOLD = 6.5;
+    const GAP_MARK_RADIUS = 5;
+
+    const minSep = Math.max(MIN_ABSOLUTE_SEPARATION, Math.floor(n * MIN_SEPARATION_RATIO));
+    const nearDist2 = NEAR_OVERLAP_THRESHOLD * NEAR_OVERLAP_THRESHOLD;
 
     for (let i = 0; i < n; i++) {
       const a = this.pathPoints[i];
@@ -547,7 +553,7 @@ window.createTrackVolcano = function () {
         const dz = a.z - b.z;
         if (dx * dx + dz * dz > nearDist2) continue;
 
-        for (let off = -markRadius; off <= markRadius; off++) {
+        for (let off = -GAP_MARK_RADIUS; off <= GAP_MARK_RADIUS; off++) {
           mask[(i + off + n) % n] = true;
           mask[(j + off + n) % n] = true;
         }

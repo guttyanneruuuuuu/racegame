@@ -74,7 +74,7 @@ const AIDriver = {
       // 攻撃系/ブースト系は即使用
       if (itm === 'boost' || itm === 'tripleBoost' || itm === 'shield' ||
           itm === 'rocket' || itm === 'tripleRocket' || itm === 'lightning' ||
-          itm === 'ghost' || itm === 'magnet' || itm === 'megaShield' ||
+          itm === 'ghost' || itm === 'magnet' || itm === 'killer' || itm === 'megaShield' ||
           itm === 'mini' || itm === 'boomerang' || itm === 'fog') {
         use = true;
       }

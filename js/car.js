@@ -72,6 +72,7 @@ class Car {
     this.inkScrambleTimer = 0;    // HUD/ミニマップスクランブル (新墨効果)
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
+    this.killerTimer = 0;         // キラー(自動高速走行)
 
     // コイン (1枚で+2%最高速, 上限10枚)
     this.coins = 0;
@@ -362,6 +363,37 @@ class Car {
       this.lockedTimer -= dt;
       steer = 0; accel = false; brake = false;
     }
+    const killerActive = this.killerTimer > 0;
+    if (killerActive) {
+      this.killerTimer = Math.max(0, this.killerTimer - dt);
+      // キラー中は操作不能 + 自動操舵
+      accel = true;
+      brake = false;
+      this.lockedTimer = 0;
+      this.spinTimer = 0;
+      this.confuseTimer = 0;
+      this.slowTimer = 0;
+      this.slowMul = 1.0;
+      this.driftActive = false;
+      this.driftCharge = 0;
+      this.invincibleTimer = Math.max(this.invincibleTimer, 0.25);
+      this.boostTimer = Math.max(this.boostTimer, 0.2);
+      let idx = this.lastProgressIdx;
+      if (window.Track && Track.getProgress) {
+        const p = Track.getProgress(this.x, this.z, this.lastProgressIdx);
+        if (p && Number.isFinite(p.index)) idx = p.index;
+      }
+      const n = Track.pathPoints.length;
+      if (n > 2) {
+        const tgt = Track.pathPoints[(idx + 6) % n];
+        const targetAng = Math.atan2(tgt.x - this.x, tgt.z - this.z);
+        const diff = Utils.angDiff(targetAng, this.angle);
+        steer = Utils.clamp(diff * 2.0, -1, 1);
+      } else {
+        steer = 0;
+      }
+      this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_BOOST * 0.94);
+    }
     // スピン中
     if (this.spinTimer > 0) {
       this.spinTimer -= dt;
@@ -421,6 +453,9 @@ class Car {
     const coinMul = 1 + Math.min(10, this.coins) * 0.02;
     maxSp *= coinMul * (this.stats.maxSpeed || 1);
     this.speed = Utils.clamp(this.speed, -CarPhysics.MAX_SPEED * 0.5, maxSp);
+    if (killerActive) {
+      this.speed = Math.max(this.speed, Math.min(maxSp, CarPhysics.MAX_SPEED_BOOST * 0.94));
+    }
 
     // === ドリフト処理 ===
     // ブレーキ + 移動中 + ある程度の速度 = ドリフト発動
@@ -1088,14 +1123,14 @@ class Car {
   }
 
   hitBanana() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.spinTimer = 1.2;
     this.driftActive = false; this.driftCharge = 0;
     this.dropCoins(2);
     return true;
   }
   hitRocket() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 1.6;
     this.lockedTimer = 1.6;
     this.speed = 0;
@@ -1103,20 +1138,20 @@ class Car {
     return true;
   }
   hitLightning() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 2.0;
     this.lockedTimer = 1.0;
     this.speed *= 0.3;
     return true;
   }
   hitOilSplash() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.spinTimer = Math.max(this.spinTimer, 0.6);
     this.applySlow(2.5, 0.5);
     return true;
   }
   hitInkSplash() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     // 新仕様: 操作妨害ではなく『HUD/ミニマップを乱す』効果に変更
     // - confuseTimer は短めに残す (僅かな操作鈍化はキャラ的演出)
     // - inkScrambleTimer でミニマップ/順位/スピード表示をスクランブル
@@ -1125,7 +1160,7 @@ class Car {
     return true;
   }
   hitMine() {
-    if (this.invincibleTimer > 0 || this.ghostTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.ghostTimer > 0 || this.killerTimer > 0) return false;
     this.squishTimer = 1.4;
     this.lockedTimer = 1.0;
     this.speed = 0;
@@ -1140,6 +1175,20 @@ class Car {
 
   giveShield(seconds = 5) {
     this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
+  }
+
+  activateKiller(seconds = 4.5) {
+    this.killerTimer = Math.max(this.killerTimer, seconds);
+    this.boostTimer = Math.max(this.boostTimer, seconds);
+    this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
+    this.lockedTimer = 0;
+    this.spinTimer = 0;
+    this.confuseTimer = 0;
+    this.slowTimer = 0;
+    this.slowMul = 1.0;
+    this.driftActive = false;
+    this.driftCharge = 0;
+    this.speed = Math.max(this.speed, CarPhysics.MAX_SPEED_BOOST * 0.94);
   }
 
   // コイン取得 (上限10枚)

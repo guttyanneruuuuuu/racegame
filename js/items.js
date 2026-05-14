@@ -2,7 +2,7 @@
 const ItemSystem = {
   ITEMS: [
     'boost', 'tripleBoost', 'rocket', 'tripleRocket', 'banana', 'lightning',
-    'shield', 'oil', 'ink', 'mine', 'ghost', 'magnet'
+    'shield', 'oil', 'ink', 'mine', 'ghost', 'magnet', 'killer'
   ],
 
   // 順位によって出やすさを変える(1位は弱め、後ろはレア出やすい)
@@ -23,6 +23,7 @@ const ItemSystem = {
       rocket:       Utils.lerp(0.8, 2.4, ratio),
       tripleRocket: Utils.lerp(0.05, 1.4, ratio),
       lightning:    Utils.lerp(0.05, 1.6, ratio),
+      killer:       Utils.lerp(0.02, 2.2, ratio),
     };
     if (totalPlayers <= 2) {
       // 2人対戦ではロケット系を出しやすくする
@@ -53,6 +54,7 @@ const ItemSystem = {
       case 'mine':         return { emoji: '💣', label: 'MINE',        color: '#37474F' };
       case 'ghost':        return { emoji: '👻', label: 'GHOST',       color: '#B0BEC5' };
       case 'magnet':       return { emoji: '🧲', label: 'MAGNET',      color: '#EF5350' };
+      case 'killer':       return { emoji: '💥', label: 'KILLER',      color: '#FFC107' };
       default: return { emoji: '?', label: '', color: '#999' };
     }
   },
@@ -195,6 +197,13 @@ const ItemSystem = {
   applyMagnet(owner) {
     // 5秒間マグネット効果は車側のフラグで管理
     owner.magnetTimer = 5.0;
+  },
+
+  // ===== キラー (大砲演出 + 一定時間の自動爆速走行) =====
+  applyKiller(owner) {
+    if (!owner || !owner.activateKiller) return;
+    owner.activateKiller(4.5);
+    this._spawnShockwave(owner.x, owner.z, 12, 0xffc107);
   },
 
   _mkBanana() {

@@ -351,6 +351,7 @@ const UIExt = {
       mini:         { rarity: '中',  desc: '自分を小さく+ハンドリング上昇' },
       boomerang:    { rarity: 'レア', desc: '前方に飛び、戻ってくる飛び道具' },
       megaShield:   { rarity: '超レア', desc: '10秒間 周囲全員を弾き飛ばす' },
+      killer:       { rarity: '超レア', desc: '大砲に入り、4.5秒間 自動で爆速前進' },
     };
     for (const it of ItemSystem.ITEMS) {
       const d = ItemSystem.getDisplay(it);

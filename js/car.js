@@ -73,7 +73,6 @@ class Car {
     this.magnetTimer = 0;         // 引き寄せ無効化など使わないが拡張用
     this.ghostTimer = 0;          // ゴースト(車衝突無効・半透明)
     this.killerTimer = 0;         // キラー(自動高速走行)
-    this.killerVisualBlend = 0;
 
     // コイン (1枚で+2%最高速, 上限10枚)
     this.coins = 0;
@@ -778,10 +777,6 @@ class Car {
   // メッシュ更新
   updateMesh() {
     const killerActive = this.killerTimer > 0;
-    const targetBlend = killerActive ? 1 : 0;
-    const blendSpeed = killerActive ? 0.26 : 0.2;
-    this.killerVisualBlend = Utils.lerp(this.killerVisualBlend, targetBlend, blendSpeed);
-
     const rescueActive = this.wrongWayRescueTimer > 0;
     const rescueProgress = rescueActive
       ? Utils.clamp(1 - (this.wrongWayRescueTimer / this.wrongWayRescueDuration), 0, 1)
@@ -900,13 +895,11 @@ class Car {
     this._updateSparks();
 
     if (this._baseCarMeshes) {
-      const showCar = !killerActive;
-      for (const m of this._baseCarMeshes) m.visible = showCar;
+      for (const m of this._baseCarMeshes) m.visible = !killerActive;
     }
     if (this.killerCannonMesh) {
-      const showCannon = killerActive;
-      this.killerCannonMesh.visible = showCannon;
-      if (showCannon) {
+      this.killerCannonMesh.visible = killerActive;
+      if (killerActive) {
         const t = performance.now() * 0.01;
         this.killerCannonMesh.position.y = Math.sin(t) * 0.08;
         this.killerCannonMesh.rotation.z = Math.sin(t * 0.45) * 0.03;
@@ -1252,7 +1245,6 @@ class Car {
 
   activateKiller(seconds = 4.5) {
     this.killerTimer = Math.max(this.killerTimer, seconds);
-    this.killerVisualBlend = 1;
     this.boostTimer = Math.max(this.boostTimer, seconds);
     this.invincibleTimer = Math.max(this.invincibleTimer, seconds);
     this.lockedTimer = 0;

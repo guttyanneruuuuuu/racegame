@@ -1120,17 +1120,20 @@ window.createTrackVolcano = function () {
     const hasY = Number.isFinite(y);
     // 高架/地上の近接交差で誤レーンを避けるため、縦 1m 差を平面距離 3m 相当として扱う (3^2=9)。
     const HEIGHT_WEIGHT = 9.0;
+    // 交差区間で別レーンへ飛び移る誤スナップを抑えるための連続性パラメータ。
+    // freeRange: 通常走行で許容するインデックス移動幅
+    // continuityWeight: freeRange を超えた移動に対する二乗ペナルティ強度
+    const CONTINUITY_FREE_RANGE = 14;
+    const CONTINUITY_WEIGHT = 1.6;
     const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
-    const wrappedHint = hintIdx >= 0 ? ((hintIdx % n) + n) % n : -1;
+    const wrappedHint = hintIdx >= 0 ? (hintIdx % n) : -1;
     const continuityPenaltyAt = (i) => {
       if (wrappedHint < 0) return 0;
       const raw = Math.abs(i - wrappedHint);
       const cyc = Math.min(raw, n - raw);
-      // 交差区間で別レーンへ誤スナップしにくくするため、進行連続性に緩いペナルティを追加
-      const freeRange = 14;
-      if (cyc <= freeRange) return 0;
-      const d = cyc - freeRange;
-      return d * d * 1.6;
+      if (cyc <= CONTINUITY_FREE_RANGE) return 0;
+      const d = cyc - CONTINUITY_FREE_RANGE;
+      return d * d * CONTINUITY_WEIGHT;
     };
     const consider = (i) => {
       const p = this.pathPoints[i];

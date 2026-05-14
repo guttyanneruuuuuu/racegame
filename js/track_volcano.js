@@ -792,6 +792,8 @@ window.createTrackVolcano = function () {
     const startT = 0.58;
     const endT = 0.67;
     const count = 9;
+    const branchLateralOffset = 0.7;
+    const branchBarrierRadius = 1.85;
     const geo = this._sharedGeos.smallRock || new THREE.DodecahedronGeometry(1.1, 0);
     const mat = this._sharedMats.rockLight || new THREE.MeshLambertMaterial({ color: 0x3a3438 });
 
@@ -801,7 +803,7 @@ window.createTrackVolcano = function () {
       const p = this.pathPoints[idx];
       const y = this._getTrackY(idx);
       const { nx, nz } = this._segNorm[idx];
-      const lateralOffset = (k % 2 === 0 ? -1 : 1) * 0.7;
+      const lateralOffset = (k % 2 === 0 ? -1 : 1) * branchLateralOffset;
       const x = p.x + nx * lateralOffset;
       const z = p.z + nz * lateralOffset;
 
@@ -811,7 +813,7 @@ window.createTrackVolcano = function () {
       mesh.scale.set(1.45, 1.15, 1.45);
       this.group.add(mesh);
 
-      this.forkBarriers.push({ mesh, x, z, y, radius: 1.85 });
+      this.forkBarriers.push({ mesh, x, z, y, radius: branchBarrierRadius });
     }
   },
 

@@ -104,7 +104,7 @@ class Car {
       enumerable: true,
       get: () => this.itemSlots[0],
       set: (value) => {
-        if (value == null) {
+        if (value === null || value === undefined) {
           this.itemSlots[0] = this.itemSlots[1];
           this.itemSlots[1] = null;
         } else {

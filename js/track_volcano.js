@@ -232,8 +232,8 @@ window.createTrackVolcano = function () {
 
   // 連続的な路面高さ補間 (高低差バグ対策):
   // 最近傍 idx だけでなく、その隣のセグメントへの射影 t で線形補間する。
-  getSurfaceHeight(x, z, hintIdx = -1) {
-    const prog = this.getProgress(x, z, hintIdx);
+  getSurfaceHeight(x, z, hintIdx = -1, y = undefined) {
+    const prog = this.getProgress(x, z, hintIdx, y);
     const n = this.pathPoints.length;
     if (n < 2) return this._getTrackY(prog.index);
     const i = prog.index;
@@ -1112,26 +1112,37 @@ window.createTrackVolcano = function () {
 
   // 近傍探索の範囲を狭め、最寄りを正確に。さらに射影で連続位置を取れるよう
   // 結果は idx に加えて簡易距離も返している (従来互換)。
-  getProgress(x, z, hintIdx = -1) {
+  getProgress(x, z, hintIdx = -1, y = undefined) {
     const n = this.pathPoints.length;
     let best = 0;
+    let bestScore = Infinity;
     let bestD = Infinity;
+    const hasY = Number.isFinite(y);
+    // 高架/地上の近接交差で誤レーンを避けるため、縦 1m 差を平面距離 3m 相当として扱う (3^2=9)。
+    const HEIGHT_WEIGHT = 9.0;
+    const heightWeight = hasY ? HEIGHT_WEIGHT : 0;
+    const consider = (i) => {
+      const p = this.pathPoints[i];
+      const dxq = p.x - x, dzq = p.z - z;
+      const d = dxq * dxq + dzq * dzq;
+      const dy = hasY ? (this._getTrackY(i) - y) : 0;
+      const score = d + dy * dy * heightWeight;
+      if (score < bestScore || (score === bestScore && d < bestD)) {
+        bestScore = score;
+        bestD = d;
+        best = i;
+      }
+    };
     if (hintIdx >= 0) {
       // 高速時のすり抜け対策: 近傍範囲を 30 → 40 に拡張
       const range = 40;
       for (let k = -range; k <= range; k++) {
         const i = ((hintIdx + k) % n + n) % n;
-        const p = this.pathPoints[i];
-        const dxq = p.x - x, dzq = p.z - z;
-        const d = dxq * dxq + dzq * dzq;
-        if (d < bestD) { bestD = d; best = i; }
+        consider(i);
       }
     } else {
       for (let i = 0; i < n; i++) {
-        const p = this.pathPoints[i];
-        const dxq = p.x - x, dzq = p.z - z;
-        const d = dxq * dxq + dzq * dzq;
-        if (d < bestD) { bestD = d; best = i; }
+        consider(i);
       }
     }
     return { index: best, dist: Math.sqrt(bestD), totalDist: this.cumLen[best] };
@@ -1156,8 +1167,8 @@ window.createTrackVolcano = function () {
     return out;
   },
 
-  isOffTrack(x, z, hintIdx = -1) {
-    const prog = this.getProgress(x, z, hintIdx);
+  isOffTrack(x, z, hintIdx = -1, y = undefined) {
+    const prog = this.getProgress(x, z, hintIdx, y);
     const w = this.widthAt(prog.index);
     if (prog.dist <= w) return false;
     if (this.isOnShortcut(x, z)) return false;
@@ -1179,7 +1190,7 @@ window.createTrackVolcano = function () {
   // - MAX_TANGENT_DISTANCE を 24 → 28 に拡大して、高速で飛び込んだ際の取りこぼし防止
   // - 押し戻し inset/extra を Grand と同程度に強化 (再すり抜け防止)
   // - 隣接セグメント法線平均で押し戻し方向を安定化 (急カーブで折れない)
-  resolveWalls(x, z, radius, hintIdx = -1) {
+  resolveWalls(x, z, radius, hintIdx = -1, y = undefined) {
     // 高速時の取りこぼしを抑えるため検査範囲を少し広めに設定
     const MAX_TANGENT_DISTANCE = 34;
     // 初回押し戻し量を大きめにして再めり込みを防ぐ
@@ -1187,7 +1198,7 @@ window.createTrackVolcano = function () {
     const WALL_EXTRA_PUSHBACK = 0.38;
     // 二次検証で使う最終押し戻しの最小量
     const VERIFICATION_PUSHBACK = 0.16;
-    const prog = this.getProgress(x, z, hintIdx);
+    const prog = this.getProgress(x, z, hintIdx, y);
     const idx = prog.index;
     const cur = this.pathPoints[idx];
     const { nx, nz } = this._segNorm[idx];
@@ -1248,7 +1259,7 @@ window.createTrackVolcano = function () {
       // 二次検証:
       // 初回押し戻し後でも急カーブ連結部では隣接セグメント側に再めり込みすることがあるため、
       // 新しい位置でもう一度最近傍セグメント基準で許容幅内に収める。
-      const verify = this.getProgress(newX, newZ, bestSeg.index);
+      const verify = this.getProgress(newX, newZ, bestSeg.index, y);
       const vIdx = verify.index;
       const vCur = this.pathPoints[vIdx];
       const vNorm = this._segNorm[vIdx];

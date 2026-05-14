@@ -375,7 +375,7 @@ class Car {
   }
 
   _groundHeight(hintIdx = this.lastProgressIdx) {
-    return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx) : 0;
+    return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx, this.y) : 0;
   }
 
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
@@ -418,7 +418,7 @@ class Car {
       this.boostTimer = Math.max(this.boostTimer, 0.2);
       let idx = this.lastProgressIdx;
       if (window.Track && Track.getProgress) {
-        const p = Track.getProgress(this.x, this.z, this.lastProgressIdx);
+        const p = Track.getProgress(this.x, this.z, this.lastProgressIdx, this.y);
         if (p && Number.isFinite(p.index)) idx = p.index;
       }
       const n = Track.pathPoints.length;
@@ -470,7 +470,7 @@ class Car {
     }
 
     // コース外摩擦
-    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx)) {
+    if (Track.isOffTrack(this.x, this.z, this.lastProgressIdx, this.y)) {
       const sign = Math.sign(this.speed);
       this.speed -= sign * CarPhysics.OFFTRACK_FRICTION * dt;
     }
@@ -588,10 +588,10 @@ class Car {
     let wr = this._pendingWallHit;
     this._pendingWallHit = null;
     if (!wr || !wr.hit) {
-      wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+      wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
     } else {
       // 念のためもう一度押し戻し (まだめり込んでいる可能性)
-      const wr2 = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+      const wr2 = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
       if (wr2.hit) { this.x = wr2.x; this.z = wr2.z; }
     }
     if (wr.hit) {
@@ -760,7 +760,7 @@ class Car {
         this.x += stepX;
         this.z += stepZ;
         // サブステップごとに壁にめり込んだら押し戻す
-        const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx);
+        const wr = Track.resolveWalls(this.x, this.z, CarPhysics.RADIUS, this.lastProgressIdx, this.y);
         if (wr.hit) {
           this.x = wr.x; this.z = wr.z;
           this._pendingWallHit = wr;
@@ -994,7 +994,7 @@ class Car {
   // 進行状況更新 → ラップ判定 + 逆走/スタック検知
   updateProgress(now) {
     if (this.finished) return;
-    const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx);
+    const prog = Track.getProgress(this.x, this.z, this.lastProgressIdx, this.y);
     const n = Track.pathPoints.length;
     if (this._lapCheckpointPathLen !== n) {
       const marks = LAP_CHECKPOINT_RATIOS
@@ -1146,7 +1146,7 @@ class Car {
   }
 
   initProgress() {
-    const prog = Track.getProgress(this.x, this.z);
+    const prog = Track.getProgress(this.x, this.z, -1, this.y);
     this.lastProgressIdx = prog.index;
     this.totalProgress = 0;
     this.lap = 0;

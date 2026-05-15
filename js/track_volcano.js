@@ -1,7 +1,7 @@
 // ============= 🌋 VOLCANO CIRCUIT (火山サーキット) =============
 // 軽量化 & スムーズ走行重視リファクタ:
-//   - 制御点をクラシック GRAND サーキットと同じく低曲率にして CatmullRom の暴れを抑制
-//   - 幅配列 (widthArray) + 曲率に応じた緩衝幅で内壁の自己交差を回避 (すり抜け対策)
+//   - 制御点を単一路線の大きな閉曲線にして、道同士の交差を根本的に排除
+//   - 幅配列 (widthArray) は曲率補正だけに留め、自己交差しにくい幅変化へ整理
 //   - 高低差を path 上で連続補間する getSurfaceHeight (高低差バグ対策)
 //   - 壁衝突は近傍 -6..+6 セグメントを走査し、最深めり込みで押し戻す
 //   - グライダーガイドは『着地ゾーンへ向かう光の柱』にして遠くからでも進行方向が判る
@@ -44,35 +44,28 @@ window.createTrackVolcano = function () {
     this.group = new THREE.Group();
     scene.add(this.group);
 
-    // 制御点: ヘアピン2つを緩和して曲率を平準化
-    // GRAND サーキットと同じく "Catmull-Rom が暴れない" よう、隣接距離を均し、
-    // 急な折り返しを 2 段階の中継点で繋いでいる。
+    // 制御点: 交差しない単一の閉曲線。
+    // 外周を大きく使った複雑なうねりを作りつつ、非隣接区間の距離を十分に確保している。
     this.controlPoints = [
-      { x:    0, z:  170 },   // スタート直線
-      { x:   90, z:  175 },
-      { x:  170, z:  150 },
-      { x:  225, z:   90 },   // 右大カーブ進入
-      { x:  240, z:   10 },
-      { x:  220, z:  -60 },
-      { x:  170, z: -100 },   // ヘアピン1 (緩和)
-      { x:  100, z: -100 },
-      { x:   40, z:  -55 },   // S字へ復帰
-      { x:    0, z:   10 },
-      { x:  -60, z:   30 },
-      { x: -130, z:    0 },   // 左外周
-      { x: -195, z:  -70 },
-      { x: -200, z: -150 },
-      { x: -150, z: -210 },   // 下端の大カーブ
-      { x:  -60, z: -225 },
-      { x:   40, z: -210 },
-      { x:  130, z: -180 },
-      { x:  170, z: -130 },   // ヘアピン2 (緩和: 折返さず大回りに)
-      { x:  150, z:  -70 },
-      { x:   90, z:  -40 },
-      { x:    0, z:   -5 },
-      { x:  -70, z:   40 },
-      { x: -110, z:  100 },   // 戻り直線
-      { x:  -70, z:  155 },
+      { x:    0, z:  220 },   // スタート直線
+      { x:   90, z:  245 },
+      { x:  180, z:  230 },
+      { x:  255, z:  180 },
+      { x:  300, z:   95 },   // 右外周ダウンヒル
+      { x:  315, z:   -5 },
+      { x:  285, z:  -95 },
+      { x:  220, z: -165 },
+      { x:  135, z: -215 },   // 南端の大回り
+      { x:   35, z: -245 },
+      { x:  -70, z: -235 },
+      { x: -155, z: -205 },
+      { x: -235, z: -150 },   // 左下の連続複合コーナー
+      { x: -285, z:  -65 },
+      { x: -300, z:   25 },
+      { x: -275, z:  120 },
+      { x: -220, z:  190 },   // 左上の登り返し
+      { x: -135, z:  240 },
+      { x:  -40, z:  255 },
     ];
 
     // Catmull-Rom の細かさを 16 → 14 に下げて頂点数 (= 壁ポリゴン数) を軽量化
@@ -179,7 +172,7 @@ window.createTrackVolcano = function () {
     }
   },
 
-  // 幅配列を作成 (Grand と同形式): 急カーブで僅かに広げて自己交差を緩和
+  // 幅配列を作成: 単一路線のまま走りやすくなるよう、曲率に応じてだけ僅かに広げる
   _buildWidthArray() {
     const n = this.pathPoints.length;
     this.widthArray = new Array(n);
@@ -189,18 +182,8 @@ window.createTrackVolcano = function () {
       const a = this._segDir[prev], b = this._segDir[nxt];
       const dot = a.ux * b.ux + a.uz * b.uz;
       const curveSharp = 1 - Math.max(-1, Math.min(1, dot));
-      // ベース 22 + 急カーブで最大 +3 (折り返し点の自己交差防止 & 走りやすさ)
+      // ベース 22 + 急カーブで最大 +3
       let w = this.width + curveSharp * 2.4;
-      // 中盤に分岐→合流レーンを作るため一時的に拡幅
-      const t = i / n;
-      if (t >= 0.56 && t <= 0.70) {
-        const p = (t - 0.56) / 0.14;
-        const smoothStep = (v) => v * v * (3 - 2 * v);
-        const rampIn = Math.min(1, p * 2);
-        const rampOut = Math.min(1, (1 - p) * 2);
-        const smooth = Math.min(smoothStep(rampIn), smoothStep(rampOut));
-        w += 7.5 * smooth;
-      }
       this.widthArray[i] = w;
     }
     // 平滑化 (急な幅変化を抑制)
@@ -789,35 +772,7 @@ window.createTrackVolcano = function () {
 
   _buildForkBranchDivider() {
     this.forkBarriers = [];
-    const n = this.pathPoints.length;
-    const startT = 0.58;
-    const endT = 0.67;
-    const count = 9;
-    const branchLateralOffset = 0.7;
-    const branchBarrierRadius = 1.85;
-    if (!this._sharedGeos.smallRock) this._sharedGeos.smallRock = new THREE.DodecahedronGeometry(1.1, 0);
-    if (!this._sharedMats.rockLight) this._sharedMats.rockLight = new THREE.MeshLambertMaterial({ color: 0x3a3438 });
-    const geo = this._sharedGeos.smallRock;
-    const mat = this._sharedMats.rockLight;
-
-    for (let k = 0; k < count; k++) {
-      const t = startT + (endT - startT) * (k / (count - 1));
-      const idx = Math.floor(t * n) % n;
-      const p = this.pathPoints[idx];
-      const y = this._getTrackY(idx);
-      const { nx, nz } = this._segNorm[idx];
-      const signedLateralOffset = (k % 2 === 0 ? -1 : 1) * branchLateralOffset;
-      const x = p.x + nx * signedLateralOffset;
-      const z = p.z + nz * signedLateralOffset;
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, y + 1.1, z);
-      mesh.rotation.set(Math.random() * 0.4, Math.random() * Math.PI * 2, Math.random() * 0.4);
-      mesh.scale.set(1.45, 1.15, 1.45);
-      this.group.add(mesh);
-
-      this.forkBarriers.push({ mesh, x, z, y, radius: branchBarrierRadius });
-    }
+    // 新レイアウトは完全な単一路線なので、分岐仕切りは不要。
   },
 
   _buildBoostPads() {

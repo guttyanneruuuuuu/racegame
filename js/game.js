@@ -654,9 +654,11 @@ const Game = {
       const maxItemPickupsPerFrame = (c.itemSlots && c.itemSlots.length) ? c.itemSlots.length : 2;
       while (c.canHoldItem() && Track.collectItemBox(c.x, c.z, 2.4)) {
         const rank = this._getRank(c);
-        const item = ItemSystem.weightedRoll(rank, this.cars.length);
+        const dryStreak = c._newItemDryStreak || 0;
+        const item = ItemSystem.weightedRoll(rank, this.cars.length, dryStreak);
         const added = c.setItem ? c.setItem(item) : false;
         if (!added) break;
+        c._newItemDryStreak = (ItemSystem.isFreshItem && ItemSystem.isFreshItem(item)) ? 0 : (dryStreak + 1);
         pickupCount++;
         if (c.isLocal) {
           GameUI.updateItem(c.item, c.itemSecondary);

@@ -926,6 +926,58 @@ input { font-family: inherit; outline: none; }
 .drift-charge.tier-blue   { background: linear-gradient(180deg, #40C4FF, #0288D1); }
 .drift-charge.tier-yellow { background: linear-gradient(180deg, #FFEB3B, #F57C00); color: #5D2C00; text-shadow: 0 2px 0 rgba(255,255,255,0.3); }
 .drift-charge.tier-purple { background: linear-gradient(180deg, #E040FB, #6A1B9A); }
+
+.slipstream-meter {
+  position: absolute;
+  bottom: 102px; left: 50%; transform: translateX(-50%);
+  display: none;
+  width: 170px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(18, 28, 48, 0.84), rgba(34, 52, 88, 0.75));
+  border: 2px solid rgba(255,255,255,0.82);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.42);
+  pointer-events: none;
+  z-index: 6;
+}
+.slipstream-meter.show { display: block; }
+.slipstream-label {
+  font-size: 10px;
+  font-weight: 900;
+  color: #B3E5FC;
+  letter-spacing: 1.2px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.slipstream-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.35);
+  overflow: hidden;
+}
+.slipstream-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #80DEEA, #40C4FF, #00B0FF);
+  box-shadow: 0 0 10px rgba(64,196,255,0.8);
+  transition: width 0.12s linear;
+}
+.slipstream-meter.active .slipstream-fill {
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.95);
+}
+.slipstream-meter.ready {
+  animation: slipReadyPulse 0.35s ease-in-out infinite alternate;
+}
+.slipstream-meter.cooldown .slipstream-label {
+  color: #B0BEC5;
+}
+@keyframes slipReadyPulse {
+  from { transform: translateX(-50%) scale(1); }
+  to { transform: translateX(-50%) scale(1.06); }
+}
 @keyframes driftPulse {
   from { transform: translateX(-50%) scale(1); }
   to { transform: translateX(-50%) scale(1.08); }
@@ -1135,6 +1187,9 @@ input { font-family: inherit; outline: none; }
   .btn-icon { width: 34px; height: 34px; font-size: 15px; }
   .wrong-way { font-size: 18px; padding: 10px 22px; }
   .drift-charge { bottom: 110px; font-size: 12px; padding: 3px 12px; }
+  .slipstream-meter { bottom: 90px; width: 148px; padding: 5px 8px; }
+  .slipstream-label { font-size: 9px; margin-bottom: 3px; }
+  .slipstream-bar { height: 7px; }
 }
 
 /* ============= 拡張UI: タイトルの追加ボタン ============= */

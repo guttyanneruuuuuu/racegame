@@ -30,6 +30,7 @@ const Game = {
 
   // 順位変動通知用
   _prevRanks: new Map(),
+  doubleItemBoxChance: 0.18,
 
   init() {
     this._initThree();
@@ -415,7 +416,7 @@ const Game = {
   useItem(car, allCars) {
     if (!car.item) return;
     const item = car.consumeItem();
-    if (car.isLocal) GameUI.updateItem(null);
+    if (!item) return;
 
     if (window.SFX) SFX.play('item');
 
@@ -462,6 +463,8 @@ const Game = {
       Net.sendAction({ kind: 'killer' });
     }
     if (car.isLocal) {
+      const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
+      GameUI.updateItem(held.length ? held : null);
       const d = ItemSystem.getDisplay(item);
       showToast(`${d.emoji} ${d.label}!`, 1000);
     }
@@ -563,11 +566,26 @@ const Game = {
       if (!c.item) {
         if (Track.collectItemBox(c.x, c.z, 2.4)) {
           const rank = this._getRank(c);
-          const item = ItemSystem.weightedRoll(rank, this.cars.length);
-          c.setItem(item);
+          const firstItem = ItemSystem.weightedRoll(rank, this.cars.length);
+          const isDouble = Math.random() < this.doubleItemBoxChance;
+          let secondItem = null;
+          if (isDouble) {
+            secondItem = ItemSystem.weightedRoll(rank, this.cars.length);
+            if (typeof c.setDoubleItems === 'function') c.setDoubleItems(firstItem, secondItem);
+            else c.setItem(firstItem);
+          } else {
+            c.setItem(firstItem);
+          }
           if (c.isLocal) {
-            GameUI.updateItem(item);
-            showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
+            const held = (typeof c.getHeldItems === 'function') ? c.getHeldItems() : (c.item ? [c.item] : []);
+            GameUI.updateItem(held.length ? held : null);
+            if (isDouble && secondItem) {
+              const d1 = ItemSystem.getDisplay(firstItem);
+              const d2 = ItemSystem.getDisplay(secondItem);
+              showToast(`🎁 ダブル！ ${d1.emoji}${d2.emoji} アイテム2個ゲット！`, 1200);
+            } else {
+              showToast(`${ItemSystem.getDisplay(firstItem).emoji} ${ItemSystem.getDisplay(firstItem).label} ゲット！`, 1200);
+            }
             if (window.SFX) SFX.play('pickup');
           }
         }

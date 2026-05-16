@@ -98,6 +98,7 @@ class Car {
 
     // アイテム
     this.item = null;
+    this.itemExtra = null;
     this.itemReady = false;
 
     // 進行管理
@@ -1315,13 +1316,30 @@ class Car {
   }
 
   setItem(item) {
-    this.item = item;
-    this.itemReady = true;
+    this.item = item || null;
+    this.itemExtra = null;
+    this.itemReady = !!this.item;
+  }
+  setDoubleItems(itemA, itemB) {
+    this.item = itemA || null;
+    this.itemExtra = itemB || null;
+    if (!this.item && this.itemExtra) {
+      this.item = this.itemExtra;
+      this.itemExtra = null;
+    }
+    this.itemReady = !!this.item;
+  }
+  getHeldItems() {
+    const items = [];
+    if (this.item) items.push(this.item);
+    if (this.itemExtra) items.push(this.itemExtra);
+    return items;
   }
   consumeItem() {
     const it = this.item;
-    this.item = null;
-    this.itemReady = false;
+    this.item = this.itemExtra || null;
+    this.itemExtra = null;
+    this.itemReady = !!this.item;
     return it;
   }
 }

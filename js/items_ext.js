@@ -553,7 +553,6 @@ const ItemExt = {
         return origUse(car, allCars);
       }
       const item = car.consumeItem();
-      if (car.isLocal && window.GameUI) GameUI.updateItem(null);
       if (window.SFX) SFX.play('item');
 
       if (item === 'fog') {
@@ -602,6 +601,10 @@ const ItemExt = {
         if (window.Net) Net.sendAction({ kind: 'phaseShift' });
       }
       if (car.isLocal) {
+        if (window.GameUI) {
+          const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
+          GameUI.updateItem(held.length ? held : null);
+        }
         const d = ItemSystem.getDisplay(item);
         if (typeof showToast === 'function') showToast(`${d.emoji} ${d.label}!`, 1000);
       }

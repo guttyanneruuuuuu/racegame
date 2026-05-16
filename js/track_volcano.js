@@ -23,6 +23,7 @@ window.createTrackVolcano = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  smallJumpPads: [],
   airBoostRings: [],
   coins: [],
   oilPads: [],
@@ -86,6 +87,7 @@ window.createTrackVolcano = function () {
     this._buildItemBoxes();
     this._buildBoostPads();
     this._buildJumpPads();
+    this._buildSmallJumpPads();
     this._buildDirectionArrows();
     this._buildAerialGuides();
     this._buildAirBoostRings();
@@ -965,11 +967,39 @@ window.createTrackVolcano = function () {
       this.group.add(ring);
       this.airBoostRings.push({
         mesh: ring,
-        x: pp.x, z: pp.z, y: py + 7.4,
+        x: pp.x, z: pp.z, y: py + 9.8,
         radius: 4.3,
-        yMin: py + 4.8,
-        yMax: py + 10.2,
+        yMin: py + 7.0,
+        yMax: py + 14.2,
         _phase: Math.random() * Math.PI * 2,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
+  _buildSmallJumpPads() {
+    const n = this.pathPoints.length;
+    const positions = [0.14, 0.22, 0.39, 0.58, 0.69, 0.82];
+    const padTex = this._makeGeyserPadTexture();
+    for (const t of positions) {
+      const idx = Math.floor(t * n);
+      const cur = this.pathPoints[idx];
+      const next = this.pathPoints[(idx + 1) % n];
+      const dx = next.x - cur.x, dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const dirX = dx / len, dirZ = dz / len;
+      const py = this._getTrackY(idx);
+      const px = cur.x, pz = cur.z;
+
+      const rampGeo = new THREE.CylinderGeometry(2.3, 2.8, 0.42, 10);
+      const rampMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.9 });
+      const ramp = new THREE.Mesh(rampGeo, rampMat);
+      ramp.position.set(px, py + 0.22, pz);
+      this.group.add(ramp);
+
+      this.smallJumpPads.push({
+        mesh: ramp, x: px, z: pz, y: py, dirX, dirZ, idx,
+        radius: 3.1,
         _lastTrigger: new Map(),
       });
     }
@@ -1543,7 +1573,7 @@ window.createTrackVolcano = function () {
   },
 
   checkPads(car, now) {
-    let result = { boost: false, jump: false, lava: false, airBoost: false };
+    let result = { boost: false, jump: false, lava: false, airBoost: false, smallJump: false };
     const airborne = !!(car.isAirborne && car.isAirborne());
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
@@ -1572,6 +1602,16 @@ window.createTrackVolcano = function () {
         if (now - last > 1500) {
           p._lastTrigger.set(car.id, now);
           result.jump = true;
+        }
+      }
+    }
+    for (const p of this.smallJumpPads) {
+      const d = Utils.dist2(car.x, car.z, p.x, p.z);
+      if (d < p.radius && car.y < p.y + 1.4) {
+        const last = p._lastTrigger.get(car.id) || 0;
+        if (now - last > 900) {
+          p._lastTrigger.set(car.id, now);
+          result.smallJump = true;
         }
       }
     }

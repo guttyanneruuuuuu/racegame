@@ -154,32 +154,43 @@ input { font-family: inherit; outline: none; }
   background: linear-gradient(135deg, #ffd180, #ff8a65); color: #fff;
 }
 .cartype-options {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+  /* 9 種類 + 将来拡張に対応: 5列固定 → auto-fit で自動折り返し */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 5px;
   margin-top: 6px;
 }
 .cartype-option {
-  background: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.88);
   border: 2px solid rgba(0,0,0,0.18);
   border-radius: 10px;
   padding: 6px 4px; cursor: pointer;
   text-align: center;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  min-height: 78px;
+  display: flex; flex-direction: column; justify-content: center; align-items: stretch;
 }
-.cartype-option:hover { transform: translateY(-2px); }
+.cartype-option:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,87,34,0.55);
+  background: rgba(255,255,255,0.95);
+}
 .cartype-option.active {
   border-color: #ff5722;
   background: linear-gradient(135deg, #fff9c4, #ffe082);
   box-shadow: 0 4px 10px rgba(255,87,34,0.25);
   transform: translateY(-2px) scale(1.04);
 }
-.cartype-option .ctt-icon { font-size: 20px; }
-.cartype-option .ctt-name { font-size: 11px; font-weight: 700; color: #2b1d10; }
+.cartype-option .ctt-icon { font-size: 22px; line-height: 1; }
+.cartype-option .ctt-name { font-size: 11px; font-weight: 800; color: #2b1d10; letter-spacing: 0.5px; }
 .cartype-option .ctt-stats {
   display: flex; flex-direction: column; gap: 1px;
   font-size: 8px; color: #555; margin-top: 2px;
 }
 @media (max-width: 600px) {
-  .cartype-options { grid-template-columns: repeat(5, 1fr); gap: 3px; }
+  .cartype-options { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 3px; }
+  .cartype-option { min-height: 64px; padding: 4px 2px; }
+  .cartype-option .ctt-icon { font-size: 18px; }
   .cartype-option .ctt-stats { font-size: 7px; }
   .cartype-option .ctt-name { font-size: 10px; }
 }

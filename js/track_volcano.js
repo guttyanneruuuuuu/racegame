@@ -773,8 +773,9 @@ window.createTrackVolcano = function () {
 
   _buildBoostPads() {
     const n = this.pathPoints.length;
-    // ブーストパッドを増設 (6 → 10) + ストレート区間を意識した配置
-    const positions = [0.06, 0.16, 0.22, 0.35, 0.42, 0.54, 0.62, 0.72, 0.84, 0.92];
+    // ブーストパッド: ショートカット位置 (0.10-0.18, 0.55-0.63) を避けて配置
+    // 9 枚に調整 (重なり対策で 10→9)
+    const positions = [0.04, 0.22, 0.30, 0.38, 0.46, 0.52, 0.68, 0.78, 0.88];
     const padTex = this._makeBoostPadTexture();
     const padGeo = new THREE.PlaneGeometry(6, 8);
     const arrowGeo = new THREE.ConeGeometry(2.0, 0.4, 4);
@@ -848,8 +849,8 @@ window.createTrackVolcano = function () {
   // ===== 💨 間欠泉ジャンプ台 =====
   _buildJumpPads() {
     const n = this.pathPoints.length;
-    // ジャンプ台を増設 (4 → 6) で空中アクションを増加
-    const positions = [0.13, 0.26, 0.44, 0.58, 0.74, 0.90];
+    // ジャンプ台: ショートカット位置 (0.10-0.18, 0.55-0.63) を避けて配置
+    const positions = [0.08, 0.26, 0.44, 0.64, 0.74, 0.90];
     const padTex = this._makeGeyserPadTexture();
 
     const ringGeo = new THREE.CylinderGeometry(3.2, 3.6, 0.5, 10);
@@ -1033,8 +1034,8 @@ window.createTrackVolcano = function () {
 
   _buildLavaPools() {
     const n = this.pathPoints.length;
-    // 溶岩プールを増設 (3 → 5)。位置はジャンプ台/ブーストパッドと重ならないように調整
-    const positions = [0.20, 0.32, 0.48, 0.66, 0.80];
+    // 溶岩プール: ショートカット (0.10-0.18, 0.55-0.63) 及び他パッドとの位置重複を避けて配置
+    const positions = [0.20, 0.34, 0.48, 0.70, 0.82];
     const lavaTex = this._makeLavaTexture();
     const lavaMat = new THREE.MeshBasicMaterial({ map: lavaTex });
     const lavaGeo = new THREE.CircleGeometry(2.4, 10);

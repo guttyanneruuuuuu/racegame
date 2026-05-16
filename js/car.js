@@ -727,6 +727,8 @@ class Car {
     this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
     this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
     this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
+    // 拡張デバフもリセット
+    this.freezeTimer = 0; this.fogTimer = 0; this.slowMul = 1.0;
     // 短時間の無敵 (連続ダメージ防止)
     this.invincibleTimer = Math.max(this.invincibleTimer, 1.5);
     this.rewindBuffer = [];
@@ -1140,6 +1142,15 @@ class Car {
       this.wrongWayRescueTimer = 0;
       this.wrongWayRescueRespawned = false;
     }
+    // 拡張系のデバフタイマーもまとめてリセット (フリーズ/フォグ/ミニ等)
+    this.freezeTimer = 0;
+    this.fogTimer = 0;
+    this.lockedTimer = 0;
+    this.confuseTimer = 0;
+    this.inkScrambleTimer = 0;
+    this.slowTimer = 0;
+    this.slowMul = 1.0;
+    this.spinTimer = 0;
     this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
   }
 

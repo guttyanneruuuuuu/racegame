@@ -106,6 +106,12 @@ const SFX = {
       case 'bump':     return this._beep([220], 0.08, 'square');
       case 'lightning':return this._sweep(2000, 200, 0.45, 'sawtooth');
       case 'finish':   return this._beep([880, 1100, 1320, 1760], 0.5, 'triangle');
+      // ===== 新規アイテム用 SFX =====
+      case 'freeze':   return this._sweep(1800, 320, 0.6, 'sine');      // キーンと冷える音
+      case 'shockwave':return this._sweep(120, 800, 0.35, 'square');   // ドーンと低音から拡散
+      case 'swap':     return this._beep([1320, 660, 1760, 880], 0.18, 'triangle'); // ヒラリヒラリ
+      case 'phase':    return this._sweep(440, 1320, 0.32, 'sine');     // 上昇音
+      case 'warp':     return this._sweep(880, 2200, 0.25, 'sine');     // ワープ用
     }
   },
 

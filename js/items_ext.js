@@ -297,38 +297,44 @@ const ItemExt = {
 
     // ===== 🔀 スワップ (前方の最も近い敵車と位置を交換) =====
     // 他レースゲームに無い: 駆け引き要素満点
+    // 順位判定は車側で集計された `totalProgress` (= lap * pathLength + 区間内距離) を正本とする
     ItemSystem.applySwap = function(owner, allCars) {
-      // 進行度が自分より前で、かつ最も近い敵車を探す
+      const myTotal = (typeof owner.totalProgress === 'number') ? owner.totalProgress : 0;
       let target = null;
-      let bestProg = Infinity;
+      let bestGap = Infinity;
       for (const c of allCars) {
         if (c.id === owner.id) continue;
         if (c.finished) continue;
         if (c.invincibleTimer > 0 || c.ghostTimer > 0) continue;
-        // 自分より前 (進行度がより進んでいる)
-        const myTotal = (owner.lap || 0) * 1000 + (owner.lastProgressIdx || 0);
-        const cTotal = (c.lap || 0) * 1000 + (c.lastProgressIdx || 0);
+        if (c.killerTimer > 0) continue;       // キラー中の車は対象外 (相手はチートに近い状態)
+        const cTotal = (typeof c.totalProgress === 'number') ? c.totalProgress : 0;
         if (cTotal <= myTotal) continue;
         const diff = cTotal - myTotal;
-        if (diff < bestProg) { bestProg = diff; target = c; }
+        if (diff < bestGap) { bestGap = diff; target = c; }
       }
       if (!target) {
-        // 前方にいなければ自分にスマイル: 軽いブースト返却
+        // 前方にいなければ自分に小ブースト返却
         owner.applyBoost(1.2);
         return null;
       }
-      // 位置交換 (高度も)
-      const ox = owner.x, oz = owner.z, oy = owner.y, oa = owner.angle, op = owner.lastProgressIdx, ol = owner.lap;
+      // 位置/進行度を完全交換 (lap, totalProgress, lastProgressIdx, maxProgress)
       this._spawnTeleportFX(owner.x, owner.z, 0xF06292);
       this._spawnTeleportFX(target.x, target.z, 0xEC407A);
+      const snap = {
+        x: owner.x, z: owner.z, y: owner.y, angle: owner.angle,
+        lap: owner.lap, totalProgress: owner.totalProgress,
+        lastProgressIdx: owner.lastProgressIdx, maxProgress: owner.maxProgress,
+      };
       owner.x = target.x; owner.z = target.z; owner.y = target.y; owner.angle = target.angle;
-      owner.lastProgressIdx = target.lastProgressIdx; owner.lap = target.lap;
-      target.x = ox; target.z = oz; target.y = oy; target.angle = oa;
-      target.lastProgressIdx = op; target.lap = ol;
-      // ターゲットには短いスピンペナルティ
+      owner.lap = target.lap; owner.totalProgress = target.totalProgress;
+      owner.lastProgressIdx = target.lastProgressIdx; owner.maxProgress = target.maxProgress;
+      target.x = snap.x; target.z = snap.z; target.y = snap.y; target.angle = snap.angle;
+      target.lap = snap.lap; target.totalProgress = snap.totalProgress;
+      target.lastProgressIdx = snap.lastProgressIdx; target.maxProgress = snap.maxProgress;
+      // 相手にはスピンペナルティ + 自分には短い無敵
       target.spinTimer = Math.max(target.spinTimer || 0, 0.6);
       target.speed *= 0.5;
-      // 自分には短い無敵
+      target.driftActive = false; target.driftCharge = 0;
       owner.giveShield(1.2);
       owner.speed = Math.max(owner.speed, 30);
       return target;
@@ -454,33 +460,43 @@ const ItemExt = {
       }
 
       // 追加: ロケットがデコイに引き寄せられる (駆け引きアイテム)
-      for (const p of ItemSystem.projectiles) {
-        if (p.kind !== 'rocket') continue;
-        // ロケットの target が敵プレイヤー & 近くに敵のデコイがあればロックオン切替
-        for (const d of ItemSystem.projectiles) {
-          if (d.kind !== 'decoy') continue;
-          if (d.ownerId === p.ownerId) continue; // 自分のデコイには釣られない
-          const dist = Utils.dist2(p.x, p.z, d.x, d.z);
-          if (dist < 20) {
-            // 偽ターゲットへ
-            p._fakeTarget = { x: d.x, z: d.z };
-            if (p.target) {
-              // 既存ターゲットより近ければ差し替え
-              const td = Utils.dist2(p.x, p.z, p.target.x, p.target.z);
-              if (dist < td) {
+      // 最適化: デコイ/ロケットが共に存在するときだけ二重ループを実行 (アロケーション無し)
+      let hasRocket = false, hasDecoy = false;
+      const pl = ItemSystem.projectiles;
+      for (let i = 0; i < pl.length; i++) {
+        const k = pl[i].kind;
+        if (k === 'rocket') hasRocket = true;
+        else if (k === 'decoy') hasDecoy = true;
+        if (hasRocket && hasDecoy) break;
+      }
+      if (hasRocket && hasDecoy) {
+        for (let i = 0; i < pl.length; i++) {
+          const p = pl[i];
+          if (p.kind !== 'rocket') continue;
+          for (let j = 0; j < pl.length; j++) {
+            const d = pl[j];
+            if (d.kind !== 'decoy') continue;
+            if (d.ownerId === p.ownerId) continue;
+            const dist = Utils.dist2(p.x, p.z, d.x, d.z);
+            if (dist < 20) {
+              p._fakeTarget = { x: d.x, z: d.z };
+              if (p.target) {
+                const td = Utils.dist2(p.x, p.z, p.target.x, p.target.z);
+                if (dist < td) {
+                  p.target = { x: d.x, z: d.z, _isDecoy: true };
+                }
+              } else {
                 p.target = { x: d.x, z: d.z, _isDecoy: true };
               }
-            } else {
-              p.target = { x: d.x, z: d.z, _isDecoy: true };
             }
           }
         }
       }
 
       // 追加: メガシールド持ちが触れたら通常車にダメージ
+      // (注: megaShieldTimer の減算は game_ext.js の updateMesh ラッパー側で行うため、ここでは減算しない)
       for (const c of allCars) {
         if (!c.megaShieldTimer || c.megaShieldTimer <= 0) continue;
-        c.megaShieldTimer -= dt;
         for (const o of allCars) {
           if (o.id === c.id) continue;
           if (o.invincibleTimer > 0 || o.ghostTimer > 0) continue;
@@ -557,6 +573,7 @@ const ItemExt = {
         if (window.Net) Net.sendAction({ kind: 'megaShield' });
       } else if (item === 'teleport') {
         ItemSystem.applyTeleport(car);
+        if (window.SFX) SFX.play('warp');
         if (window.Net) Net.sendAction({ kind: 'teleport', x: car.x, z: car.z });
       } else if (item === 'emp') {
         const n = ItemSystem.triggerEMP(car, allCars);
@@ -569,15 +586,19 @@ const ItemExt = {
         if (window.Net) Net.sendAction({ kind: 'decoy' });
       } else if (item === 'freeze') {
         ItemSystem.triggerFreeze(car, allCars);
+        if (window.SFX) SFX.play('freeze');
         if (window.Net) Net.sendAction({ kind: 'freeze' });
       } else if (item === 'shockwave') {
         ItemSystem.triggerShockwave(car, allCars);
+        if (window.SFX) SFX.play('shockwave');
         if (window.Net) Net.sendAction({ kind: 'shockwave' });
       } else if (item === 'swap') {
         const target = ItemSystem.applySwap(car, allCars);
+        if (window.SFX) SFX.play('swap');
         if (window.Net) Net.sendAction({ kind: 'swap', targetId: target ? target.id : null });
       } else if (item === 'phaseShift') {
         ItemSystem.applyPhaseShift(car);
+        if (window.SFX) SFX.play('phase');
         if (window.Net) Net.sendAction({ kind: 'phaseShift' });
       }
       if (car.isLocal) {
@@ -612,16 +633,25 @@ const ItemExt = {
         if (action.kind === 'freeze')     { ItemSystem.triggerFreeze(car, Game.cars); return; }
         if (action.kind === 'shockwave')  { ItemSystem.triggerShockwave(car, Game.cars); return; }
         if (action.kind === 'swap')       {
-          // ターゲットIDが提供されていればその車と交換、なければローカル計算
+          // ターゲットIDが提供されていればその車と進行度ごと交換、なければローカル計算
           if (action.targetId) {
             const tgt = Game.cars.find(c => c.id === action.targetId);
             if (tgt) {
-              const ox = car.x, oz = car.z, oy = car.y, oa = car.angle;
               ItemSystem._spawnTeleportFX(car.x, car.z, 0xF06292);
               ItemSystem._spawnTeleportFX(tgt.x, tgt.z, 0xEC407A);
+              const snap = {
+                x: car.x, z: car.z, y: car.y, angle: car.angle,
+                lap: car.lap, totalProgress: car.totalProgress,
+                lastProgressIdx: car.lastProgressIdx, maxProgress: car.maxProgress,
+              };
               car.x = tgt.x; car.z = tgt.z; car.y = tgt.y; car.angle = tgt.angle;
-              tgt.x = ox; tgt.z = oz; tgt.y = oy; tgt.angle = oa;
+              car.lap = tgt.lap; car.totalProgress = tgt.totalProgress;
+              car.lastProgressIdx = tgt.lastProgressIdx; car.maxProgress = tgt.maxProgress;
+              tgt.x = snap.x; tgt.z = snap.z; tgt.y = snap.y; tgt.angle = snap.angle;
+              tgt.lap = snap.lap; tgt.totalProgress = snap.totalProgress;
+              tgt.lastProgressIdx = snap.lastProgressIdx; tgt.maxProgress = snap.maxProgress;
               tgt.spinTimer = Math.max(tgt.spinTimer || 0, 0.6);
+              tgt.driftActive = false; tgt.driftCharge = 0;
             }
           } else {
             ItemSystem.applySwap(car, Game.cars);

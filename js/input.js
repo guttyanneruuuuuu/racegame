@@ -23,6 +23,10 @@ const Input = {
   _shakeLastAt: 0,
   _shakeAxisSmoothed: 0,
   _shakeCooldownMs: 500,
+  _shakeSmoothKeep: 0.82,
+  _shakeSmoothIn: 0.18,
+  _shakeZAssist: 0.35,
+  _shakeVerticalThreshold: 7,
 
   // ジャイロ感度設定
   sensitivity: 18,
@@ -276,12 +280,12 @@ const Input = {
     const ay = acc.y || 0;
     const az = acc.z || 0;
     // ローパスで滑らかにした基準と現在値の差分を見る
-    this._shakeAxisSmoothed = this._shakeAxisSmoothed * 0.82 + ay * 0.18;
+    this._shakeAxisSmoothed = this._shakeAxisSmoothed * this._shakeSmoothKeep + ay * this._shakeSmoothIn;
     const deltaY = ay - this._shakeAxisSmoothed;
     // 小さい縦振りを取りたいので、y軸差分を主軸にしつつ z軸も補助的に見る
-    const vertical = Math.max(Math.abs(deltaY), Math.abs(az) * 0.35);
+    const vertical = Math.max(Math.abs(deltaY), Math.abs(az) * this._shakeZAssist);
     const now = performance.now();
-    if (vertical > 7 && now - this._shakeLastAt > this._shakeCooldownMs) {
+    if (vertical > this._shakeVerticalThreshold && now - this._shakeLastAt > this._shakeCooldownMs) {
       this._shakeLastAt = now;
       this.shakeTriggered = true;
     }

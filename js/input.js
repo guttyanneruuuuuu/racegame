@@ -23,8 +23,7 @@ const Input = {
   _shakeLastAt: 0,
   _shakeAxisSmoothed: 0,
   _shakeCooldownMs: 500,
-  // 低パス係数 (keep + in = 1.0): 小さな縦振りを拾えるように追従寄り
-  _shakeSmoothKeep: 0.82,
+  // 低パス係数 in (keep は 1 - in): 小さな縦振りを拾えるように追従寄り
   _shakeSmoothIn: 0.18,
   _shakeZAssist: 0.35,
   _shakeVerticalThreshold: 7,
@@ -281,7 +280,8 @@ const Input = {
     const ay = acc.y || 0;
     const az = acc.z || 0;
     // ローパスで滑らかにした基準と現在値の差分を見る
-    this._shakeAxisSmoothed = this._shakeAxisSmoothed * this._shakeSmoothKeep + ay * this._shakeSmoothIn;
+    const keep = 1 - this._shakeSmoothIn;
+    this._shakeAxisSmoothed = this._shakeAxisSmoothed * keep + ay * this._shakeSmoothIn;
     const deltaY = ay - this._shakeAxisSmoothed;
     // 小さい縦振りを取りたいので、y軸差分を主軸にしつつ z軸も補助的に見る
     const vertical = Math.max(Math.abs(deltaY), Math.abs(az) * this._shakeZAssist);

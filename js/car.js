@@ -1318,16 +1318,12 @@ class Car {
   setItem(item) {
     this.item = item || null;
     this.itemExtra = null;
-    this.itemReady = !!this.item;
+    this._normalizeItemSlots();
   }
   setDoubleItems(itemA, itemB) {
     this.item = itemA || null;
     this.itemExtra = itemB || null;
-    if (!this.item && this.itemExtra) {
-      this.item = this.itemExtra;
-      this.itemExtra = null;
-    }
-    this.itemReady = !!this.item;
+    this._normalizeItemSlots();
   }
   getHeldItems() {
     const items = [];
@@ -1335,11 +1331,18 @@ class Car {
     if (this.itemExtra) items.push(this.itemExtra);
     return items;
   }
+  _normalizeItemSlots() {
+    if (!this.item && this.itemExtra) {
+      this.item = this.itemExtra;
+      this.itemExtra = null;
+    }
+    this.itemReady = !!this.item;
+  }
   consumeItem() {
     const it = this.item;
     this.item = this.itemExtra || null;
     this.itemExtra = null;
-    this.itemReady = !!this.item;
+    this._normalizeItemSlots();
     return it;
   }
 }

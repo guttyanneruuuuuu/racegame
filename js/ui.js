@@ -356,8 +356,9 @@ const GameUI = {
   updateItem(itemOrItems) {
     const slot = document.getElementById('hud-item-slot');
     if (!slot) return;
+    const MAX_ITEM_SLOTS = 2;
     const items = Array.isArray(itemOrItems)
-      ? itemOrItems.filter(Boolean).slice(0, 2)
+      ? itemOrItems.filter(Boolean).slice(0, MAX_ITEM_SLOTS)
       : (itemOrItems ? [itemOrItems] : []);
 
     if (items.length === 0) {

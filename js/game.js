@@ -30,7 +30,7 @@ const Game = {
 
   // 順位変動通知用
   _prevRanks: new Map(),
-  doubleItemBoxChance: 0.18,
+  DOUBLE_ITEM_BOX_PROBABILITY: 0.18,
 
   init() {
     this._initThree();
@@ -416,9 +416,8 @@ const Game = {
   useItem(car, allCars) {
     if (!car.item) return;
     const item = car.consumeItem();
-    if (!item) return;
 
-    if (window.SFX) SFX.play('item');
+    if (item && window.SFX) SFX.play('item');
 
     if (item === 'boost') {
       car.applyBoost(2.5);
@@ -465,8 +464,10 @@ const Game = {
     if (car.isLocal) {
       const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
       GameUI.updateItem(held.length ? held : null);
-      const d = ItemSystem.getDisplay(item);
-      showToast(`${d.emoji} ${d.label}!`, 1000);
+      if (item) {
+        const d = ItemSystem.getDisplay(item);
+        showToast(`${d.emoji} ${d.label}!`, 1000);
+      }
     }
   },
 
@@ -567,7 +568,7 @@ const Game = {
         if (Track.collectItemBox(c.x, c.z, 2.4)) {
           const rank = this._getRank(c);
           const firstItem = ItemSystem.weightedRoll(rank, this.cars.length);
-          const isDouble = Math.random() < this.doubleItemBoxChance;
+          const isDouble = Math.random() < this.DOUBLE_ITEM_BOX_PROBABILITY;
           let secondItem = null;
           if (isDouble) {
             secondItem = ItemSystem.weightedRoll(rank, this.cars.length);

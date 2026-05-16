@@ -591,7 +591,7 @@ const Game = {
         }
       }
       const BIG_JUMP_POWER = 8;
-      const SMALL_JUMP_POWER = 11 / 3;
+      const SMALL_JUMP_POWER = 3.67;
       if (r.jump) {
         // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
         c.applyJump(BIG_JUMP_POWER);

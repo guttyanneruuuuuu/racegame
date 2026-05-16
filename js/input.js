@@ -18,7 +18,7 @@ const Input = {
   _fallbackLandscapeSign: 1,
   _safeStorage: null,
 
-  // シェイク (横振り) 検出 - 小ジャンプ中のトリック用
+  // シェイク (小さい縦振り) 検出 - 小ジャンプ中のトリック用
   shakeTriggered: false,        // 1フレームだけ立つフラグ
   _shakeLastAt: 0,
   _shakeAxisSmoothed: 0,
@@ -268,20 +268,20 @@ const Input = {
     window.addEventListener('devicemotion', this._motionHandler);
   },
 
-  // 横向き持ちで「シャッ」と素早く左右に振った瞬間を検出する。
-  // x軸加速度の急変 + 上下方向の加速ピークを組み合わせ、ノイズに強くする。
+  // 横向き持ちで「シャッ」と素早く上下に小さく振った瞬間を検出する。
+  // y軸の急変を中心に、前後(z軸)の変化も少し加味して取りこぼしを減らす。
   _onMotion(e) {
     const acc = e.accelerationIncludingGravity || e.acceleration;
     if (!acc) return;
-    const ax = acc.x || 0;
     const ay = acc.y || 0;
+    const az = acc.z || 0;
     // ローパスで滑らかにした基準と現在値の差分を見る
-    this._shakeAxisSmoothed = this._shakeAxisSmoothed * 0.85 + ax * 0.15;
-    const delta = ax - this._shakeAxisSmoothed;
-    // 強い横振り (横持ちなので主軸は x or y) — どちらの大きい方を採用
-    const lateral = Math.max(Math.abs(delta), Math.abs(ay) * 0.55);
+    this._shakeAxisSmoothed = this._shakeAxisSmoothed * 0.82 + ay * 0.18;
+    const deltaY = ay - this._shakeAxisSmoothed;
+    // 小さい縦振りを取りたいので、y軸差分を主軸にしつつ z軸も補助的に見る
+    const vertical = Math.max(Math.abs(deltaY), Math.abs(az) * 0.35);
     const now = performance.now();
-    if (lateral > 14 && now - this._shakeLastAt > this._shakeCooldownMs) {
+    if (vertical > 7 && now - this._shakeLastAt > this._shakeCooldownMs) {
       this._shakeLastAt = now;
       this.shakeTriggered = true;
     }

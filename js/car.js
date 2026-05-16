@@ -589,7 +589,7 @@ class Car {
         const airBonus = this.stats.airBonus || 1.0;
         if (this.smallJumpActive) {
           if (this.smallJumpTrickSuccess) {
-            // トリック成功: ミニターボ + 軽いブースト (横振り報酬)
+            // トリック成功: ミニターボ + 軽いブースト (小さい縦振り報酬)
             this.applyMiniTurbo(1.3 * airBonus);
             this.applyBoost(0.55 * airBonus);
             if (this.isLocal && typeof showToast === 'function') showToast('🌀 TRICK BOOST!', 800);

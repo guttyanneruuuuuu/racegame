@@ -1,4 +1,8 @@
 // ============= ゲームコア =============
+// ジャンプ台の調整値
+const BIG_JUMP_PAD_POWER = 8;
+const SMALL_JUMP_PAD_POWER = 3.67; // 元の小ジャンプ力 11 の約1/3に丸めた値
+
 const Game = {
   renderer: null,
   scene: null,
@@ -592,7 +596,7 @@ const Game = {
       }
       if (r.jump) {
         // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
-        c.applyJump(24);
+        c.applyJump(BIG_JUMP_PAD_POWER);
         c.deployGlider(3.8);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
@@ -602,9 +606,9 @@ const Game = {
       if (r.smallJump) {
         // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
         if (typeof c.beginSmallJump === 'function') {
-          c.beginSmallJump(11);
+          c.beginSmallJump(SMALL_JUMP_PAD_POWER);
         } else {
-          c.applyJump(11);
+          c.applyJump(SMALL_JUMP_PAD_POWER);
         }
         if (c.isLocal) {
           showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);

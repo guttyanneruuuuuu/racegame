@@ -18,7 +18,11 @@ const Track = {
   },
 
   normalizeMapId(mapId) {
-    return this.maps[mapId] ? mapId : 'grand';
+    const raw = typeof mapId === 'string' ? mapId.trim() : '';
+    if (this.maps[raw]) return raw;
+    const lower = raw.toLowerCase();
+    if (lower === 'volucano') return 'volcano';
+    return this.maps[lower] ? lower : 'grand';
   },
 
   getMapList() {

@@ -88,6 +88,11 @@ class Car {
     this.glider = false;
     this.gliderTimer = 0;
     this.gliderMesh = null;
+    this.smallJumpActive = false;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
+    this.smallJumpFlipDuration = 0.42;
 
     // 時間巻き戻し (ユニーク機能: マリオカートには無い)
     // 過去 3秒の状態をリングバッファに保存しておき、ボタン押下で巻き戻す
@@ -579,17 +584,23 @@ class Car {
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
         // スタント車種は空中ボーナス増加
         const airBonus = this.stats.airBonus || 1.0;
-        if (this.airTime > 0.5 && !this.driftActive) {
+        if (this.smallJumpActive) {
+          if (this.smallJumpTrickSuccess) {
+            this.applyMiniTurbo(1.05 * airBonus);
+            if (this.isLocal && typeof showToast === 'function') showToast('🌀 TRICK BOOST!', 800);
+          }
+        } else if (this.airTime > 0.5 && !this.driftActive) {
           this.applyMiniTurbo((0.5 + Math.min(0.8, this.airTime * 0.35)) * airBonus);
         }
         // 長時間滞空時のグライダーボーナス
-        if (this.glider && this.airTime > 1.5) {
+        if (!this.smallJumpActive && this.glider && this.airTime > 1.5) {
           this.applyBoost(0.8 * airBonus);
           if (this.isLocal && typeof showToast === 'function') showToast('🪂 GLIDE BOOST!', 800);
         }
         this.glider = false;
         this.gliderTimer = 0;
         this.airTime = 0;
+        this._resetSmallJump();
       }
     } else {
       // 地上ではグライダー解除
@@ -598,6 +609,7 @@ class Car {
         this.glider = false;
         this.gliderTimer = 0;
       }
+      if (this.smallJumpActive) this._resetSmallJump();
     }
 
     this._integratePos(dt);
@@ -701,6 +713,7 @@ class Car {
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
     if (this.ghostTimer > 0) this.ghostTimer -= dt;
     if (this.inkScrambleTimer > 0) this.inkScrambleTimer -= dt;
+    if (this.smallJumpFlipTimer > 0) this.smallJumpFlipTimer = Math.max(0, this.smallJumpFlipTimer - dt);
     // 巻き戻しバッファに状態を保存 (ローカルのみで十分だが全車保存しても軽量)
     this._recordRewindSnapshot(dt);
   }
@@ -740,6 +753,7 @@ class Car {
     this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
     this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
     this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
+    this._resetSmallJump();
     // 拡張デバフもリセット
     this.freezeTimer = 0; this.fogTimer = 0; this.slowMul = 1.0;
     // 短時間の無敵 (連続ダメージ防止)
@@ -826,7 +840,12 @@ class Car {
       // 空中時はピッチ
       if (this.y > this._groundHeight() + 0.05) {
         const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
-        this.mesh.rotation.x = pitchAmt;
+        let trickSpin = 0;
+        if (this.smallJumpTrickDone && this.smallJumpFlipDuration > 0) {
+          const done = 1 - (this.smallJumpFlipTimer / this.smallJumpFlipDuration);
+          trickSpin = Utils.clamp(done, 0, 1) * Math.PI * 2;
+        }
+        this.mesh.rotation.x = pitchAmt + trickSpin;
       } else {
         this.mesh.rotation.x = 0;
       }
@@ -1164,6 +1183,7 @@ class Car {
     this.slowTimer = 0;
     this.slowMul = 1.0;
     this.spinTimer = 0;
+    this._resetSmallJump();
     this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
   }
 
@@ -1174,6 +1194,7 @@ class Car {
     this.vy = 0;
     this.driftActive = false;
     this.driftCharge = 0;
+    this._resetSmallJump();
     this.stuckTimer = 0;
     if (this.isLocal && typeof showToast === 'function') {
       showToast('🛟 逆走補正中…', 900);
@@ -1215,6 +1236,30 @@ class Car {
       this.vy = power;
       this.y = groundY + 0.1;
     }
+  }
+
+  beginSmallJump(power = 9.5) {
+    this.smallJumpActive = true;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
+    this.applyJump(power);
+  }
+
+  trySmallJumpTrick() {
+    if (!this.smallJumpActive || this.smallJumpTrickDone) return false;
+    if (!this.isAirborne(0.08)) return false;
+    this.smallJumpTrickDone = true;
+    this.smallJumpTrickSuccess = true;
+    this.smallJumpFlipTimer = this.smallJumpFlipDuration;
+    return true;
+  }
+
+  _resetSmallJump() {
+    this.smallJumpActive = false;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
   }
 
   applySlow(seconds, mul) {

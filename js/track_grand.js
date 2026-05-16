@@ -14,6 +14,7 @@ window.createTrackGrand = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  smallJumpPads: [],
   airBoostRings: [],
   oilPads: [],       // ハザード: オイル
   shortcuts: [],     // 近道(芝ショートカット)
@@ -105,6 +106,7 @@ window.createTrackGrand = function () {
     this._buildItemBoxes();
     this._buildBoostPads();
     this._buildJumpPads();
+    this._buildSmallJumpPads();
     this._buildAirBoostRings();
     this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
     this._buildCoins();       // コインをルートに点在
@@ -891,15 +893,43 @@ window.createTrackGrand = function () {
         ringGeo,
         new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.86, depthWrite: false })
       );
-      ring.position.set(pp.x, 6.8, pp.z);
+      ring.position.set(pp.x, 8.9, pp.z);
       this.group.add(ring);
       this.airBoostRings.push({
         mesh: ring,
-        x: pp.x, z: pp.z, y: 6.8,
+        x: pp.x, z: pp.z, y: 8.9,
         radius: 4.0,
-        yMin: 4.5,
-        yMax: 9.8,
+        yMin: 6.4,
+        yMax: 12.8,
         _phase: Math.random() * Math.PI * 2,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
+  _buildSmallJumpPads() {
+    const n = this.pathPoints.length;
+    const positions = [0.06, 0.20, 0.34, 0.50, 0.66, 0.80, 0.93];
+    const padTex = this._makeJumpPadTexture();
+    for (const t of positions) {
+      const idx = Math.floor(t * n);
+      const cur = this.pathPoints[idx];
+      const next = this.pathPoints[(idx + 1) % n];
+      const dx = next.x - cur.x, dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const dirX = dx / len, dirZ = dz / len;
+      const px = cur.x, pz = cur.z;
+
+      const rampGeo = this._makeRampGeometry(5.0, 0.85, 3.3);
+      const rampMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.92 });
+      const ramp = new THREE.Mesh(rampGeo, rampMat);
+      ramp.position.set(px, 0, pz);
+      ramp.rotation.y = Math.atan2(dirX, dirZ);
+      this.group.add(ramp);
+
+      this.smallJumpPads.push({
+        mesh: ramp, x: px, z: pz, y: 0, dirX, dirZ,
+        radius: 3.0,
         _lastTrigger: new Map(),
       });
     }
@@ -1448,7 +1478,7 @@ window.createTrackGrand = function () {
 
   // ===== パッド衝突チェック =====
   checkPads(car, now) {
-    let result = { boost: false, jump: false, airBoost: false };
+    let result = { boost: false, jump: false, airBoost: false, smallJump: false };
     const airborne = !!(car.isAirborne && car.isAirborne());
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
@@ -1477,6 +1507,16 @@ window.createTrackGrand = function () {
         if (now - last > 1500) {
           p._lastTrigger.set(car.id, now);
           result.jump = true;
+        }
+      }
+    }
+    for (const p of this.smallJumpPads) {
+      const d = Utils.dist2(car.x, car.z, p.x, p.z);
+      if (d < p.radius && car.y < p.y + 1.2) {
+        const last = p._lastTrigger.get(car.id) || 0;
+        if (now - last > 800) {
+          p._lastTrigger.set(car.id, now);
+          result.smallJump = true;
         }
       }
     }

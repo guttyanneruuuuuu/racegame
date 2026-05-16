@@ -590,9 +590,11 @@ const Game = {
           if (window.SFX) SFX.play('boost');
         }
       }
+      const BIG_JUMP_POWER = 8;
+      const SMALL_JUMP_POWER = 11 / 3;
       if (r.jump) {
         // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
-        c.applyJump(8);
+        c.applyJump(BIG_JUMP_POWER);
         c.deployGlider(3.8);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
@@ -602,9 +604,9 @@ const Game = {
       if (r.smallJump) {
         // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
         if (typeof c.beginSmallJump === 'function') {
-          c.beginSmallJump(11 / 3);
+          c.beginSmallJump(SMALL_JUMP_POWER);
         } else {
-          c.applyJump(11 / 3);
+          c.applyJump(SMALL_JUMP_POWER);
         }
         if (c.isLocal) {
           showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);

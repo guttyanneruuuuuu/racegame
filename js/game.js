@@ -368,6 +368,7 @@ const Game = {
     if (this.mode !== 'multi') return;
     if (!this.localCar) return;
     const c = this.localCar;
+    // 位置はcm単位、角度は約0.001rad、進行度は0.1mで丸めて帯域を節約
     const state = {
       x: Math.round(c.x * 100) / 100,
       z: Math.round(c.z * 100) / 100,
@@ -384,9 +385,9 @@ const Game = {
     };
     const prev = this._lastSentState;
     const th = this.NET_STATE_DELTA_THRESHOLDS;
+    const moved = !prev ? true : Math.hypot(state.x - prev.x, state.z - prev.z) > th.pos;
     const changed = !prev ||
-      Math.abs(state.x - prev.x) > th.pos ||
-      Math.abs(state.z - prev.z) > th.pos ||
+      moved ||
       Math.abs(Utils.angDiff(state.angle, prev.angle)) > th.angle ||
       Math.abs(state.speed - prev.speed) > th.speed ||
       Math.abs(state.totalProgress - prev.totalProgress) > th.progress ||

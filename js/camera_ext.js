@@ -9,7 +9,11 @@ const CameraExt = {
     this.installed = true;
     // 保存された設定
     const saved = localStorage.getItem('gyrorush-camera-mode');
-    if (saved && ['chase', 'cockpit', 'rear'].includes(saved)) this.mode = saved;
+    if (saved && ['chase', 'cockpit', 'rear'].includes(saved)) {
+      this.mode = saved;
+    } else if (saved) {
+      localStorage.setItem('gyrorush-camera-mode', 'chase');
+    }
 
     // Game._updateCamera をラップ
     const origUpdate = Game._updateCamera.bind(Game);

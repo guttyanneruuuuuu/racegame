@@ -385,11 +385,13 @@ class Car {
     return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx, this.y) : 0;
   }
 
-  isAirborne(margin = 0.35) {
+  isAirborne(margin = undefined) {
+    const MIN_HEIGHT_MARGIN = 0.35;
     const MIN_UPWARD_VELOCITY = 0.15;
     const MIN_AIR_TIME = 0.05;
+    const heightMargin = Number.isFinite(margin) ? margin : MIN_HEIGHT_MARGIN;
     const groundY = this._groundHeight();
-    return this.y > groundY + margin
+    return this.y > groundY + heightMargin
       || this.vy > MIN_UPWARD_VELOCITY
       || this.airTime > MIN_AIR_TIME
       || (this.glider && this.gliderTimer > 0);

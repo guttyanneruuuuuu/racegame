@@ -914,7 +914,8 @@ window.createTrackGrand = function () {
       const idx = Math.floor(n * t);
       const cur = this.pathPoints[idx];
       const { nx, nz } = this._segNorm[idx];
-      const laneOff = (Math.random() > 0.5 ? 1 : -1) * this.widthAt(idx) * 0.28;
+      const laneSign = (Math.random() < 0.5 ? -1 : 1);
+      const laneOff = laneSign * this.widthAt(idx) * 0.28;
       const m = new THREE.Mesh(geo, mat);
       m.position.set(cur.x + nx * laneOff, 1.6, cur.z + nz * laneOff);
       m.rotation.set(Math.random(), Math.random(), Math.random());

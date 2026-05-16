@@ -521,6 +521,15 @@ const Game = {
           if (window.SFX) SFX.play('boost');
         }
       }
+      if (r.airBoost) {
+        c.applyBoost(1.9);
+        if (c.isLocal) {
+          this._camShakeTime = 0.2;
+          this._camShakeAmp = 0.32;
+          showToast('⭕ AIR BOOST!', 700);
+          if (window.SFX) SFX.play('boost');
+        }
+      }
       if (r.jump) {
         c.applyJump(18);
         c.deployGlider(3.5);
@@ -866,6 +875,7 @@ const Game = {
       ctx.strokeStyle = '#FF6F00';
       ctx.lineWidth = 1.2;
       for (const b of Track.boulders) {
+        if (!b.mesh || b.mesh.visible === false) continue;
         ctx.beginPath();
         ctx.arc(toX(b.mesh.position.x), toZ(b.mesh.position.z), 3.0, 0, Math.PI * 2);
         ctx.fill();

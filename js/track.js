@@ -79,7 +79,7 @@ const Track = {
   },
 
   checkPads(car, now) {
-    return this._delegate('checkPads', { boost: false, jump: false, lava: false }, car, now);
+    return this._delegate('checkPads', { boost: false, jump: false, lava: false, airBoost: false }, car, now);
   },
 
   checkBoulderHit(car, now) {
@@ -101,7 +101,7 @@ const Track = {
 
 [
   'controlPoints', 'pathPoints', 'pathLength', 'cumLen', 'width', 'widthArray', 'wallHeight',
-  'group', 'trackMesh', 'itemBoxes', 'boostPads', 'jumpPads', 'oilPads', 'shortcuts', 'coins',
+  'group', 'trackMesh', 'itemBoxes', 'boostPads', 'jumpPads', 'airBoostRings', 'oilPads', 'shortcuts', 'coins',
   'lavaPools', 'boulders', 'geysers', 'wallSegmentsOuter', 'wallSegmentsInner', '_segDir', '_segNorm',
 ].forEach((prop) => {
   Object.defineProperty(Track, prop, {

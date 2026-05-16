@@ -23,6 +23,7 @@ window.createTrackVolcano = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  airBoostRings: [],
   coins: [],
   oilPads: [],
   shortcuts: [],
@@ -87,6 +88,7 @@ window.createTrackVolcano = function () {
     this._buildJumpPads();
     this._buildDirectionArrows();
     this._buildAerialGuides();
+    this._buildAirBoostRings();
     this._buildShortcuts();
     this._buildLavaPools();
     this._buildBoulders();
@@ -939,6 +941,40 @@ window.createTrackVolcano = function () {
     }
   },
 
+  _buildAirBoostRings() {
+    if (!this.jumpPads || this.jumpPads.length === 0) return;
+    const n = this.pathPoints.length;
+    const RING_RADIUS = 2.6;
+    const RING_TUBE = 0.34;
+    const RING_RADIAL_SEGMENTS = 10;
+    const RING_TUBULAR_SEGMENTS = 22;
+    const MIN_FORWARD_INDEX_OFFSET = 11;
+    const FORWARD_INDEX_RATIO = 0.035;
+    const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x66e0ff, transparent: true, opacity: 0.88, depthWrite: false,
+    });
+    for (const p of this.jumpPads) {
+      const baseIdx = p.idx || 0;
+      const midIdx = (baseIdx + Math.max(MIN_FORWARD_INDEX_OFFSET, Math.floor(n * FORWARD_INDEX_RATIO))) % n;
+      const pp = this.pathPoints[midIdx];
+      const py = this._getTrackY(midIdx);
+      const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+      ring.position.set(pp.x, py + 7.4, pp.z);
+      ring.rotation.y = Math.random() * Math.PI * 2;
+      this.group.add(ring);
+      this.airBoostRings.push({
+        mesh: ring,
+        x: pp.x, z: pp.z, y: py + 7.4,
+        radius: 4.3,
+        yMin: py + 4.8,
+        yMax: py + 10.2,
+        _phase: Math.random() * Math.PI * 2,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
   _makeGeyserPadTexture() {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -1111,6 +1147,7 @@ window.createTrackVolcano = function () {
         phase: Math.random() * Math.PI * 2,
         offset: 0,
         radius: 1.8,
+        brokenUntil: 0,
       });
     }
   },
@@ -1473,6 +1510,11 @@ window.createTrackVolcano = function () {
     }
     // 転がる岩 (Y を path 上で連続補間して、横移動時の段差を解消)
     for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) {
+        if (b.mesh.visible) b.mesh.visible = false;
+        continue;
+      }
+      if (!b.mesh.visible) b.mesh.visible = true;
       b.phase += dt * b.speed;
       const cur = this.pathPoints[b.baseIdx];
       const { nx, nz } = this._segNorm[b.baseIdx];
@@ -1489,17 +1531,37 @@ window.createTrackVolcano = function () {
       b.mesh.rotation.x += dt * 2.8;
       b.mesh.rotation.z += dt * 1.4;
     }
+    for (const r of this.airBoostRings) {
+      r._phase += dt * 3.5;
+      if (r.mesh) {
+        r.mesh.rotation.y += dt * 1.4;
+        const s = 1 + Math.sin(r._phase) * 0.12;
+        r.mesh.scale.set(s, s, s);
+        r.mesh.material.opacity = 0.55 + (Math.sin(r._phase) + 1) * 0.18;
+      }
+    }
   },
 
   checkPads(car, now) {
-    let result = { boost: false, jump: false, lava: false };
+    let result = { boost: false, jump: false, lava: false, airBoost: false };
+    const airborne = !!(car.isAirborne && car.isAirborne());
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
-      if (d < p.radius) {
+      if (d < p.radius && !airborne) {
         const last = p._lastTrigger.get(car.id) || 0;
         if (now - last > 500) {
           p._lastTrigger.set(car.id, now);
           result.boost = true;
+        }
+      }
+    }
+    for (const r of this.airBoostRings) {
+      const d = Utils.dist2(car.x, car.z, r.x, r.z);
+      if (d < r.radius && car.y > r.yMin && car.y < r.yMax) {
+        const last = r._lastTrigger.get(car.id) || 0;
+        if (now - last > 900) {
+          r._lastTrigger.set(car.id, now);
+          result.airBoost = true;
         }
       }
     }
@@ -1528,11 +1590,15 @@ window.createTrackVolcano = function () {
 
   checkBoulderHit(car, now) {
     for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) continue;
+      if (car.isAirborne && car.isAirborne()) continue;
       const dx = car.x - b.mesh.position.x;
       const dz = car.z - b.mesh.position.z;
       const d2 = dx * dx + dz * dz;
       const rr = (b.radius + 1.0);
       if (d2 < rr * rr && car.y < b.y + 2.0) {
+        b.brokenUntil = now + 1000;
+        b.mesh.visible = false;
         return { hit: true, nx: dx / Math.sqrt(d2 || 1), nz: dz / Math.sqrt(d2 || 1) };
       }
     }

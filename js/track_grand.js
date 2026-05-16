@@ -874,16 +874,21 @@ window.createTrackGrand = function () {
 
   // ===== ショートカット (内側を攻めるとアスファルト化された近道) =====
   _buildShortcuts() {
-    // ヘアピン内側に複数の戦略的ショートカット
+    // 複数セクターに合法ショートカットを配置
     const n = this.pathPoints.length;
     const shortcuts = [
+      // セクター1 スタート後の内側
+      { from: Math.floor(n * 0.05), to: Math.floor(n * 0.10) },
       // セクター2 S字の内側
       { from: Math.floor(n * 0.22), to: Math.floor(n * 0.30) },
       // セクター3 ヘアピン
       { from: Math.floor(n * 0.42), to: Math.floor(n * 0.52) },
       // セクター4 バンク内側
       { from: Math.floor(n * 0.62), to: Math.floor(n * 0.68) },
-      // セクター5 はゴール直前のスムーズカーブに変更したのでショートカットは削除
+      // セクター5 ワインディング内側
+      { from: Math.floor(n * 0.74), to: Math.floor(n * 0.80) },
+      // ゴール直前の最終カーブ内側
+      { from: Math.floor(n * 0.90), to: Math.floor(n * 0.96) },
     ];
     for (const sc of shortcuts) {
       const a = this.pathPoints[sc.from];
@@ -1240,6 +1245,13 @@ window.createTrackGrand = function () {
     return 0;
   },
 
+  _isWallGlitchZone(index) {
+    const n = this.pathPoints.length;
+    if (!n) return false;
+    const edge = Math.max(6, Math.floor(n * 0.03));
+    return index <= edge || index >= n - edge;
+  },
+
   // 壁衝突解決 (改善版: 法線にのみ押し戻し、接線は保存)
   // すり抜け対策: 検査範囲を大幅に広げ、最も深いめり込みを基準に押し戻す
   resolveWalls(x, z, radius, hintIdx = -1) {
@@ -1251,6 +1263,12 @@ window.createTrackGrand = function () {
     const lateral = rx * nx + rz * nz;
     const w = this.widthAt(idx);
     const limit = w - radius;
+
+    const n = this.pathPoints.length;
+    const startGoalWallBug = this._isWallGlitchZone(idx);
+    if (startGoalWallBug) {
+      return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
+    }
 
     // 最大めり込みを追跡 (代表セグメントから周辺まで全部見て最深を採用)
     let bestExcess = -Infinity;
@@ -1264,10 +1282,10 @@ window.createTrackGrand = function () {
     }
 
     // 近隣セグメントも広めに検査 (-2..+2 → -4..+4 に拡張)
-    const n = this.pathPoints.length;
     for (let k = -4; k <= 4; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
+      if (this._isWallGlitchZone(j)) continue;
       const pj = this.pathPoints[j];
       const seg = this._segNorm[j];
       const rxj = x - pj.x, rzj = z - pj.z;

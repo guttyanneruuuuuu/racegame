@@ -248,7 +248,7 @@ const Game = {
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
-      // 小ジャンプ中の横振りでトリック (横持ち端末を素早く振ると車体一回転)
+      // 小ジャンプ中の小さい縦振りでトリック (横持ち端末を軽く上下に振ると車体一回転)
       const shaken = (typeof Input.consumeShake === 'function') ? Input.consumeShake() : false;
       // キーボード操作のテスト用: Shift キーでも代用可能
       const kbTrick = !!(Input._keys && (Input._keys['shift'] || Input._keys[' ']));
@@ -604,14 +604,14 @@ const Game = {
         }
       }
       if (r.smallJump) {
-        // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
+        // 小ジャンプ盤: 軽くポップしてトリック (小さい縦振り) チャンス
         if (typeof c.beginSmallJump === 'function') {
           c.beginSmallJump(SMALL_JUMP_PAD_POWER);
         } else {
           c.applyJump(SMALL_JUMP_PAD_POWER);
         }
         if (c.isLocal) {
-          showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);
+          showToast('🤸 SMALL JUMP — 小さい縦振りでトリック!', 900);
           if (window.SFX) SFX.play('jump');
         }
       }

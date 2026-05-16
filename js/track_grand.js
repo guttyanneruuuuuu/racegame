@@ -877,8 +877,6 @@ window.createTrackGrand = function () {
     // 複数セクターに合法ショートカットを配置
     const n = this.pathPoints.length;
     const shortcuts = [
-      // セクター1 スタート後の内側
-      { from: Math.floor(n * 0.05), to: Math.floor(n * 0.10) },
       // セクター2 S字の内側
       { from: Math.floor(n * 0.22), to: Math.floor(n * 0.30) },
       // セクター3 ヘアピン
@@ -1284,8 +1282,6 @@ window.createTrackGrand = function () {
     const w = this.widthAt(idx);
     const limit = w - radius;
 
-    const shortcutHit = this._resolveShortcutSideWalls(x, z, radius);
-    if (shortcutHit) return shortcutHit;
     if (this.isOnShortcut(x, z)) {
       return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
     }

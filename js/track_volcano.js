@@ -981,7 +981,6 @@ window.createTrackVolcano = function () {
   _buildShortcuts() {
     const n = this.pathPoints.length;
     const shortcuts = [
-      { from: Math.floor(n * 0.10), to: Math.floor(n * 0.18) },
       { from: Math.floor(n * 0.55), to: Math.floor(n * 0.63) },
     ];
     const tex = this._makeFissureTexture();
@@ -1372,8 +1371,6 @@ window.createTrackVolcano = function () {
     const w = this.widthAt(idx);
     const limit = w - radius;
 
-    const shortcutHit = this._resolveShortcutSideWalls(x, z, radius);
-    if (shortcutHit) return shortcutHit;
     if (this.isOnShortcut(x, z)) {
       return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
     }

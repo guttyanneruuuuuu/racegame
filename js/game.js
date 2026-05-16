@@ -33,6 +33,21 @@ const Game = {
   // 順位変動通知用
   _prevRanks: new Map(),
   DOUBLE_ITEM_DROP_PROBABILITY: 0.18,
+  NET_SEND_INTERVALS: {
+    base: 50,
+    fourPlayers: 65,
+    fivePlayers: 75,
+    sixPlayers: 85,
+    idleHeartbeat: 220,
+  },
+  NET_STATE_DELTA_THRESHOLDS: {
+    // world units / radians / mps
+    pos: 0.18,
+    angle: 0.03,
+    speed: 0.6,
+    progress: 0.35,
+    y: 0.12,
+  },
 
   init() {
     this._initThree();
@@ -131,13 +146,14 @@ const Game = {
     const numCars = playersList.length;
     if (this.mode === 'multi') {
       // 多人数時は送信頻度を少し落として、ホスト中継負荷を抑える
-      if (numCars >= 6) this.netSendInterval = 85;
-      else if (numCars >= 5) this.netSendInterval = 75;
-      else if (numCars >= 4) this.netSendInterval = 65;
-      else this.netSendInterval = 50;
+      if (numCars >= 6) this.netSendInterval = this.NET_SEND_INTERVALS.sixPlayers;
+      else if (numCars >= 5) this.netSendInterval = this.NET_SEND_INTERVALS.fivePlayers;
+      else if (numCars >= 4) this.netSendInterval = this.NET_SEND_INTERVALS.fourPlayers;
+      else this.netSendInterval = this.NET_SEND_INTERVALS.base;
     } else {
-      this.netSendInterval = 50;
+      this.netSendInterval = this.NET_SEND_INTERVALS.base;
     }
+    this.netIdleHeartbeatInterval = this.NET_SEND_INTERVALS.idleHeartbeat;
     this._lastSentState = null;
     const positions = Track.getStartPositions(numCars);
 
@@ -367,13 +383,14 @@ const Game = {
       y: Math.round(c.y * 100) / 100,
     };
     const prev = this._lastSentState;
+    const th = this.NET_STATE_DELTA_THRESHOLDS;
     const changed = !prev ||
-      Math.abs(state.x - prev.x) > 0.18 ||
-      Math.abs(state.z - prev.z) > 0.18 ||
-      Math.abs(Utils.angDiff(state.angle, prev.angle)) > 0.03 ||
-      Math.abs(state.speed - prev.speed) > 0.6 ||
-      Math.abs(state.totalProgress - prev.totalProgress) > 0.35 ||
-      Math.abs(state.y - prev.y) > 0.12 ||
+      Math.abs(state.x - prev.x) > th.pos ||
+      Math.abs(state.z - prev.z) > th.pos ||
+      Math.abs(Utils.angDiff(state.angle, prev.angle)) > th.angle ||
+      Math.abs(state.speed - prev.speed) > th.speed ||
+      Math.abs(state.totalProgress - prev.totalProgress) > th.progress ||
+      Math.abs(state.y - prev.y) > th.y ||
       state.lap !== prev.lap ||
       state.boost !== prev.boost ||
       state.mini !== prev.mini ||

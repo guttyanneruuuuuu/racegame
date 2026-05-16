@@ -1,6 +1,7 @@
 // ============= ゲームコア =============
+// ジャンプ台の調整値
 const BIG_JUMP_PAD_POWER = 8;
-const SMALL_JUMP_PAD_POWER = 11 / 3; // 元の小ジャンプ力 11 の約1/3
+const SMALL_JUMP_PAD_POWER = 3.67; // 元の小ジャンプ力 11 の約1/3に丸めた値
 
 const Game = {
   renderer: null,

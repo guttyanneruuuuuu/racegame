@@ -876,10 +876,16 @@ window.createTrackGrand = function () {
   _buildAirBoostRings() {
     if (!this.jumpPads || this.jumpPads.length === 0) return;
     const n = this.pathPoints.length;
-    const ringGeo = new THREE.TorusGeometry(2.4, 0.32, 10, 22);
+    const RING_RADIUS = 2.4;
+    const RING_TUBE = 0.32;
+    const RING_RADIAL_SEGMENTS = 10;
+    const RING_TUBULAR_SEGMENTS = 22;
+    const MIN_FORWARD_INDEX_OFFSET = 9;
+    const FORWARD_INDEX_RATIO = 0.03;
+    const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     for (const p of this.jumpPads) {
       const base = this.getProgress(p.x, p.z).index;
-      const midIdx = (base + Math.max(9, Math.floor(n * 0.03))) % n;
+      const midIdx = (base + Math.max(MIN_FORWARD_INDEX_OFFSET, Math.floor(n * FORWARD_INDEX_RATIO))) % n;
       const pp = this.pathPoints[midIdx];
       const ring = new THREE.Mesh(
         ringGeo,

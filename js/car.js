@@ -386,8 +386,13 @@ class Car {
   }
 
   isAirborne(margin = 0.35) {
+    const MIN_UPWARD_VELOCITY = 0.15;
+    const MIN_AIR_TIME = 0.05;
     const groundY = this._groundHeight();
-    return this.y > groundY + margin || this.vy > 0.15 || this.airTime > 0.05 || (this.glider && this.gliderTimer > 0);
+    return this.y > groundY + margin
+      || this.vy > MIN_UPWARD_VELOCITY
+      || this.airTime > MIN_AIR_TIME
+      || (this.glider && this.gliderTimer > 0);
   }
 
   // 入力からの操作 (steer: -1..+1, accel, brake bool)

@@ -944,13 +944,19 @@ window.createTrackVolcano = function () {
   _buildAirBoostRings() {
     if (!this.jumpPads || this.jumpPads.length === 0) return;
     const n = this.pathPoints.length;
-    const ringGeo = new THREE.TorusGeometry(2.6, 0.34, 10, 22);
+    const RING_RADIUS = 2.6;
+    const RING_TUBE = 0.34;
+    const RING_RADIAL_SEGMENTS = 10;
+    const RING_TUBULAR_SEGMENTS = 22;
+    const MIN_FORWARD_INDEX_OFFSET = 11;
+    const FORWARD_INDEX_RATIO = 0.035;
+    const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x66e0ff, transparent: true, opacity: 0.88, depthWrite: false,
     });
     for (const p of this.jumpPads) {
       const baseIdx = p.idx || 0;
-      const midIdx = (baseIdx + Math.max(11, Math.floor(n * 0.035))) % n;
+      const midIdx = (baseIdx + Math.max(MIN_FORWARD_INDEX_OFFSET, Math.floor(n * FORWARD_INDEX_RATIO))) % n;
       const pp = this.pathPoints[midIdx];
       const py = this._getTrackY(midIdx);
       const ring = new THREE.Mesh(ringGeo, ringMat.clone());

@@ -2,6 +2,8 @@
 // ジャンプ台の調整値
 const BIG_JUMP_PAD_POWER = 16;
 const SMALL_JUMP_PAD_POWER = 11;
+const AIR_RING_MARKER_LINE_WIDTH = 1.4;
+const AIR_RING_MARKER_RADIUS = 2.6;
 
 const Game = {
   renderer: null,
@@ -864,8 +866,6 @@ const Game = {
     if (!this.miniCtx) return;
     if (now < this._miniNextAt) return;
     this._miniNextAt = now + 50;
-    const AIR_RING_MARKER_LINE_WIDTH = 1.4;
-    const AIR_RING_MARKER_RADIUS = 2.6;
     const ctx = this.miniCtx;
     const W = this.miniCanvas.width;
     const H = this.miniCanvas.height;

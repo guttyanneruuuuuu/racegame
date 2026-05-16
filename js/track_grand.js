@@ -5,7 +5,7 @@ window.createTrackGrand = function () {
   pathPoints: [],
   pathLength: 0,
   cumLen: [],
-  width: 22,        // 基本コース幅 (セクターごとに変化)
+  width: 28,        // 基本コース幅 (太めにして走りやすく調整)
   widthArray: [],   // 各セグメントごとの幅 (動的に算出)
   wallHeight: 4.5,
 
@@ -181,16 +181,16 @@ window.createTrackGrand = function () {
     for (let i = 0; i < n; i++) {
       const t = i / n;            // 0..1 でループ
       let w = this.width;
-      // セクター1 (0..0.18) 高速ストレート: 広い
-      if (t < 0.18)        w = 28;
-      // セクター2 (0.18..0.30) テクニカルS字: 狭い
-      else if (t < 0.30)   w = 18;
-      // セクター3 (0.30..0.50) ヘアピン: 中
-      else if (t < 0.50)   w = 22;
-      // セクター4 (0.50..0.72) 高速バンク: 広い
-      else if (t < 0.72)   w = 30;
-      // セクター5 (0.72..1.0) ゴール直前カーブ: 広めに変更 (壁すり抜け対策)
-      else                 w = 26;
+      // セクター1 (0..0.18) 高速ストレート: かなり広い
+      if (t < 0.18)        w = 34;
+      // セクター2 (0.18..0.30) テクニカルS字: 以前より余裕を持たせる
+      else if (t < 0.30)   w = 24;
+      // セクター3 (0.30..0.50) ヘアピン: 中広め
+      else if (t < 0.50)   w = 28;
+      // セクター4 (0.50..0.72) 高速バンク: 最大級に広く
+      else if (t < 0.72)   w = 36;
+      // セクター5 (0.72..1.0) ゴール直前カーブ: 壁際の余裕を増やす
+      else                 w = 32;
 
       // 隣接セグメントとの曲率に応じて少し補正 (急カーブは僅かに広げる)
       const prev = (i - 1 + n) % n;
@@ -198,7 +198,7 @@ window.createTrackGrand = function () {
       const a = this._segDir[prev], b = this._segDir[nxt];
       const dot = a.ux * b.ux + a.uz * b.uz;
       const curveSharp = 1 - Math.max(-1, Math.min(1, dot));
-      w += curveSharp * 1.4;
+      w += curveSharp * 1.8;
       this.widthArray[i] = w;
     }
     // 平滑化 (急な幅変化を緩める)

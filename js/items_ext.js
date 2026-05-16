@@ -1,7 +1,7 @@
 // ============= アイテム拡張パック =============
 // 既存の ItemSystem に新規アイテム (霧/ブロック/ミニ/ブーメラン/ヒーローシールド) を追加。
 // items.js は変更せず、ここで動的に拡張する。
-const TOP_RANK_BLOCKED_ITEMS = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
+const TOP_RANK_BLOCKED_ITEMS = ['killer', 'lightning', 'tripleRocket', 'swap'];
 const STORM_CLOUD_HEIGHT = 6.5;
 const STORM_CLOUD_FLOAT_AMPLITUDE = 0.35;
 const STORM_CLOUD_OPACITY = 0.88;
@@ -17,7 +17,7 @@ const ItemExt = {
 
     // 既存配列に追加
     const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer',
-                      'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud'];
+                      'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud', 'repairKit'];
     for (const it of newItems) {
       if (!ItemSystem.ITEMS.includes(it)) ItemSystem.ITEMS.push(it);
     }
@@ -40,6 +40,7 @@ const ItemExt = {
         case 'swap':       return { emoji: '🔀', label: 'SWAP',        color: '#F06292' };
         case 'phaseShift': return { emoji: '👻', label: 'PHASE',       color: '#CE93D8' };
         case 'stormCloud': return { emoji: '🌩', label: 'STORM CLOUD', color: '#5C6BC0' };
+        case 'repairKit':  return { emoji: '🛠️', label: 'PIT BOOST',   color: '#66BB6A' };
       }
       return origDisp(item);
     };
@@ -50,43 +51,44 @@ const ItemExt = {
       const ratio = totalPlayers > 1 ? (rank - 1) / (totalPlayers - 1) : 0.5;
       // 既存ベース重み(items.js のロジックに新規分を追加)
       const w = {
-        boost:        Utils.lerp(3.0, 1.5, ratio),
-        tripleBoost:  Utils.lerp(0.2, 1.8, ratio),
-        banana:       Utils.lerp(2.5, 0.8, ratio),
-        oil:          Utils.lerp(1.8, 0.7, ratio),
-        mine:         Utils.lerp(0.9, 0.9, ratio),
-        ink:          Utils.lerp(0.6, 1.6, ratio),
-        shield:       Utils.lerp(2.0, 1.0, ratio),
-        ghost:        Utils.lerp(0.2, 1.4, ratio),
-        magnet:       Utils.lerp(0.4, 1.4, ratio),
-        rocket:       Utils.lerp(0.8, 2.0, ratio),
-        tripleRocket: Utils.lerp(0.05, 1.1, ratio),
-        lightning:    Utils.lerp(0.03, 1.2, ratio),
+        boost:        Utils.lerp(2.6, 1.6, ratio),
+        tripleBoost:  Utils.lerp(0.7, 2.1, ratio),
+        banana:       Utils.lerp(2.0, 1.1, ratio),
+        oil:          Utils.lerp(1.6, 0.9, ratio),
+        mine:         Utils.lerp(1.0, 1.1, ratio),
+        ink:          Utils.lerp(0.8, 1.5, ratio),
+        shield:       Utils.lerp(2.2, 1.4, ratio),
+        ghost:        Utils.lerp(0.7, 1.5, ratio),
+        magnet:       Utils.lerp(0.8, 1.6, ratio),
+        rocket:       Utils.lerp(1.0, 2.2, ratio),
+        tripleRocket: Utils.lerp(0.35, 1.5, ratio),
+        lightning:    Utils.lerp(0.18, 1.25, ratio),
         // 既存追加アイテム
-        fog:          Utils.lerp(0.1, 1.2, ratio),
-        block:        Utils.lerp(0.6, 1.1, ratio),
-        mini:         Utils.lerp(0.1, 0.9, ratio),
-        boomerang:    Utils.lerp(0.5, 1.4, ratio),
-        megaShield:   Utils.lerp(0.0, 0.5, ratio),
+        fog:          Utils.lerp(0.45, 1.1, ratio),
+        block:        Utils.lerp(0.9, 1.2, ratio),
+        mini:         Utils.lerp(0.55, 1.0, ratio),
+        boomerang:    Utils.lerp(0.9, 1.5, ratio),
+        megaShield:   Utils.lerp(0.28, 0.85, ratio),
         // === 新規ユニークアイテム ===
-        teleport:     Utils.lerp(0.05, 1.6, ratio),  // 下位救済: 前方ワープ
-        emp:          Utils.lerp(0.2, 1.4, ratio),   // HUDジャミング + 短い制御不能
-        decoy:        Utils.lerp(0.5, 1.0, ratio),   // ロケット囮: 駆け引きアイテム
-        killer:       Utils.lerp(0.01, 2.8, ratio),  // 下位専用の超加速アイテム
+        teleport:     Utils.lerp(0.55, 1.7, ratio),
+        emp:          Utils.lerp(0.65, 1.25, ratio),
+        decoy:        Utils.lerp(0.85, 1.15, ratio),
+        killer:       Utils.lerp(0.12, 1.9, ratio),
+        repairKit:    Utils.lerp(1.7, 1.55, ratio),
       };
       // === 新規追加アイテム重み ===
       // freeze: 周囲を凍結 (中位救済)
-      w.freeze     = Utils.lerp(0.0, 1.0, ratio);
+      w.freeze     = Utils.lerp(0.45, 1.2, ratio);
       // shockwave: 周囲を強力に弾く防御兼攻撃 (中位)
-      w.shockwave  = Utils.lerp(0.2, 1.2, ratio);
+      w.shockwave  = Utils.lerp(0.75, 1.35, ratio);
       // swap: 前方のライバルと順位交換 (下位救済)
-      w.swap       = Utils.lerp(0.0, 1.3, ratio);
+      w.swap       = Utils.lerp(0.18, 1.45, ratio);
       // phaseShift: 短時間の透過 + 速度ブースト (中下位)
-      w.phaseShift = Utils.lerp(0.1, 1.4, ratio);
+      w.phaseShift = Utils.lerp(0.7, 1.45, ratio);
       // stormCloud: 狙った地点に落雷 (中下位)
-      w.stormCloud = Utils.lerp(0.0, 1.3, ratio);
-      // 強アイテムは 1位/2位には絶対出さない
-      if (rank <= 2) {
+      w.stormCloud = Utils.lerp(0.4, 1.35, ratio);
+      // 強アイテムは先頭だけ厳しめに制限し、2位以下はバリエーションを増やす
+      if (rank === 1) {
         for (const k of TOP_RANK_BLOCKED_ITEMS) w[k] = 0;
       }
       if (totalPlayers <= 2) {
@@ -187,6 +189,28 @@ const ItemExt = {
     ItemSystem.applyMegaShield = function(owner) {
       owner.giveShield(10);
       owner.megaShieldTimer = Math.max(owner.megaShieldTimer || 0, 10);
+    };
+
+    // ===== 🛠️ ピットブースト (状態異常をリフレッシュして加速) =====
+    ItemSystem.applyRepairKit = function(owner) {
+      owner.spinTimer = 0;
+      owner.lockedTimer = 0;
+      owner.squishTimer = 0;
+      owner.freezeTimer = 0;
+      owner.fogTimer = 0;
+      owner.confuseTimer = 0;
+      owner.inkScrambleTimer = 0;
+      owner.slowTimer = 0;
+      owner.slowMul = 1.0;
+      owner.wallRecoverTimer = 0;
+      owner.wallRecoverSteer = 0;
+      owner.driftActive = false;
+      owner.driftCharge = 0;
+      if (typeof owner.addCoin === 'function') owner.addCoin(2);
+      owner.giveShield(1.8);
+      owner.applyBoost(1.6);
+      owner.speed = Math.max(owner.speed, 28);
+      this._spawnShockwave(owner.x, owner.z, 4.8, 0x66BB6A);
     };
 
     // ===== 🌀 ワープ (短距離テレポート: 前方28m + 短い無敵) =====
@@ -671,7 +695,7 @@ const ItemExt = {
       if (!car.item) return;
       const it = car.item;
       const isNew = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy',
-                     'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud'].includes(it);
+                     'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud', 'repairKit'].includes(it);
       if (!isNew) {
         return origUse(car, allCars);
       }
@@ -725,6 +749,9 @@ const ItemExt = {
       } else if (item === 'stormCloud') {
         const target = ItemSystem.triggerStormCloud(car, allCars);
         if (window.Net) Net.sendAction({ kind: 'stormCloud', targetId: target ? target.id : null });
+      } else if (item === 'repairKit') {
+        ItemSystem.applyRepairKit(car);
+        if (window.Net) Net.sendAction({ kind: 'repairKit' });
       }
       if (car.isLocal) {
         if (window.GameUI) {
@@ -789,6 +816,7 @@ const ItemExt = {
         }
         if (action.kind === 'phaseShift') { ItemSystem.applyPhaseShift(car); return; }
         if (action.kind === 'stormCloud') { ItemSystem.triggerStormCloud(car, Game.cars, action.targetId); return; }
+        if (action.kind === 'repairKit') { ItemSystem.applyRepairKit(car); return; }
       }
       origRemote(action);
     };

@@ -120,6 +120,11 @@ const AIDriver = {
       else if (itm === 'stormCloud') {
         use = this._hasRivalAhead(car, allCars) || this._enemiesNearby(car, allCars, 10) >= 1 || Math.random() < 0.35;
       }
+      // ピットブースト: 状態異常中は優先、平時でもそこそこ使う
+      else if (itm === 'repairKit') {
+        use = car.spinTimer > 0 || car.slowTimer > 0 || car.lockedTimer > 0 || car.confuseTimer > 0 ||
+          car.freezeTimer > 0 || car.inkScrambleTimer > 0 || Math.random() < 0.45;
+      }
       if (use) {
         Game.useItem(car, allCars);
         st.itemCooldown = 2.5 + Math.random() * 2.5;

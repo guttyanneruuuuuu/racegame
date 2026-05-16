@@ -33,6 +33,8 @@ const Game = {
   _slipstreamCharge: 0,
   _slipstreamCooldown: 0,
   _slipstreamActive: false,
+  _overtakeCombo: 0,
+  _overtakeComboUntil: 0,
 
   init() {
     this._initThree();
@@ -173,6 +175,8 @@ const Game = {
     this._slipstreamCharge = 0;
     this._slipstreamCooldown = 0;
     this._slipstreamActive = false;
+    this._overtakeCombo = 0;
+    this._overtakeComboUntil = 0;
     if (this.hudEls && this.hudEls.slipMeter) {
       this.hudEls.slipMeter.classList.remove('show', 'active', 'ready', 'cooldown');
     }
@@ -198,6 +202,7 @@ const Game = {
       this._updateSlipstream(dt);
       this._updateAIs(dt);
       this._handleCollisions();
+      this._updateOvertakeCombo(now);
       this._sendNetwork(now);
       this._updateMagnet(dt);
       ItemSystem.update(dt, this.cars);
@@ -410,19 +415,36 @@ const Game = {
   _detectRankChanges() {
     if (!this.localCar) return;
     const sorted = [...this.cars].sort((a, b) => b.totalProgress - a.totalProgress);
+    const now = performance.now();
     sorted.forEach((c, idx) => {
       const newRank = idx + 1;
       const old = this._prevRanks.get(c.id);
       this._prevRanks.set(c.id, newRank);
       if (c.id === this.localCar.id && old !== undefined && old !== newRank) {
         if (newRank < old) {
-          // 順位上昇
-          showToast(`▲ ${newRank}位 にアップ！`, 900);
+          // 順位上昇: オーバーテイクコンボで小ブースト
+          if (now <= this._overtakeComboUntil) this._overtakeCombo += 1;
+          else this._overtakeCombo = 1;
+          this._overtakeComboUntil = now + 3200;
+          const bonus = Math.min(1.2, 0.35 + this._overtakeCombo * 0.18);
+          this.localCar.applyMiniTurbo(bonus);
+          const comboLabel = this._overtakeCombo >= 2 ? ` ×${this._overtakeCombo} COMBO` : '';
+          showToast(`⚡ OVERTAKE! ${newRank}位${comboLabel}`, 950);
+          if (window.SFX) SFX.play('boost');
         } else if (newRank > old && newRank <= this.cars.length) {
+          this._overtakeCombo = 0;
+          this._overtakeComboUntil = 0;
           showToast(`▼ ${newRank}位 に...`, 900);
         }
       }
     });
+  },
+
+  _updateOvertakeCombo(now) {
+    if (this._overtakeCombo > 0 && now > this._overtakeComboUntil) {
+      this._overtakeCombo = 0;
+      this._overtakeComboUntil = 0;
+    }
   },
 
   _sendNetwork(now) {

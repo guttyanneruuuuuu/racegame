@@ -18,7 +18,11 @@ const Track = {
   },
 
   normalizeMapId(mapId) {
-    return this.maps[mapId] ? mapId : 'grand';
+    const raw = typeof mapId === 'string' ? mapId.trim() : '';
+    if (this.maps[raw]) return raw;
+    const lower = raw.toLowerCase();
+    if (lower === 'volucano') return 'volcano';
+    return this.maps[lower] ? lower : 'grand';
   },
 
   getMapList() {
@@ -79,7 +83,7 @@ const Track = {
   },
 
   checkPads(car, now) {
-    return this._delegate('checkPads', { boost: false, jump: false, lava: false }, car, now);
+    return this._delegate('checkPads', { boost: false, jump: false, lava: false, airBoost: false }, car, now);
   },
 
   checkBoulderHit(car, now) {
@@ -101,7 +105,7 @@ const Track = {
 
 [
   'controlPoints', 'pathPoints', 'pathLength', 'cumLen', 'width', 'widthArray', 'wallHeight',
-  'group', 'trackMesh', 'itemBoxes', 'boostPads', 'jumpPads', 'oilPads', 'shortcuts', 'coins',
+  'group', 'trackMesh', 'itemBoxes', 'boostPads', 'jumpPads', 'airBoostRings', 'oilPads', 'shortcuts', 'coins',
   'lavaPools', 'boulders', 'geysers', 'wallSegmentsOuter', 'wallSegmentsInner', '_segDir', '_segNorm',
 ].forEach((prop) => {
   Object.defineProperty(Track, prop, {

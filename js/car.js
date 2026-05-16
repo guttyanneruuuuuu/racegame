@@ -88,6 +88,11 @@ class Car {
     this.glider = false;
     this.gliderTimer = 0;
     this.gliderMesh = null;
+    this.smallJumpActive = false;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
+    this.smallJumpFlipDuration = 0.42;
 
     // 時間巻き戻し (ユニーク機能: マリオカートには無い)
     // 過去 3秒の状態をリングバッファに保存しておき、ボタン押下で巻き戻す
@@ -98,6 +103,7 @@ class Car {
 
     // アイテム
     this.item = null;
+    this.itemExtra = null;
     this.itemReady = false;
 
     // 進行管理
@@ -384,6 +390,18 @@ class Car {
     return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx, this.y) : 0;
   }
 
+  isAirborne(margin = undefined) {
+    const MIN_HEIGHT_MARGIN = 0.35;
+    const MIN_UPWARD_VELOCITY = 0.15;
+    const MIN_AIR_TIME = 0.05;
+    const heightMargin = Number.isFinite(margin) ? margin : MIN_HEIGHT_MARGIN;
+    const groundY = this._groundHeight();
+    return this.y > groundY + heightMargin
+      || this.vy > MIN_UPWARD_VELOCITY
+      || this.airTime > MIN_AIR_TIME
+      || (this.glider && this.gliderTimer > 0);
+  }
+
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
     this.wallImpactStrength = 0;
@@ -549,11 +567,14 @@ class Car {
       if (this.y > groundY + 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
         this.deployGlider(3.0);
       }
-      // グライダー有効中は重力が弱く前進推進が付く
-      const gravity = (this.glider && this.gliderTimer > 0) ? 8 : 30;
+      // グライダー有効中は重力が弱く前進推進+ゆるい上昇推力が付く (加速リング到達のため)
+      const gliderOn = this.glider && this.gliderTimer > 0;
+      const gravity = gliderOn ? 6 : 30;
       this.vy -= gravity * dt;
+      // グライダー中は微小な上昇推力 (リング高度に到達できるよう)
+      if (gliderOn && this.vy < 1.2) this.vy += 4.2 * dt;
       // グライダー中は落下速度の下限を制限 (ゆっくり)
-      if (this.glider && this.gliderTimer > 0 && this.vy < -6) this.vy = -6;
+      if (gliderOn && this.vy < -4.5) this.vy = -4.5;
       this.y += this.vy * dt;
       this.airTime += dt;
       // グライダー中は推進力 (空中加速)
@@ -566,17 +587,26 @@ class Car {
         // 着地時にミニトリックボーナス (空中時間に応じて少しブースト)
         // スタント車種は空中ボーナス増加
         const airBonus = this.stats.airBonus || 1.0;
-        if (this.airTime > 0.5 && !this.driftActive) {
+        if (this.smallJumpActive) {
+          if (this.smallJumpTrickSuccess) {
+            // トリック成功: ミニターボ + 軽いブースト (横振り報酬)
+            this.applyMiniTurbo(1.3 * airBonus);
+            this.applyBoost(0.55 * airBonus);
+            if (this.isLocal && typeof showToast === 'function') showToast('🌀 TRICK BOOST!', 800);
+          }
+          // 失敗 (振らなかった) ならボーナスなしでそのまま着地
+        } else if (this.airTime > 0.5 && !this.driftActive) {
           this.applyMiniTurbo((0.5 + Math.min(0.8, this.airTime * 0.35)) * airBonus);
         }
         // 長時間滞空時のグライダーボーナス
-        if (this.glider && this.airTime > 1.5) {
+        if (!this.smallJumpActive && this.glider && this.airTime > 1.5) {
           this.applyBoost(0.8 * airBonus);
           if (this.isLocal && typeof showToast === 'function') showToast('🪂 GLIDE BOOST!', 800);
         }
         this.glider = false;
         this.gliderTimer = 0;
         this.airTime = 0;
+        this._resetSmallJump();
       }
     } else {
       // 地上ではグライダー解除
@@ -585,6 +615,7 @@ class Car {
         this.glider = false;
         this.gliderTimer = 0;
       }
+      if (this.smallJumpActive) this._resetSmallJump();
     }
 
     this._integratePos(dt);
@@ -688,6 +719,7 @@ class Car {
     if (this.wallHitFlash > 0) this.wallHitFlash -= dt;
     if (this.ghostTimer > 0) this.ghostTimer -= dt;
     if (this.inkScrambleTimer > 0) this.inkScrambleTimer -= dt;
+    if (this.smallJumpFlipTimer > 0) this.smallJumpFlipTimer = Math.max(0, this.smallJumpFlipTimer - dt);
     // 巻き戻しバッファに状態を保存 (ローカルのみで十分だが全車保存しても軽量)
     this._recordRewindSnapshot(dt);
   }
@@ -727,6 +759,7 @@ class Car {
     this.lockedTimer = 0; this.driftActive = false; this.driftCharge = 0;
     this.wallRecoverTimer = 0; this.consecutiveWallHits = 0;
     this.vy = 0; this.airTime = 0; this.glider = false; this.gliderTimer = 0;
+    this._resetSmallJump();
     // 拡張デバフもリセット
     this.freezeTimer = 0; this.fogTimer = 0; this.slowMul = 1.0;
     // 短時間の無敵 (連続ダメージ防止)
@@ -813,7 +846,12 @@ class Car {
       // 空中時はピッチ
       if (this.y > this._groundHeight() + 0.05) {
         const pitchAmt = Utils.clamp(this.vy * 0.04, -0.4, 0.4);
-        this.mesh.rotation.x = pitchAmt;
+        let trickSpin = 0;
+        if (this.smallJumpTrickDone && this.smallJumpFlipDuration > 0) {
+          const done = 1 - (this.smallJumpFlipTimer / this.smallJumpFlipDuration);
+          trickSpin = Utils.clamp(done, 0, 1) * Math.PI * 2;
+        }
+        this.mesh.rotation.x = pitchAmt + trickSpin;
       } else {
         this.mesh.rotation.x = 0;
       }
@@ -1151,6 +1189,7 @@ class Car {
     this.slowTimer = 0;
     this.slowMul = 1.0;
     this.spinTimer = 0;
+    this._resetSmallJump();
     this.giveShield(1.5); // 短時間の無敵で連鎖事故防止
   }
 
@@ -1161,6 +1200,7 @@ class Car {
     this.vy = 0;
     this.driftActive = false;
     this.driftCharge = 0;
+    this._resetSmallJump();
     this.stuckTimer = 0;
     if (this.isLocal && typeof showToast === 'function') {
       showToast('🛟 逆走補正中…', 900);
@@ -1202,6 +1242,30 @@ class Car {
       this.vy = power;
       this.y = groundY + 0.1;
     }
+  }
+
+  beginSmallJump(power = 9.5) {
+    this.smallJumpActive = true;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
+    this.applyJump(power);
+  }
+
+  trySmallJumpTrick() {
+    if (!this.smallJumpActive || this.smallJumpTrickDone) return false;
+    if (!this.isAirborne(0.08)) return false;
+    this.smallJumpTrickDone = true;
+    this.smallJumpTrickSuccess = true;
+    this.smallJumpFlipTimer = this.smallJumpFlipDuration;
+    return true;
+  }
+
+  _resetSmallJump() {
+    this.smallJumpActive = false;
+    this.smallJumpTrickDone = false;
+    this.smallJumpTrickSuccess = false;
+    this.smallJumpFlipTimer = 0;
   }
 
   applySlow(seconds, mul) {
@@ -1315,13 +1379,33 @@ class Car {
   }
 
   setItem(item) {
-    this.item = item;
-    this.itemReady = true;
+    this.item = item || null;
+    this.itemExtra = null;
+    this._normalizeItemSlots();
+  }
+  setDoubleItems(itemA, itemB) {
+    this.item = itemA || null;
+    this.itemExtra = itemB || null;
+    this._normalizeItemSlots();
+  }
+  getHeldItems() {
+    const items = [];
+    if (this.item) items.push(this.item);
+    if (this.itemExtra) items.push(this.itemExtra);
+    return items;
+  }
+  _normalizeItemSlots() {
+    if (!this.item && this.itemExtra) {
+      this.item = this.itemExtra;
+      this.itemExtra = null;
+    }
+    this.itemReady = !!this.item;
   }
   consumeItem() {
     const it = this.item;
-    this.item = null;
-    this.itemReady = false;
+    this.item = this.itemExtra;
+    this.itemExtra = null;
+    this._normalizeItemSlots();
     return it;
   }
 }

@@ -23,6 +23,8 @@ window.createTrackVolcano = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  smallJumpPads: [],
+  airBoostRings: [],
   coins: [],
   oilPads: [],
   shortcuts: [],
@@ -43,35 +45,28 @@ window.createTrackVolcano = function () {
     this.group = new THREE.Group();
     scene.add(this.group);
 
-    // 制御点: ヘアピン2つを緩和して曲率を平準化
-    // GRAND サーキットと同じく "Catmull-Rom が暴れない" よう、隣接距離を均し、
-    // 急な折り返しを 2 段階の中継点で繋いでいる。
+    // 制御点: 交差しない時計回りループに再調整
+    // 右側の折返しと中央復帰線が交差しないよう、外周寄りの滑らかな周回ラインに変更。
     this.controlPoints = [
       { x:    0, z:  170 },   // スタート直線
-      { x:   90, z:  175 },
-      { x:  170, z:  150 },
-      { x:  225, z:   90 },   // 右大カーブ進入
-      { x:  240, z:   10 },
-      { x:  220, z:  -60 },
-      { x:  170, z: -100 },   // ヘアピン1 (緩和)
-      { x:  100, z: -100 },
-      { x:   40, z:  -55 },   // S字へ復帰
-      { x:    0, z:   10 },
-      { x:  -60, z:   30 },
-      { x: -130, z:    0 },   // 左外周
-      { x: -195, z:  -70 },
-      { x: -200, z: -150 },
-      { x: -150, z: -210 },   // 下端の大カーブ
-      { x:  -60, z: -225 },
-      { x:   40, z: -210 },
-      { x:  130, z: -180 },
-      { x:  170, z: -130 },   // ヘアピン2 (緩和: 折返さず大回りに)
-      { x:  150, z:  -70 },
-      { x:   90, z:  -40 },
-      { x:    0, z:   -5 },
-      { x:  -70, z:   40 },
-      { x: -110, z:  100 },   // 戻り直線
-      { x:  -70, z:  155 },
+      { x:   90, z:  180 },
+      { x:  180, z:  150 },
+      { x:  240, z:   90 },   // 右上外周
+      { x:  265, z:   10 },
+      { x:  250, z:  -70 },
+      { x:  210, z: -140 },
+      { x:  160, z: -190 },   // 右下へ
+      { x:   80, z: -225 },
+      { x:    0, z: -240 },
+      { x:  -90, z: -230 },
+      { x: -170, z: -200 },
+      { x: -230, z: -150 },   // 左下外周
+      { x: -255, z:  -80 },
+      { x: -250, z:    0 },
+      { x: -230, z:   80 },
+      { x: -180, z:  145 },   // 左上へ復帰
+      { x: -110, z:  185 },
+      { x:  -30, z:  195 },
     ];
 
     // Catmull-Rom の細かさを 16 → 14 に下げて頂点数 (= 壁ポリゴン数) を軽量化
@@ -92,8 +87,10 @@ window.createTrackVolcano = function () {
     this._buildItemBoxes();
     this._buildBoostPads();
     this._buildJumpPads();
+    this._buildSmallJumpPads();
     this._buildDirectionArrows();
     this._buildAerialGuides();
+    this._buildAirBoostRings();
     this._buildShortcuts();
     this._buildLavaPools();
     this._buildBoulders();
@@ -946,6 +943,91 @@ window.createTrackVolcano = function () {
     }
   },
 
+  _buildAirBoostRings() {
+    if (!this.jumpPads || this.jumpPads.length === 0) return;
+    const n = this.pathPoints.length;
+    const RING_RADIUS = 3.0;          // 通しやすく拡大
+    const RING_TUBE = 0.38;
+    const RING_RADIAL_SEGMENTS = 10;
+    const RING_TUBULAR_SEGMENTS = 24;
+    const MIN_FORWARD_INDEX_OFFSET = 11;
+    const FORWARD_INDEX_RATIO = 0.035;
+    const RING_OFFSET_Y = 7.2;        // 飛行軌道に合わせて高度を最適化 (peak~9.6m, glide 6-8m)
+    const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x66e0ff, transparent: true, opacity: 0.92, depthWrite: false,
+    });
+    const innerGeo = new THREE.TorusGeometry(RING_RADIUS * 0.65, RING_TUBE * 0.4, 8, 18);
+    for (const p of this.jumpPads) {
+      const baseIdx = p.idx || 0;
+      const midIdx = (baseIdx + Math.max(MIN_FORWARD_INDEX_OFFSET, Math.floor(n * FORWARD_INDEX_RATIO))) % n;
+      const pp = this.pathPoints[midIdx];
+      const py = this._getTrackY(midIdx);
+      const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+      ring.position.set(pp.x, py + RING_OFFSET_Y, pp.z);
+      ring.rotation.y = Math.random() * Math.PI * 2;
+      this.group.add(ring);
+      const innerRing = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+      innerRing.position.copy(ring.position);
+      this.group.add(innerRing);
+      // 地面からリングまで光柱 (位置の視認性アップ)
+      const pillarH = RING_OFFSET_Y;
+      const pillarGeo = new THREE.CylinderGeometry(0.2, 0.2, pillarH, 6, 1, true);
+      const pillarMat = new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+      const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+      pillar.position.set(pp.x, py + pillarH / 2, pp.z);
+      this.group.add(pillar);
+      this.airBoostRings.push({
+        mesh: ring,
+        innerMesh: innerRing,
+        x: pp.x, z: pp.z, y: py + RING_OFFSET_Y,
+        radius: 5.0,
+        yMin: py + 3.4,                // 通り抜け判定をかなり広く
+        yMax: py + 12.0,
+        _phase: Math.random() * Math.PI * 2,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
+  _buildSmallJumpPads() {
+    const n = this.pathPoints.length;
+    const positions = [0.14, 0.22, 0.39, 0.58, 0.69, 0.82];
+    const padTex = this._makeGeyserPadTexture();
+    // 軽量化: バンプ形状とマテリアルを共有
+    const bumpGeo = new THREE.CylinderGeometry(2.0, 3.1, 0.85, 12);   // 円錐台 (地面が盛り上がった小山)
+    const bumpMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.95 });
+    const ringHintGeo = new THREE.TorusGeometry(2.8, 0.12, 6, 18);
+    const ringHintMat = new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.55, depthWrite: false });
+    for (const t of positions) {
+      const idx = Math.floor(t * n);
+      const cur = this.pathPoints[idx];
+      const next = this.pathPoints[(idx + 1) % n];
+      const dx = next.x - cur.x, dz = next.z - cur.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const dirX = dx / len, dirZ = dz / len;
+      const py = this._getTrackY(idx);
+      const px = cur.x, pz = cur.z;
+
+      const bump = new THREE.Mesh(bumpGeo, bumpMat);
+      bump.position.set(px, py + 0.42, pz);
+      this.group.add(bump);
+
+      // 路面マーカー (リング型ハイライト)
+      const hint = new THREE.Mesh(ringHintGeo, ringHintMat);
+      hint.rotation.x = -Math.PI / 2;
+      hint.position.set(px, py + 0.05, pz);
+      this.group.add(hint);
+
+      this.smallJumpPads.push({
+        mesh: bump, x: px, z: pz, y: py, dirX, dirZ, idx,
+        radius: 3.3,
+        bumpHeight: 0.85,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
   _makeGeyserPadTexture() {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -1118,6 +1200,7 @@ window.createTrackVolcano = function () {
         phase: Math.random() * Math.PI * 2,
         offset: 0,
         radius: 1.8,
+        brokenUntil: 0,
       });
     }
   },
@@ -1480,6 +1563,11 @@ window.createTrackVolcano = function () {
     }
     // 転がる岩 (Y を path 上で連続補間して、横移動時の段差を解消)
     for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) {
+        if (b.mesh.visible) b.mesh.visible = false;
+        continue;
+      }
+      if (!b.mesh.visible) b.mesh.visible = true;
       b.phase += dt * b.speed;
       const cur = this.pathPoints[b.baseIdx];
       const { nx, nz } = this._segNorm[b.baseIdx];
@@ -1496,17 +1584,41 @@ window.createTrackVolcano = function () {
       b.mesh.rotation.x += dt * 2.8;
       b.mesh.rotation.z += dt * 1.4;
     }
+    for (const r of this.airBoostRings) {
+      r._phase += dt * 3.5;
+      if (r.mesh) {
+        r.mesh.rotation.y += dt * 1.4;
+        const s = 1 + Math.sin(r._phase) * 0.12;
+        r.mesh.scale.set(s, s, s);
+        r.mesh.material.opacity = 0.55 + (Math.sin(r._phase) + 1) * 0.18;
+      }
+      if (r.innerMesh) {
+        r.innerMesh.rotation.y -= dt * 2.6;
+        r.innerMesh.material.opacity = 0.35 + (Math.sin(r._phase * 1.4) + 1) * 0.15;
+      }
+    }
   },
 
   checkPads(car, now) {
-    let result = { boost: false, jump: false, lava: false };
+    let result = { boost: false, jump: false, lava: false, airBoost: false, smallJump: false };
+    const airborne = !!(car.isAirborne && car.isAirborne());
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
-      if (d < p.radius) {
+      if (d < p.radius && !airborne) {
         const last = p._lastTrigger.get(car.id) || 0;
         if (now - last > 500) {
           p._lastTrigger.set(car.id, now);
           result.boost = true;
+        }
+      }
+    }
+    for (const r of this.airBoostRings) {
+      const d = Utils.dist2(car.x, car.z, r.x, r.z);
+      if (d < r.radius && car.y > r.yMin && car.y < r.yMax) {
+        const last = r._lastTrigger.get(car.id) || 0;
+        if (now - last > 900) {
+          r._lastTrigger.set(car.id, now);
+          result.airBoost = true;
         }
       }
     }
@@ -1517,6 +1629,16 @@ window.createTrackVolcano = function () {
         if (now - last > 1500) {
           p._lastTrigger.set(car.id, now);
           result.jump = true;
+        }
+      }
+    }
+    for (const p of this.smallJumpPads) {
+      const d = Utils.dist2(car.x, car.z, p.x, p.z);
+      if (d < p.radius && car.y < p.y + 1.4) {
+        const last = p._lastTrigger.get(car.id) || 0;
+        if (now - last > 900) {
+          p._lastTrigger.set(car.id, now);
+          result.smallJump = true;
         }
       }
     }
@@ -1535,11 +1657,15 @@ window.createTrackVolcano = function () {
 
   checkBoulderHit(car, now) {
     for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) continue;
+      if (car.isAirborne && car.isAirborne()) continue;
       const dx = car.x - b.mesh.position.x;
       const dz = car.z - b.mesh.position.z;
       const d2 = dx * dx + dz * dz;
       const rr = (b.radius + 1.0);
       if (d2 < rr * rr && car.y < b.y + 2.0) {
+        b.brokenUntil = now + 1000;
+        b.mesh.visible = false;
         return { hit: true, nx: dx / Math.sqrt(d2 || 1), nz: dz / Math.sqrt(d2 || 1) };
       }
     }

@@ -359,6 +359,7 @@ const UIExt = {
       shockwave:    { rarity: 'レア', desc: '周囲10mを強烈に弾き飛ばす + 自分ブースト' },
       swap:         { rarity: '超レア', desc: '前方の最も近いライバルと位置交換！' },
       phaseShift:   { rarity: '超レア', desc: '2.5秒透過 + ブースト + 短無敵' },
+      stormCloud:   { rarity: 'レア', desc: '狙った相手の頭上に雲を出し、雷を落とす' },
     };
     for (const it of ItemSystem.ITEMS) {
       const d = ItemSystem.getDisplay(it);

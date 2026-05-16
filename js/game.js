@@ -12,6 +12,8 @@ const Game = {
   totalLaps: 3,
   lastSendTime: 0,
   netSendInterval: 50,
+  netIdleHeartbeatInterval: 220,
+  _lastSentState: null,
 
   miniCtx: null,
   miniCanvas: null,
@@ -30,6 +32,22 @@ const Game = {
 
   // 順位変動通知用
   _prevRanks: new Map(),
+  DOUBLE_ITEM_DROP_PROBABILITY: 0.18,
+  NET_SEND_INTERVALS: {
+    base: 50,
+    fourPlayers: 65,
+    fivePlayers: 75,
+    sixPlayers: 85,
+    idleHeartbeat: 220,
+  },
+  NET_STATE_DELTA_THRESHOLDS: {
+    // world units / radians / mps
+    pos: 0.18,
+    angle: 0.03,
+    speed: 0.6,
+    progress: 0.35,
+    y: 0.12,
+  },
 
   init() {
     this._initThree();
@@ -126,6 +144,17 @@ const Game = {
     this.localCar = null;
 
     const numCars = playersList.length;
+    if (this.mode === 'multi') {
+      // 多人数時は送信頻度を少し落として、ホスト中継負荷を抑える
+      if (numCars >= 6) this.netSendInterval = this.NET_SEND_INTERVALS.sixPlayers;
+      else if (numCars >= 5) this.netSendInterval = this.NET_SEND_INTERVALS.fivePlayers;
+      else if (numCars >= 4) this.netSendInterval = this.NET_SEND_INTERVALS.fourPlayers;
+      else this.netSendInterval = this.NET_SEND_INTERVALS.base;
+    } else {
+      this.netSendInterval = this.NET_SEND_INTERVALS.base;
+    }
+    this.netIdleHeartbeatInterval = this.NET_SEND_INTERVALS.idleHeartbeat;
+    this._lastSentState = null;
     const positions = Track.getStartPositions(numCars);
 
     for (let i = 0; i < playersList.length; i++) {
@@ -214,6 +243,16 @@ const Game = {
       this.localCar.updateProgress(performance.now());
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
+      }
+      // 小ジャンプ中の横振りでトリック (横持ち端末を素早く振ると車体一回転)
+      const shaken = (typeof Input.consumeShake === 'function') ? Input.consumeShake() : false;
+      // キーボード操作のテスト用: Shift キーでも代用可能
+      const kbTrick = !!(Input._keys && (Input._keys['shift'] || Input._keys[' ']));
+      if ((shaken || kbTrick) && this.localCar.smallJumpActive && !this.localCar.smallJumpTrickDone) {
+        if (typeof this.localCar.trySmallJumpTrick === 'function' && this.localCar.trySmallJumpTrick()) {
+          if (window.SFX) SFX.play('boost');
+          if (typeof showToast === 'function') showToast('🌀 FLIP!', 600);
+        }
       }
       // 壁ヒットでカメラ揺れ
       if (this.localCar.wallHitFlash > 0.2) {
@@ -338,20 +377,42 @@ const Game = {
   _sendNetwork(now) {
     if (this.mode !== 'multi') return;
     if (!this.localCar) return;
-    if (now - this.lastSendTime < this.netSendInterval) return;
+    const c = this.localCar;
+    // 位置は小数2桁、角度は小数3桁、進行度は小数1桁へ丸めて帯域を節約
+    const state = {
+      x: Math.round(c.x * 100) / 100,
+      z: Math.round(c.z * 100) / 100,
+      angle: Math.round(c.angle * 1000) / 1000,
+      speed: Math.round(c.speed * 100) / 100,
+      lap: c.lap,
+      totalProgress: Math.round(c.totalProgress * 10) / 10,
+      boost: c.boostTimer > 0,
+      mini: c.miniTurboTimer > 0,
+      shield: c.invincibleTimer > 0,
+      squish: c.squishTimer > 0,
+      ghost: c.ghostTimer > 0,
+      y: Math.round(c.y * 100) / 100,
+    };
+    const prev = this._lastSentState;
+    const th = this.NET_STATE_DELTA_THRESHOLDS;
+    const moved = prev && Math.hypot(state.x - prev.x, state.z - prev.z) > th.pos;
+    const changed = !prev ||
+      moved ||
+      Math.abs(Utils.angDiff(state.angle, prev.angle)) > th.angle ||
+      Math.abs(state.speed - prev.speed) > th.speed ||
+      Math.abs(state.totalProgress - prev.totalProgress) > th.progress ||
+      Math.abs(state.y - prev.y) > th.y ||
+      state.lap !== prev.lap ||
+      state.boost !== prev.boost ||
+      state.mini !== prev.mini ||
+      state.shield !== prev.shield ||
+      state.squish !== prev.squish ||
+      state.ghost !== prev.ghost;
+    const minInterval = changed ? this.netSendInterval : this.netIdleHeartbeatInterval;
+    if (now - this.lastSendTime < minInterval) return;
     this.lastSendTime = now;
-    Net.sendState({
-      x: this.localCar.x, z: this.localCar.z, angle: this.localCar.angle,
-      speed: this.localCar.speed,
-      lap: this.localCar.lap,
-      totalProgress: this.localCar.totalProgress,
-      boost: this.localCar.boostTimer > 0,
-      mini: this.localCar.miniTurboTimer > 0,
-      shield: this.localCar.invincibleTimer > 0,
-      squish: this.localCar.squishTimer > 0,
-      ghost: this.localCar.ghostTimer > 0,
-      y: this.localCar.y,
-    });
+    this._lastSentState = state;
+    Net.sendState(state);
   },
 
   applyRemoteState(id, state) {
@@ -415,9 +476,8 @@ const Game = {
   useItem(car, allCars) {
     if (!car.item) return;
     const item = car.consumeItem();
-    if (car.isLocal) GameUI.updateItem(null);
 
-    if (window.SFX) SFX.play('item');
+    if (item && window.SFX) SFX.play('item');
 
     if (item === 'boost') {
       car.applyBoost(2.5);
@@ -462,8 +522,12 @@ const Game = {
       Net.sendAction({ kind: 'killer' });
     }
     if (car.isLocal) {
-      const d = ItemSystem.getDisplay(item);
-      showToast(`${d.emoji} ${d.label}!`, 1000);
+      const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
+      GameUI.updateItem(held.length ? held : null);
+      if (item) {
+        const d = ItemSystem.getDisplay(item);
+        showToast(`${d.emoji} ${d.label}!`, 1000);
+      }
     }
   },
 
@@ -517,11 +581,33 @@ const Game = {
           if (window.SFX) SFX.play('boost');
         }
       }
+      if (r.airBoost) {
+        c.applyBoost(1.9);
+        if (c.isLocal) {
+          this._camShakeTime = 0.2;
+          this._camShakeAmp = 0.32;
+          showToast('⭕ AIR BOOST!', 700);
+          if (window.SFX) SFX.play('boost');
+        }
+      }
       if (r.jump) {
-        c.applyJump(18);
-        c.deployGlider(3.5);
+        // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
+        c.applyJump(24);
+        c.deployGlider(3.8);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
+          if (window.SFX) SFX.play('jump');
+        }
+      }
+      if (r.smallJump) {
+        // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
+        if (typeof c.beginSmallJump === 'function') {
+          c.beginSmallJump(11);
+        } else {
+          c.applyJump(11);
+        }
+        if (c.isLocal) {
+          showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);
           if (window.SFX) SFX.play('jump');
         }
       }
@@ -563,11 +649,26 @@ const Game = {
       if (!c.item) {
         if (Track.collectItemBox(c.x, c.z, 2.4)) {
           const rank = this._getRank(c);
-          const item = ItemSystem.weightedRoll(rank, this.cars.length);
-          c.setItem(item);
+          const firstItem = ItemSystem.weightedRoll(rank, this.cars.length);
+          const canHoldDouble = typeof c.setDoubleItems === 'function';
+          const isDouble = canHoldDouble && Math.random() < this.DOUBLE_ITEM_DROP_PROBABILITY;
+          let secondItem = null;
+          if (isDouble) {
+            secondItem = ItemSystem.weightedRoll(rank, this.cars.length);
+            c.setDoubleItems(firstItem, secondItem);
+          } else {
+            c.setItem(firstItem);
+          }
           if (c.isLocal) {
-            GameUI.updateItem(item);
-            showToast(`${ItemSystem.getDisplay(item).emoji} ${ItemSystem.getDisplay(item).label} ゲット！`, 1200);
+            const held = (typeof c.getHeldItems === 'function') ? c.getHeldItems() : (c.item ? [c.item] : []);
+            GameUI.updateItem(held.length ? held : null);
+            if (isDouble && secondItem) {
+              const d1 = ItemSystem.getDisplay(firstItem);
+              const d2 = ItemSystem.getDisplay(secondItem);
+              showToast(`🎁 ダブル！ ${d1.emoji}${d2.emoji} アイテム2個ゲット！`, 1200);
+            } else {
+              showToast(`${ItemSystem.getDisplay(firstItem).emoji} ${ItemSystem.getDisplay(firstItem).label} ゲット！`, 1200);
+            }
             if (window.SFX) SFX.play('pickup');
           }
         }
@@ -847,6 +948,7 @@ const Game = {
       ctx.strokeStyle = '#FF6F00';
       ctx.lineWidth = 1.2;
       for (const b of Track.boulders) {
+        if (!b.mesh || b.mesh.visible === false) continue;
         ctx.beginPath();
         ctx.arc(toX(b.mesh.position.x), toZ(b.mesh.position.z), 3.0, 0, Math.PI * 2);
         ctx.fill();

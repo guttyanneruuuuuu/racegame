@@ -1,6 +1,10 @@
 // ============= アイテム拡張パック =============
 // 既存の ItemSystem に新規アイテム (霧/ブロック/ミニ/ブーメラン/ヒーローシールド) を追加。
 // items.js は変更せず、ここで動的に拡張する。
+const TOP_RANK_BLOCKED_ITEMS = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
+const STORM_CLOUD_HEIGHT = 6.5;
+const STORM_CLOUD_FLOAT_AMPLITUDE = 0.35;
+const STORM_CLOUD_OPACITY = 0.88;
 const ItemExt = {
   installed: false,
 
@@ -81,8 +85,7 @@ const ItemExt = {
       w.stormCloud = Utils.lerp(0.0, 1.3, ratio);
       // 強アイテムは 1位/2位には絶対出さない
       if (rank <= 2) {
-        const topRankBlockedItems = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
-        for (const k of topRankBlockedItems) w[k] = 0;
+        for (const k of TOP_RANK_BLOCKED_ITEMS) w[k] = 0;
       }
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
@@ -396,7 +399,7 @@ const ItemExt = {
       }
 
       const cloud = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x5C6BC0, transparent: true, opacity: 0.88 });
+      const mat = new THREE.MeshLambertMaterial({ color: 0x5C6BC0, transparent: true, opacity: STORM_CLOUD_OPACITY });
       const p1 = new THREE.Mesh(new THREE.SphereGeometry(1.0, 10, 8), mat);
       const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), mat);
       const p3 = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), mat);
@@ -404,7 +407,7 @@ const ItemExt = {
       p2.position.set(0.9, 0.1, 0.1);
       p3.position.set(-0.8, -0.05, 0.15);
       cloud.add(p1, p2, p3);
-      cloud.position.set(target.x, 6.5, target.z);
+      cloud.position.set(target.x, STORM_CLOUD_HEIGHT, target.z);
       this.scene.add(cloud);
 
       const marker = new THREE.Mesh(
@@ -490,10 +493,8 @@ const ItemExt = {
             p.z = tgt.z;
           }
           if (p.mesh) {
-            const CLOUD_HEIGHT = 6.5;
-            const CLOUD_FLOAT_AMPLITUDE = 0.35;
             const t = performance.now() * 0.005;
-            p.mesh.position.set(p.x, CLOUD_HEIGHT + Math.sin(t) * CLOUD_FLOAT_AMPLITUDE, p.z);
+            p.mesh.position.set(p.x, STORM_CLOUD_HEIGHT + Math.sin(t) * STORM_CLOUD_FLOAT_AMPLITUDE, p.z);
             p.mesh.rotation.y += dt * 0.7;
           }
           if (p.marker) {

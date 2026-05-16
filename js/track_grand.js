@@ -884,7 +884,7 @@ window.createTrackGrand = function () {
     const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 9;
     const FORWARD_INDEX_RATIO = 0.03;
-    const RING_CENTER_Y = 27.2;     // 以前の約4倍の高さに引き上げ
+    const RING_CENTER_Y = 25.4;     // 少し低めに調整して通しやすさを改善
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     for (const p of this.jumpPads) {
       const base = this.getProgress(p.x, p.z).index;

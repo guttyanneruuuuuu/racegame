@@ -925,6 +925,15 @@ const Game = {
           sctx.fill();
         }
       }
+      if (Track.airBoostRings) {
+        sctx.strokeStyle = '#80DEEA';
+        sctx.lineWidth = 1.4;
+        for (const r of Track.airBoostRings) {
+          sctx.beginPath();
+          sctx.arc(toX(r.x), toZ(r.z), 2.6, 0, Math.PI * 2);
+          sctx.stroke();
+        }
+      }
       if (Track.lavaPools) {
         sctx.fillStyle = '#FF3D00';
         for (const lp of Track.lavaPools) {

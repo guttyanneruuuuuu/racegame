@@ -946,31 +946,44 @@ window.createTrackVolcano = function () {
   _buildAirBoostRings() {
     if (!this.jumpPads || this.jumpPads.length === 0) return;
     const n = this.pathPoints.length;
-    const RING_RADIUS = 2.6;
-    const RING_TUBE = 0.34;
+    const RING_RADIUS = 3.0;          // 通しやすく拡大
+    const RING_TUBE = 0.38;
     const RING_RADIAL_SEGMENTS = 10;
-    const RING_TUBULAR_SEGMENTS = 22;
+    const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 11;
     const FORWARD_INDEX_RATIO = 0.035;
+    const RING_OFFSET_Y = 7.2;        // 飛行軌道に合わせて高度を最適化 (peak~9.6m, glide 6-8m)
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x66e0ff, transparent: true, opacity: 0.88, depthWrite: false,
+      color: 0x66e0ff, transparent: true, opacity: 0.92, depthWrite: false,
     });
+    const innerGeo = new THREE.TorusGeometry(RING_RADIUS * 0.65, RING_TUBE * 0.4, 8, 18);
     for (const p of this.jumpPads) {
       const baseIdx = p.idx || 0;
       const midIdx = (baseIdx + Math.max(MIN_FORWARD_INDEX_OFFSET, Math.floor(n * FORWARD_INDEX_RATIO))) % n;
       const pp = this.pathPoints[midIdx];
       const py = this._getTrackY(midIdx);
       const ring = new THREE.Mesh(ringGeo, ringMat.clone());
-      ring.position.set(pp.x, py + 7.4, pp.z);
+      ring.position.set(pp.x, py + RING_OFFSET_Y, pp.z);
       ring.rotation.y = Math.random() * Math.PI * 2;
       this.group.add(ring);
+      const innerRing = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+      innerRing.position.copy(ring.position);
+      this.group.add(innerRing);
+      // 地面からリングまで光柱 (位置の視認性アップ)
+      const pillarH = RING_OFFSET_Y;
+      const pillarGeo = new THREE.CylinderGeometry(0.2, 0.2, pillarH, 6, 1, true);
+      const pillarMat = new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+      const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+      pillar.position.set(pp.x, py + pillarH / 2, pp.z);
+      this.group.add(pillar);
       this.airBoostRings.push({
         mesh: ring,
-        x: pp.x, z: pp.z, y: py + 9.8,
-        radius: 4.3,
-        yMin: py + 7.0,
-        yMax: py + 14.2,
+        innerMesh: innerRing,
+        x: pp.x, z: pp.z, y: py + RING_OFFSET_Y,
+        radius: 5.0,
+        yMin: py + 3.4,                // 通り抜け判定をかなり広く
+        yMax: py + 12.0,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });
@@ -981,6 +994,11 @@ window.createTrackVolcano = function () {
     const n = this.pathPoints.length;
     const positions = [0.14, 0.22, 0.39, 0.58, 0.69, 0.82];
     const padTex = this._makeGeyserPadTexture();
+    // 軽量化: バンプ形状とマテリアルを共有
+    const bumpGeo = new THREE.CylinderGeometry(2.0, 3.1, 0.85, 12);   // 円錐台 (地面が盛り上がった小山)
+    const bumpMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.95 });
+    const ringHintGeo = new THREE.TorusGeometry(2.8, 0.12, 6, 18);
+    const ringHintMat = new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.55, depthWrite: false });
     for (const t of positions) {
       const idx = Math.floor(t * n);
       const cur = this.pathPoints[idx];
@@ -991,15 +1009,20 @@ window.createTrackVolcano = function () {
       const py = this._getTrackY(idx);
       const px = cur.x, pz = cur.z;
 
-      const rampGeo = new THREE.CylinderGeometry(2.3, 2.8, 0.42, 10);
-      const rampMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.9 });
-      const ramp = new THREE.Mesh(rampGeo, rampMat);
-      ramp.position.set(px, py + 0.22, pz);
-      this.group.add(ramp);
+      const bump = new THREE.Mesh(bumpGeo, bumpMat);
+      bump.position.set(px, py + 0.42, pz);
+      this.group.add(bump);
+
+      // 路面マーカー (リング型ハイライト)
+      const hint = new THREE.Mesh(ringHintGeo, ringHintMat);
+      hint.rotation.x = -Math.PI / 2;
+      hint.position.set(px, py + 0.05, pz);
+      this.group.add(hint);
 
       this.smallJumpPads.push({
-        mesh: ramp, x: px, z: pz, y: py, dirX, dirZ, idx,
-        radius: 3.1,
+        mesh: bump, x: px, z: pz, y: py, dirX, dirZ, idx,
+        radius: 3.3,
+        bumpHeight: 0.85,
         _lastTrigger: new Map(),
       });
     }
@@ -1568,6 +1591,10 @@ window.createTrackVolcano = function () {
         const s = 1 + Math.sin(r._phase) * 0.12;
         r.mesh.scale.set(s, s, s);
         r.mesh.material.opacity = 0.55 + (Math.sin(r._phase) + 1) * 0.18;
+      }
+      if (r.innerMesh) {
+        r.innerMesh.rotation.y -= dt * 2.6;
+        r.innerMesh.material.opacity = 0.35 + (Math.sin(r._phase * 1.4) + 1) * 0.15;
       }
     }
   },

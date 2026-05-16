@@ -878,12 +878,13 @@ window.createTrackGrand = function () {
   _buildAirBoostRings() {
     if (!this.jumpPads || this.jumpPads.length === 0) return;
     const n = this.pathPoints.length;
-    const RING_RADIUS = 2.4;
-    const RING_TUBE = 0.32;
+    const RING_RADIUS = 2.8;        // 通しやすく拡大
+    const RING_TUBE = 0.36;
     const RING_RADIAL_SEGMENTS = 10;
-    const RING_TUBULAR_SEGMENTS = 22;
+    const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 9;
     const FORWARD_INDEX_RATIO = 0.03;
+    const RING_CENTER_Y = 6.8;      // 飛行軌道に合わせた高度 (peak~9.6m, glide 6-8m)
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     for (const p of this.jumpPads) {
       const base = this.getProgress(p.x, p.z).index;
@@ -891,16 +892,28 @@ window.createTrackGrand = function () {
       const pp = this.pathPoints[midIdx];
       const ring = new THREE.Mesh(
         ringGeo,
-        new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.86, depthWrite: false })
+        new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.9, depthWrite: false })
       );
-      ring.position.set(pp.x, 8.9, pp.z);
+      ring.position.set(pp.x, RING_CENTER_Y, pp.z);
       this.group.add(ring);
+      // 内側に薄いリングを追加して視認性アップ
+      const innerGeo = new THREE.TorusGeometry(RING_RADIUS * 0.65, RING_TUBE * 0.4, 8, 18);
+      const innerRing = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+      innerRing.position.copy(ring.position);
+      this.group.add(innerRing);
+      // 地面からリングまで縦の光柱 (位置の視認性アップ)
+      const pillarGeo = new THREE.CylinderGeometry(0.18, 0.18, RING_CENTER_Y, 6, 1, true);
+      const pillarMat = new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+      const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+      pillar.position.set(pp.x, RING_CENTER_Y / 2, pp.z);
+      this.group.add(pillar);
       this.airBoostRings.push({
         mesh: ring,
-        x: pp.x, z: pp.z, y: 8.9,
-        radius: 4.0,
-        yMin: 6.4,
-        yMax: 12.8,
+        innerMesh: innerRing,
+        x: pp.x, z: pp.z, y: RING_CENTER_Y,
+        radius: 4.8,             // 横方向の判定も少し広く
+        yMin: 3.2,               // 通り抜け判定はさらに広く
+        yMax: 11.5,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });
@@ -909,8 +922,15 @@ window.createTrackGrand = function () {
 
   _buildSmallJumpPads() {
     const n = this.pathPoints.length;
+    // 大ジャンプ盤 (0.12,0.28,0.42,0.56,0.70,0.86) と被らない位置に配置
     const positions = [0.06, 0.20, 0.34, 0.50, 0.66, 0.80, 0.93];
-    const padTex = this._makeJumpPadTexture();
+    const padTex = this._makeSmallJumpPadTexture();
+    // 軽量化: 1つのジオメトリ&マテリアルを共有
+    const bumpGeo = this._makeBumpGeometry(5.8, 0.7, 3.6);
+    const bumpMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.95 });
+    // ハイライト用の発光プレート (路面に色つきライン)
+    const stripeGeo = new THREE.PlaneGeometry(5.0, 1.4);
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xfff176, transparent: true, opacity: 0.45 });
     for (const t of positions) {
       const idx = Math.floor(t * n);
       const cur = this.pathPoints[idx];
@@ -920,19 +940,76 @@ window.createTrackGrand = function () {
       const dirX = dx / len, dirZ = dz / len;
       const px = cur.x, pz = cur.z;
 
-      const rampGeo = this._makeRampGeometry(5.0, 0.85, 3.3);
-      const rampMat = new THREE.MeshLambertMaterial({ map: padTex, transparent: true, opacity: 0.92 });
-      const ramp = new THREE.Mesh(rampGeo, rampMat);
-      ramp.position.set(px, 0, pz);
-      ramp.rotation.y = Math.atan2(dirX, dirZ);
-      this.group.add(ramp);
+      // 盛り上がった地面 (ドーム状のバンプ)
+      const bump = new THREE.Mesh(bumpGeo, bumpMat);
+      bump.position.set(px, 0, pz);
+      bump.rotation.y = Math.atan2(dirX, dirZ);
+      this.group.add(bump);
+
+      // 発光ストライプ (前後)
+      const sFront = new THREE.Mesh(stripeGeo, stripeMat);
+      sFront.rotation.x = -Math.PI / 2;
+      sFront.position.set(px + dirX * 2.3, 0.06, pz + dirZ * 2.3);
+      sFront.rotation.z = Math.atan2(dirX, dirZ);
+      this.group.add(sFront);
 
       this.smallJumpPads.push({
-        mesh: ramp, x: px, z: pz, y: 0, dirX, dirZ,
-        radius: 3.0,
+        mesh: bump, x: px, z: pz, y: 0, dirX, dirZ,
+        radius: 3.2,
         _lastTrigger: new Map(),
       });
     }
+  },
+
+  // 盛り上がった地形バンプ (台形+丸み付き)
+  _makeBumpGeometry(width, height, depth) {
+    const w = width / 2, d = depth / 2, topW = w * 0.55, topD = d * 0.5;
+    const verts = new Float32Array([
+      // 底面 4頂点
+      -w, 0, -d,   w, 0, -d,   w, 0,  d,  -w, 0,  d,
+      // 上面 4頂点 (内側に寄せて山型)
+      -topW, height, -topD,  topW, height, -topD,  topW, height,  topD,  -topW, height,  topD,
+    ]);
+    const idx = [
+      // 底面
+      0, 2, 1,  0, 3, 2,
+      // 上面
+      4, 5, 6,  4, 6, 7,
+      // 前後左右の傾斜
+      0, 1, 5,  0, 5, 4,
+      1, 2, 6,  1, 6, 5,
+      2, 3, 7,  2, 7, 6,
+      3, 0, 4,  3, 4, 7,
+    ];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  },
+
+  // 小ジャンプ専用テクスチャ (黄色ベース、シェブロン)
+  _makeSmallJumpPadTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 96);
+    grad.addColorStop(0, '#FFD54F');
+    grad.addColorStop(0.5, '#FFB300');
+    grad.addColorStop(1, '#FF8F00');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 96, 96);
+    ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 4;
+    // 山型シェブロン
+    for (let i = 0; i < 3; i++) {
+      const y = 22 + i * 24;
+      ctx.beginPath();
+      ctx.moveTo(12, y + 12);
+      ctx.lineTo(48, y - 6);
+      ctx.lineTo(84, y + 12);
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    return tex;
   },
 
   _buildBoulders() {
@@ -1463,6 +1540,10 @@ window.createTrackGrand = function () {
       const s = 1 + Math.sin(r._phase) * 0.12;
       r.mesh.scale.set(s, s, s);
       r.mesh.material.opacity = 0.52 + (Math.sin(r._phase) + 1) * 0.18;
+      if (r.innerMesh) {
+        r.innerMesh.rotation.y -= dt * 2.4;
+        r.innerMesh.material.opacity = 0.35 + (Math.sin(r._phase * 1.4) + 1) * 0.15;
+      }
     }
     for (const b of this.boulders) {
       if (now < (b.brokenUntil || 0)) {

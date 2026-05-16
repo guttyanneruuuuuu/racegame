@@ -244,6 +244,16 @@ const Game = {
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
+      // 小ジャンプ中の横振りでトリック (横持ち端末を素早く振ると車体一回転)
+      const shaken = (typeof Input.consumeShake === 'function') ? Input.consumeShake() : false;
+      // キーボード操作のテスト用: Shift キーでも代用可能
+      const kbTrick = !!(Input._keys && (Input._keys['shift'] || Input._keys[' ']));
+      if ((shaken || kbTrick) && this.localCar.smallJumpActive && !this.localCar.smallJumpTrickDone) {
+        if (typeof this.localCar.trySmallJumpTrick === 'function' && this.localCar.trySmallJumpTrick()) {
+          if (window.SFX) SFX.play('boost');
+          if (typeof showToast === 'function') showToast('🌀 FLIP!', 600);
+        }
+      }
       // 壁ヒットでカメラ揺れ
       if (this.localCar.wallHitFlash > 0.2) {
         this._camShakeTime = 0.3;
@@ -581,10 +591,23 @@ const Game = {
         }
       }
       if (r.jump) {
-        c.applyJump(18);
-        c.deployGlider(3.5);
+        // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
+        c.applyJump(24);
+        c.deployGlider(3.8);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
+          if (window.SFX) SFX.play('jump');
+        }
+      }
+      if (r.smallJump) {
+        // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
+        if (typeof c.beginSmallJump === 'function') {
+          c.beginSmallJump(11);
+        } else {
+          c.applyJump(11);
+        }
+        if (c.isLocal) {
+          showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);
           if (window.SFX) SFX.play('jump');
         }
       }

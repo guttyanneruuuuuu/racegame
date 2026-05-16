@@ -567,11 +567,14 @@ class Car {
       if (this.y > groundY + 1.8 && this.vy < 0 && !this.glider && this.airTime > 0.25) {
         this.deployGlider(3.0);
       }
-      // グライダー有効中は重力が弱く前進推進が付く
-      const gravity = (this.glider && this.gliderTimer > 0) ? 8 : 30;
+      // グライダー有効中は重力が弱く前進推進+ゆるい上昇推力が付く (加速リング到達のため)
+      const gliderOn = this.glider && this.gliderTimer > 0;
+      const gravity = gliderOn ? 6 : 30;
       this.vy -= gravity * dt;
+      // グライダー中は微小な上昇推力 (リング高度に到達できるよう)
+      if (gliderOn && this.vy < 1.2) this.vy += 4.2 * dt;
       // グライダー中は落下速度の下限を制限 (ゆっくり)
-      if (this.glider && this.gliderTimer > 0 && this.vy < -6) this.vy = -6;
+      if (gliderOn && this.vy < -4.5) this.vy = -4.5;
       this.y += this.vy * dt;
       this.airTime += dt;
       // グライダー中は推進力 (空中加速)
@@ -586,9 +589,12 @@ class Car {
         const airBonus = this.stats.airBonus || 1.0;
         if (this.smallJumpActive) {
           if (this.smallJumpTrickSuccess) {
-            this.applyMiniTurbo(1.05 * airBonus);
+            // トリック成功: ミニターボ + 軽いブースト (横振り報酬)
+            this.applyMiniTurbo(1.3 * airBonus);
+            this.applyBoost(0.55 * airBonus);
             if (this.isLocal && typeof showToast === 'function') showToast('🌀 TRICK BOOST!', 800);
           }
+          // 失敗 (振らなかった) ならボーナスなしでそのまま着地
         } else if (this.airTime > 0.5 && !this.driftActive) {
           this.applyMiniTurbo((0.5 + Math.min(0.8, this.airTime * 0.35)) * airBonus);
         }

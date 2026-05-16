@@ -385,7 +385,7 @@ const Game = {
     };
     const prev = this._lastSentState;
     const th = this.NET_STATE_DELTA_THRESHOLDS;
-    const moved = !!(prev && Math.hypot(state.x - prev.x, state.z - prev.z) > th.pos);
+    const moved = prev && Math.hypot(state.x - prev.x, state.z - prev.z) > th.pos;
     const changed = !prev ||
       moved ||
       Math.abs(Utils.angDiff(state.angle, prev.angle)) > th.angle ||

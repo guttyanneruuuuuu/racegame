@@ -12,6 +12,7 @@ const CameraExt = {
     if (saved && ['chase', 'cockpit', 'rear'].includes(saved)) {
       this.mode = saved;
     } else if (saved) {
+      this.mode = 'chase';
       localStorage.setItem('gyrorush-camera-mode', 'chase');
     }
 

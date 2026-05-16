@@ -20,6 +20,7 @@ window.createTrackGrand = function () {
 
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
+  _minWallGlitchSegments: 6,
 
   _segDir: [],
   _segNorm: [],
@@ -1248,7 +1249,7 @@ window.createTrackGrand = function () {
   _isWallGlitchZone(index) {
     const n = this.pathPoints.length;
     if (!n) return false;
-    const edge = Math.max(6, Math.floor(n * 0.03));
+    const edge = Math.max(this._minWallGlitchSegments, Math.floor(n * 0.03));
     return index <= edge || index >= n - edge;
   },
 

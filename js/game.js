@@ -2,6 +2,11 @@
 // ジャンプ台の調整値
 const BIG_JUMP_PAD_POWER = 16;
 const SMALL_JUMP_PAD_POWER = 11;
+const MINIMAP_STYLE = {
+  AIR_RING_MARKER_LINE_WIDTH: 1.4,
+  AIR_RING_MARKER_RADIUS: 2.6,
+  AIR_RING_MARKER_COLOR: '#80DEEA',
+};
 
 const Game = {
   renderer: null,
@@ -923,6 +928,15 @@ const Game = {
           sctx.beginPath();
           sctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
           sctx.fill();
+        }
+      }
+      if (Track.airBoostRings) {
+        sctx.strokeStyle = MINIMAP_STYLE.AIR_RING_MARKER_COLOR;
+        sctx.lineWidth = MINIMAP_STYLE.AIR_RING_MARKER_LINE_WIDTH;
+        for (const r of Track.airBoostRings) {
+          sctx.beginPath();
+          sctx.arc(toX(r.x), toZ(r.z), MINIMAP_STYLE.AIR_RING_MARKER_RADIUS, 0, Math.PI * 2);
+          sctx.stroke();
         }
       }
       if (Track.lavaPools) {

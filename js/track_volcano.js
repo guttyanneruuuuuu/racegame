@@ -952,7 +952,7 @@ window.createTrackVolcano = function () {
     const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 11;
     const FORWARD_INDEX_RATIO = 0.035;
-    const RING_OFFSET_Y = 28.8;       // 以前の約4倍の高さに引き上げ
+    const RING_OFFSET_Y = 27.0;       // 少し低めに調整して通しやすさを改善
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x66e0ff, transparent: true, opacity: 0.92, depthWrite: false,

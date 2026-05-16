@@ -20,6 +20,8 @@ window.createTrackGrand = function () {
 
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
+  _wallGlitchZoneMinSegments: 6,
+  _wallGlitchZonePercent: 0.03,
 
   _segDir: [],
   _segNorm: [],
@@ -874,16 +876,21 @@ window.createTrackGrand = function () {
 
   // ===== ショートカット (内側を攻めるとアスファルト化された近道) =====
   _buildShortcuts() {
-    // ヘアピン内側に複数の戦略的ショートカット
+    // 複数セクターに合法ショートカットを配置
     const n = this.pathPoints.length;
     const shortcuts = [
+      // セクター1 スタート後の内側
+      { from: Math.floor(n * 0.05), to: Math.floor(n * 0.10) },
       // セクター2 S字の内側
       { from: Math.floor(n * 0.22), to: Math.floor(n * 0.30) },
       // セクター3 ヘアピン
       { from: Math.floor(n * 0.42), to: Math.floor(n * 0.52) },
       // セクター4 バンク内側
       { from: Math.floor(n * 0.62), to: Math.floor(n * 0.68) },
-      // セクター5 はゴール直前のスムーズカーブに変更したのでショートカットは削除
+      // セクター5 ワインディング内側
+      { from: Math.floor(n * 0.74), to: Math.floor(n * 0.80) },
+      // ゴール直前の最終カーブ内側
+      { from: Math.floor(n * 0.90), to: Math.floor(n * 0.96) },
     ];
     for (const sc of shortcuts) {
       const a = this.pathPoints[sc.from];
@@ -1252,6 +1259,17 @@ window.createTrackGrand = function () {
     const w = this.widthAt(idx);
     const limit = w - radius;
 
+    const n = this.pathPoints.length;
+    const wallGlitchEdge = Math.max(
+      this._wallGlitchZoneMinSegments,
+      Math.floor(n * this._wallGlitchZonePercent)
+    );
+    const isGlitchZoneIndex = (segIndex) => segIndex <= wallGlitchEdge || segIndex >= n - wallGlitchEdge;
+    const isStartGoalGlitchZone = isGlitchZoneIndex(idx);
+    if (isStartGoalGlitchZone) {
+      return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
+    }
+
     // 最大めり込みを追跡 (代表セグメントから周辺まで全部見て最深を採用)
     let bestExcess = -Infinity;
     let bestSeg = null;
@@ -1264,10 +1282,10 @@ window.createTrackGrand = function () {
     }
 
     // 近隣セグメントも広めに検査 (-2..+2 → -4..+4 に拡張)
-    const n = this.pathPoints.length;
     for (let k = -4; k <= 4; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
+      if (isGlitchZoneIndex(j)) continue;
       const pj = this.pathPoints[j];
       const seg = this._segNorm[j];
       const rxj = x - pj.x, rzj = z - pj.z;

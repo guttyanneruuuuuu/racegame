@@ -11,7 +11,7 @@ const ItemExt = {
 
     // 既存配列に追加
     const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer',
-                      'freeze', 'shockwave', 'swap', 'phaseShift'];
+                      'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud'];
     for (const it of newItems) {
       if (!ItemSystem.ITEMS.includes(it)) ItemSystem.ITEMS.push(it);
     }
@@ -33,6 +33,7 @@ const ItemExt = {
         case 'shockwave':  return { emoji: '🌊', label: 'SHOCKWAVE',   color: '#26C6DA' };
         case 'swap':       return { emoji: '🔀', label: 'SWAP',        color: '#F06292' };
         case 'phaseShift': return { emoji: '👻', label: 'PHASE',       color: '#CE93D8' };
+        case 'stormCloud': return { emoji: '🌩', label: 'STORM CLOUD', color: '#5C6BC0' };
       }
       return origDisp(item);
     };
@@ -76,6 +77,13 @@ const ItemExt = {
       w.swap       = Utils.lerp(0.0, 1.3, ratio);
       // phaseShift: 短時間の透過 + 速度ブースト (中下位)
       w.phaseShift = Utils.lerp(0.1, 1.4, ratio);
+      // stormCloud: 狙った地点に落雷 (中下位)
+      w.stormCloud = Utils.lerp(0.0, 1.3, ratio);
+      // 強アイテムは 1位/2位には絶対出さない
+      if (rank <= 2) {
+        const top2Blocked = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
+        for (const k of top2Blocked) w[k] = 0;
+      }
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
         w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.8, ratio));
@@ -350,6 +358,74 @@ const ItemExt = {
       this._spawnShockwave(owner.x, owner.z, 4, 0xCE93D8);
     };
 
+    // ===== 🌩 ストームクラウド (狙った相手の頭上に雲を作り落雷) =====
+    ItemSystem.triggerStormCloud = function(owner, allCars, preferredTargetId = null) {
+      let target = null;
+      if (preferredTargetId) {
+        target = allCars.find(c => c.id === preferredTargetId) || null;
+      }
+      if (!target) {
+        const myTotal = (typeof owner.totalProgress === 'number') ? owner.totalProgress : 0;
+        let bestAhead = null;
+        let bestAheadGap = Infinity;
+        let bestAny = null;
+        let bestAnyD = Infinity;
+        for (const c of allCars) {
+          if (c.id === owner.id) continue;
+          if (c.finished) continue;
+          const cTotal = (typeof c.totalProgress === 'number') ? c.totalProgress : 0;
+          const d = Utils.dist2(owner.x, owner.z, c.x, c.z);
+          if (d < bestAnyD) { bestAnyD = d; bestAny = c; }
+          if (cTotal > myTotal) {
+            const gap = cTotal - myTotal;
+            if (gap < bestAheadGap) { bestAheadGap = gap; bestAhead = c; }
+          }
+        }
+        target = bestAhead || bestAny;
+      }
+      if (!target) {
+        owner.applyBoost(1.0);
+        return null;
+      }
+
+      const cloud = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: 0x5C6BC0, transparent: true, opacity: 0.88 });
+      const p1 = new THREE.Mesh(new THREE.SphereGeometry(1.0, 10, 8), mat);
+      const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), mat);
+      const p3 = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), mat);
+      p1.position.set(0, 0, 0);
+      p2.position.set(0.9, 0.1, 0.1);
+      p3.position.set(-0.8, -0.05, 0.15);
+      cloud.add(p1, p2, p3);
+      cloud.position.set(target.x, 6.5, target.z);
+      this.scene.add(cloud);
+
+      const marker = new THREE.Mesh(
+        new THREE.RingGeometry(1.1, 1.8, 20),
+        new THREE.MeshBasicMaterial({ color: 0xB3E5FC, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
+      );
+      marker.rotation.x = -Math.PI / 2;
+      marker.position.set(target.x, 0.15, target.z);
+      this.scene.add(marker);
+
+      this.projectiles.push({
+        kind: 'stormCloud',
+        x: target.x,
+        z: target.z,
+        vx: 0,
+        vz: 0,
+        ownerId: owner.id,
+        targetId: target.id,
+        life: 1.4,
+        strikeAt: 0.7,
+        struck: false,
+        radius: 3.8,
+        mesh: cloud,
+        marker,
+      });
+      return target;
+    };
+
     // ===== 👥 デコイ (停車した自分のクローンを残す。ロケット/ブーメランの囮になる) =====
     ItemSystem.spawnDecoy = function(owner) {
       const angle = owner.angle;
@@ -399,7 +475,38 @@ const ItemExt = {
       // 追加: block/boomerang/decoy の衝突
       for (let i = ItemSystem.projectiles.length - 1; i >= 0; i--) {
         const p = ItemSystem.projectiles[i];
-        if (p.kind !== 'block' && p.kind !== 'boomerang' && p.kind !== 'decoy') continue;
+        if (p.kind !== 'block' && p.kind !== 'boomerang' && p.kind !== 'decoy' && p.kind !== 'stormCloud') continue;
+        if (p.kind === 'stormCloud') {
+          const tgt = allCars.find(c => c.id === p.targetId && !c.finished) || null;
+          if (tgt) {
+            p.x = tgt.x;
+            p.z = tgt.z;
+          }
+          if (p.mesh) {
+            const t = performance.now() * 0.005;
+            p.mesh.position.set(p.x, 6.5 + Math.sin(t) * 0.35, p.z);
+            p.mesh.rotation.y += dt * 0.7;
+          }
+          if (p.marker) {
+            p.marker.position.set(p.x, 0.15, p.z);
+            p.marker.material.opacity = 0.45 + Math.abs(Math.sin(performance.now() * 0.012)) * 0.45;
+          }
+          if (!p.struck && p.life <= p.strikeAt) {
+            p.struck = true;
+            ItemSystem._spawnShockwave(p.x, p.z, 4.5, 0x90CAF9);
+            ItemSystem._spawnShockwave(p.x, p.z, 2.8, 0xE3F2FD);
+            if (window.SFX) SFX.play('lightning');
+            if (window.GameUI) GameUI.flashScreen('#cfe8ff', 180);
+            for (const c of allCars) {
+              if (c.id === p.ownerId) continue;
+              if (c.finished) continue;
+              if (c.invincibleTimer > 0 || c.ghostTimer > 0 || c.killerTimer > 0) continue;
+              const d = Utils.dist2(p.x, p.z, c.x, c.z);
+              if (d < p.radius) c.hitLightning();
+            }
+          }
+          continue;
+        }
         // デコイのオーラ点滅
         if (p.kind === 'decoy' && p.mesh && p.mesh._aura) {
           const ph = performance.now() * 0.004;
@@ -450,10 +557,12 @@ const ItemExt = {
         }
         // デコイ寿命切れの紫色フェードアウト
         if (consumed) {
+          if (p.marker) ItemSystem.scene.remove(p.marker);
           ItemSystem.scene.remove(p.mesh);
           ItemSystem.projectiles.splice(i, 1);
         } else if (p.life <= 0) {
           if (p.kind === 'decoy') ItemSystem._spawnSplash(p.x, p.z, 0xB388FF);
+          if (p.marker) ItemSystem.scene.remove(p.marker);
           ItemSystem.scene.remove(p.mesh);
           ItemSystem.projectiles.splice(i, 1);
         }
@@ -548,7 +657,7 @@ const ItemExt = {
       if (!car.item) return;
       const it = car.item;
       const isNew = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy',
-                     'freeze', 'shockwave', 'swap', 'phaseShift'].includes(it);
+                     'freeze', 'shockwave', 'swap', 'phaseShift', 'stormCloud'].includes(it);
       if (!isNew) {
         return origUse(car, allCars);
       }
@@ -599,6 +708,9 @@ const ItemExt = {
         ItemSystem.applyPhaseShift(car);
         if (window.SFX) SFX.play('phase');
         if (window.Net) Net.sendAction({ kind: 'phaseShift' });
+      } else if (item === 'stormCloud') {
+        const target = ItemSystem.triggerStormCloud(car, allCars);
+        if (window.Net) Net.sendAction({ kind: 'stormCloud', targetId: target ? target.id : null });
       }
       if (car.isLocal) {
         if (window.GameUI) {
@@ -662,6 +774,7 @@ const ItemExt = {
           return;
         }
         if (action.kind === 'phaseShift') { ItemSystem.applyPhaseShift(car); return; }
+        if (action.kind === 'stormCloud') { ItemSystem.triggerStormCloud(car, Game.cars, action.targetId); return; }
       }
       origRemote(action);
     };

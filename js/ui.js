@@ -364,16 +364,19 @@ const GameUI = {
       items = [itemOrItems];
     }
 
+    const renderBox = (item, isSub = false) => {
+      const subClass = isSub ? ' item-box-sub' : '';
+      if (!item) return `<div class="item-box${subClass}">?</div>`;
+      const d = ItemSystem.getDisplay(item);
+      return `<div class="item-box has-item${subClass}" style="background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)">${d.emoji}</div>`;
+    };
+
     if (items.length === 0) {
-      slot.innerHTML = '<div class="item-stack"><div class="item-box">?</div></div>';
+      slot.innerHTML = `<div class="item-stack">${renderBox(null)}</div>`;
       return;
     }
 
-    const boxes = items.map((item, idx) => {
-      const d = ItemSystem.getDisplay(item);
-      const subClass = idx > 0 ? ' item-box-sub' : '';
-      return `<div class="item-box has-item${subClass}" style="background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)">${d.emoji}</div>`;
-    }).join('');
+    const boxes = items.map((item, idx) => renderBox(item, idx > 0)).join('');
     slot.innerHTML = `<div class="item-stack${items.length > 1 ? ' dual' : ''}">${boxes}</div>`;
 
     // 取得時にアイテムロール演出

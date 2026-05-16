@@ -30,7 +30,7 @@ const Game = {
 
   // 順位変動通知用
   _prevRanks: new Map(),
-  DOUBLE_ITEM_BOX_PROBABILITY: 0.18,
+  DOUBLE_ITEM_DROP_PROBABILITY: 0.18,
 
   init() {
     this._initThree();
@@ -569,7 +569,7 @@ const Game = {
           const rank = this._getRank(c);
           const firstItem = ItemSystem.weightedRoll(rank, this.cars.length);
           const canHoldDouble = typeof c.setDoubleItems === 'function';
-          const isDouble = canHoldDouble && Math.random() < this.DOUBLE_ITEM_BOX_PROBABILITY;
+          const isDouble = canHoldDouble && Math.random() < this.DOUBLE_ITEM_DROP_PROBABILITY;
           let secondItem = null;
           if (isDouble) {
             secondItem = ItemSystem.weightedRoll(rank, this.cars.length);

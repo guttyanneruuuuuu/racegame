@@ -353,22 +353,35 @@ const GameUI = {
     }
   },
 
-  updateItem(item) {
+  updateItem(itemOrItems) {
     const slot = document.getElementById('hud-item-slot');
-    const box = slot.querySelector('.item-box');
-    if (!item) {
-      box.textContent = '?';
-      box.classList.remove('has-item');
-      box.style.background = '';
-    } else {
-      const d = ItemSystem.getDisplay(item);
-      box.textContent = d.emoji;
-      box.classList.add('has-item');
-      box.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)`;
-      // 取得時にアイテムロール演出
-      slot.classList.add('rolling');
-      setTimeout(() => slot.classList.remove('rolling'), 600);
+    if (!slot) return;
+    const MAX_ITEM_SLOTS = 2;
+    let items = [];
+    if (Array.isArray(itemOrItems)) {
+      items = itemOrItems.filter(Boolean).slice(0, MAX_ITEM_SLOTS);
+    } else if (itemOrItems) {
+      items = [itemOrItems];
     }
+
+    const renderBox = (item, isSub = false) => {
+      const subClass = isSub ? ' item-box-sub' : '';
+      if (!item) return `<div class="item-box${subClass}">?</div>`;
+      const d = ItemSystem.getDisplay(item);
+      return `<div class="item-box has-item${subClass}" style="background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), transparent 55%), linear-gradient(135deg, ${d.color}, #fff)">${d.emoji}</div>`;
+    };
+
+    if (items.length === 0) {
+      slot.innerHTML = `<div class="item-stack">${renderBox(null)}</div>`;
+      return;
+    }
+
+    const boxes = items.map((item, idx) => renderBox(item, idx > 0)).join('');
+    slot.innerHTML = `<div class="item-stack${items.length > 1 ? ' dual' : ''}">${boxes}</div>`;
+
+    // 取得時にアイテムロール演出
+    slot.classList.add('rolling');
+    setTimeout(() => slot.classList.remove('rolling'), 600);
   },
 
   // コイン枚数表示更新 (10枚で最大、speedボーナス % も表示)

@@ -95,7 +95,7 @@ const ItemSystem = {
     const rx = owner.x + Math.sin(angle) * 3.0;
     const rz = owner.z + Math.cos(angle) * 3.0;
     let vx, vz;
-    const rocketSpeed = 78;
+    const rocketSpeed = 98;
     if (target) {
       const dx = target.x - rx;
       const dz = target.z - rz;
@@ -379,6 +379,8 @@ const ItemSystem = {
         if (p.kind === 'rocket' && c.id === p.ownerId && p.life > 4.2) continue;
         if (p.kind === 'mine' && c.id === p.ownerId && p.armTime > 0) continue;
         if ((p.kind === 'banana' || p.kind === 'oil') && c.id === p.ownerId && p.life > 29.5) continue;
+
+        if (p.kind === 'oil' && c.isAirborne && c.isAirborne()) continue;
 
         const d = Utils.dist2(p.x, p.z, c.x, c.z);
         const hitDist = p.radius + 1.2;

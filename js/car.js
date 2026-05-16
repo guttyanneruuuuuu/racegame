@@ -385,6 +385,11 @@ class Car {
     return (window.Track && Track.getSurfaceHeight) ? Track.getSurfaceHeight(this.x, this.z, hintIdx, this.y) : 0;
   }
 
+  isAirborne(margin = 0.35) {
+    const groundY = this._groundHeight();
+    return this.y > groundY + margin || this.vy > 0.15 || this.airTime > 0.05 || (this.glider && this.gliderTimer > 0);
+  }
+
   // 入力からの操作 (steer: -1..+1, accel, brake bool)
   applyInput(steer, accel, brake, dt) {
     this.wallImpactStrength = 0;

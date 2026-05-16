@@ -14,9 +14,11 @@ window.createTrackGrand = function () {
   itemBoxes: [],
   boostPads: [],
   jumpPads: [],
+  airBoostRings: [],
   oilPads: [],       // ハザード: オイル
   shortcuts: [],     // 近道(芝ショートカット)
   coins: [],         // コイン (取得で速度ボーナス, 最大10枚)
+  boulders: [],      // 障害物
 
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
@@ -103,8 +105,10 @@ window.createTrackGrand = function () {
     this._buildItemBoxes();
     this._buildBoostPads();
     this._buildJumpPads();
+    this._buildAirBoostRings();
     this._buildShortcuts();   // 芝ショートカット (隅っこを攻める)
     this._buildCoins();       // コインをルートに点在
+    this._buildBoulders();
     this._buildDecorations();
     this._buildDirectionArrows();
 
@@ -869,6 +873,58 @@ window.createTrackGrand = function () {
     return tex;
   },
 
+  _buildAirBoostRings() {
+    if (!this.jumpPads || this.jumpPads.length === 0) return;
+    const n = this.pathPoints.length;
+    const ringGeo = new THREE.TorusGeometry(2.4, 0.32, 10, 22);
+    for (const p of this.jumpPads) {
+      const base = this.getProgress(p.x, p.z).index;
+      const midIdx = (base + Math.max(9, Math.floor(n * 0.03))) % n;
+      const pp = this.pathPoints[midIdx];
+      const ring = new THREE.Mesh(
+        ringGeo,
+        new THREE.MeshBasicMaterial({ color: 0x66e0ff, transparent: true, opacity: 0.86, depthWrite: false })
+      );
+      ring.position.set(pp.x, 6.8, pp.z);
+      this.group.add(ring);
+      this.airBoostRings.push({
+        mesh: ring,
+        x: pp.x, z: pp.z, y: 6.8,
+        radius: 4.0,
+        yMin: 4.5,
+        yMax: 9.8,
+        _phase: Math.random() * Math.PI * 2,
+        _lastTrigger: new Map(),
+      });
+    }
+  },
+
+  _buildBoulders() {
+    const n = this.pathPoints.length;
+    const seeds = [0.18, 0.46, 0.73, 0.88];
+    const geo = new THREE.DodecahedronGeometry(1.9, 0);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x5d4037, emissive: 0x2e1b14, emissiveIntensity: 0.35 });
+    for (const t of seeds) {
+      const idx = Math.floor(n * t);
+      const cur = this.pathPoints[idx];
+      const { nx, nz } = this._segNorm[idx];
+      const laneOff = (Math.random() > 0.5 ? 1 : -1) * this.widthAt(idx) * 0.28;
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(cur.x + nx * laneOff, 1.6, cur.z + nz * laneOff);
+      m.rotation.set(Math.random(), Math.random(), Math.random());
+      this.group.add(m);
+      this.boulders.push({
+        mesh: m,
+        x: m.position.x,
+        z: m.position.z,
+        y: 0,
+        radius: 1.9,
+        brokenUntil: 0,
+        spin: 0.8 + Math.random() * 0.9,
+      });
+    }
+  },
+
   // ===== ショートカット (内側を攻めるとアスファルト化された近道) =====
   _buildShortcuts() {
     // ヘアピン内側に複数の戦略的ショートカット
@@ -1363,18 +1419,47 @@ window.createTrackGrand = function () {
         if (c.ring) c.ring.visible = true;
       }
     }
+    for (const r of this.airBoostRings) {
+      r._phase += dt * 3.2;
+      if (!r.mesh) continue;
+      r.mesh.rotation.y += dt * 1.3;
+      const s = 1 + Math.sin(r._phase) * 0.12;
+      r.mesh.scale.set(s, s, s);
+      r.mesh.material.opacity = 0.52 + (Math.sin(r._phase) + 1) * 0.18;
+    }
+    for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) {
+        if (b.mesh.visible) b.mesh.visible = false;
+        continue;
+      }
+      if (!b.mesh.visible) b.mesh.visible = true;
+      b.mesh.rotation.x += dt * b.spin;
+      b.mesh.rotation.z += dt * (b.spin * 0.6);
+      b.mesh.position.y = 1.6 + Math.sin(now * 0.0025 + b.x * 0.02) * 0.12;
+    }
   },
 
   // ===== パッド衝突チェック =====
   checkPads(car, now) {
-    let result = { boost: false, jump: false };
+    let result = { boost: false, jump: false, airBoost: false };
+    const airborne = !!(car.isAirborne && car.isAirborne());
     for (const p of this.boostPads) {
       const d = Utils.dist2(car.x, car.z, p.x, p.z);
-      if (d < p.radius) {
+      if (d < p.radius && !airborne) {
         const last = p._lastTrigger.get(car.id) || 0;
         if (now - last > 500) {
           p._lastTrigger.set(car.id, now);
           result.boost = true;
+        }
+      }
+    }
+    for (const r of this.airBoostRings) {
+      const d = Utils.dist2(car.x, car.z, r.x, r.z);
+      if (d < r.radius && car.y > r.yMin && car.y < r.yMax) {
+        const last = r._lastTrigger.get(car.id) || 0;
+        if (now - last > 900) {
+          r._lastTrigger.set(car.id, now);
+          result.airBoost = true;
         }
       }
     }
@@ -1389,6 +1474,24 @@ window.createTrackGrand = function () {
       }
     }
     return result;
+  },
+
+  checkBoulderHit(car, now) {
+    if (!this.boulders || this.boulders.length === 0) return { hit: false };
+    if (car.isAirborne && car.isAirborne()) return { hit: false };
+    for (const b of this.boulders) {
+      if (now < (b.brokenUntil || 0)) continue;
+      const dx = car.x - b.mesh.position.x;
+      const dz = car.z - b.mesh.position.z;
+      const d2 = dx * dx + dz * dz;
+      const rr = b.radius + 1.0;
+      if (d2 < rr * rr && car.y < b.mesh.position.y + 1.7) {
+        b.brokenUntil = now + 1000;
+        b.mesh.visible = false;
+        return { hit: true, nx: dx / Math.sqrt(d2 || 1), nz: dz / Math.sqrt(d2 || 1) };
+      }
+    }
+    return { hit: false };
   },
 
   collectItemBox(x, z, radius = 2.2) {

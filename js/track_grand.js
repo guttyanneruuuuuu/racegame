@@ -1265,8 +1265,8 @@ window.createTrackGrand = function () {
     const limit = w - radius;
 
     const n = this.pathPoints.length;
-    const startGoalWallBug = this._isWallGlitchZone(idx);
-    if (startGoalWallBug) {
+    const isStartGoalGlitchZone = this._isWallGlitchZone(idx);
+    if (isStartGoalGlitchZone) {
       return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
     }
 

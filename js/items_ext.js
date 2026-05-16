@@ -5,6 +5,8 @@ const TOP_RANK_BLOCKED_ITEMS = ['killer', 'lightning', 'stormCloud', 'tripleRock
 const STORM_CLOUD_HEIGHT = 6.5;
 const STORM_CLOUD_FLOAT_AMPLITUDE = 0.35;
 const STORM_CLOUD_OPACITY = 0.88;
+const STORM_CLOUD_COLOR = 0x5C6BC0;
+const MANAGED_PROJECTILE_KINDS = new Set(['block', 'boomerang', 'decoy', 'stormCloud']);
 const ItemExt = {
   installed: false,
 
@@ -394,12 +396,13 @@ const ItemExt = {
         target = bestAhead || bestAny;
       }
       if (!target) {
+        // 対象がいない状況で空撃ちになるのを避けるため、小ブーストを返却
         owner.applyBoost(1.0);
         return null;
       }
 
       const cloud = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x5C6BC0, transparent: true, opacity: STORM_CLOUD_OPACITY });
+      const mat = new THREE.MeshLambertMaterial({ color: STORM_CLOUD_COLOR, transparent: true, opacity: STORM_CLOUD_OPACITY });
       const p1 = new THREE.Mesh(new THREE.SphereGeometry(1.0, 10, 8), mat);
       const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), mat);
       const p3 = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), mat);
@@ -485,7 +488,7 @@ const ItemExt = {
       // 追加: block/boomerang/decoy の衝突
       for (let i = ItemSystem.projectiles.length - 1; i >= 0; i--) {
         const p = ItemSystem.projectiles[i];
-        if (p.kind !== 'block' && p.kind !== 'boomerang' && p.kind !== 'decoy' && p.kind !== 'stormCloud') continue;
+        if (!MANAGED_PROJECTILE_KINDS.has(p.kind)) continue;
         if (p.kind === 'stormCloud') {
           const tgt = allCars.find(c => c.id === p.targetId && !c.finished) || null;
           if (tgt) {

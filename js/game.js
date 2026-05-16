@@ -2,8 +2,10 @@
 // ジャンプ台の調整値
 const BIG_JUMP_PAD_POWER = 16;
 const SMALL_JUMP_PAD_POWER = 11;
-const AIR_RING_MARKER_LINE_WIDTH = 1.4;
-const AIR_RING_MARKER_RADIUS = 2.6;
+const MINIMAP_STYLE = {
+  AIR_RING_MARKER_LINE_WIDTH: 1.4,
+  AIR_RING_MARKER_RADIUS: 2.6,
+};
 
 const Game = {
   renderer: null,
@@ -929,10 +931,10 @@ const Game = {
       }
       if (Track.airBoostRings) {
         sctx.strokeStyle = '#80DEEA';
-        sctx.lineWidth = AIR_RING_MARKER_LINE_WIDTH;
+        sctx.lineWidth = MINIMAP_STYLE.AIR_RING_MARKER_LINE_WIDTH;
         for (const r of Track.airBoostRings) {
           sctx.beginPath();
-          sctx.arc(toX(r.x), toZ(r.z), AIR_RING_MARKER_RADIUS, 0, Math.PI * 2);
+          sctx.arc(toX(r.x), toZ(r.z), MINIMAP_STYLE.AIR_RING_MARKER_RADIUS, 0, Math.PI * 2);
           sctx.stroke();
         }
       }

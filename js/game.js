@@ -864,6 +864,8 @@ const Game = {
     if (!this.miniCtx) return;
     if (now < this._miniNextAt) return;
     this._miniNextAt = now + 50;
+    const AIR_RING_MARKER_LINE_WIDTH = 1.4;
+    const AIR_RING_MARKER_RADIUS = 2.6;
     const ctx = this.miniCtx;
     const W = this.miniCanvas.width;
     const H = this.miniCanvas.height;
@@ -927,10 +929,10 @@ const Game = {
       }
       if (Track.airBoostRings) {
         sctx.strokeStyle = '#80DEEA';
-        sctx.lineWidth = 1.4;
+        sctx.lineWidth = AIR_RING_MARKER_LINE_WIDTH;
         for (const r of Track.airBoostRings) {
           sctx.beginPath();
-          sctx.arc(toX(r.x), toZ(r.z), 2.6, 0, Math.PI * 2);
+          sctx.arc(toX(r.x), toZ(r.z), AIR_RING_MARKER_RADIUS, 0, Math.PI * 2);
           sctx.stroke();
         }
       }

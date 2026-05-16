@@ -58,24 +58,24 @@ const Track = {
     return this._delegate('update', undefined, dt, now);
   },
 
-  getProgress(x, z, hintIdx = -1) {
-    return this._delegate('getProgress', { index: 0, dist: Infinity, totalDist: 0 }, x, z, hintIdx);
+  getProgress(x, z, hintIdx = -1, y = undefined) {
+    return this._delegate('getProgress', { index: 0, dist: Infinity, totalDist: 0 }, x, z, hintIdx, y);
   },
 
   getStartPositions(count) {
     return this._delegate('getStartPositions', [], count);
   },
 
-  isOffTrack(x, z, hintIdx = -1) {
-    return this._delegate('isOffTrack', false, x, z, hintIdx);
+  isOffTrack(x, z, hintIdx = -1, y = undefined) {
+    return this._delegate('isOffTrack', false, x, z, hintIdx, y);
   },
 
   isOnShortcut(x, z) {
     return this._delegate('isOnShortcut', false, x, z);
   },
 
-  resolveWalls(x, z, radius, hintIdx = -1) {
-    return this._delegate('resolveWalls', { x, z, hit: false, nx: 0, nz: 0, lateral: 0, index: 0 }, x, z, radius, hintIdx);
+  resolveWalls(x, z, radius, hintIdx = -1, y = undefined) {
+    return this._delegate('resolveWalls', { x, z, hit: false, nx: 0, nz: 0, lateral: 0, index: 0 }, x, z, radius, hintIdx, y);
   },
 
   checkPads(car, now) {
@@ -94,8 +94,8 @@ const Track = {
     return this._delegate('collectCoin', false, x, z, radius);
   },
 
-  getSurfaceHeight(x, z, hintIdx = -1) {
-    return this._delegate('getSurfaceHeight', 0, x, z, hintIdx);
+  getSurfaceHeight(x, z, hintIdx = -1, y = undefined) {
+    return this._delegate('getSurfaceHeight', 0, x, z, hintIdx, y);
   },
 };
 

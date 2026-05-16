@@ -1247,16 +1247,6 @@ window.createTrackGrand = function () {
     return 0;
   },
 
-  _isWallGlitchZone(index) {
-    const n = this.pathPoints.length;
-    if (!n) return false;
-    const edge = Math.max(
-      this._wallGlitchZoneMinSegments,
-      Math.floor(n * this._wallGlitchZonePercent)
-    );
-    return index <= edge || index >= n - edge;
-  },
-
   // 壁衝突解決 (改善版: 法線にのみ押し戻し、接線は保存)
   // すり抜け対策: 検査範囲を大幅に広げ、最も深いめり込みを基準に押し戻す
   resolveWalls(x, z, radius, hintIdx = -1) {
@@ -1270,7 +1260,12 @@ window.createTrackGrand = function () {
     const limit = w - radius;
 
     const n = this.pathPoints.length;
-    const isStartGoalGlitchZone = this._isWallGlitchZone(idx);
+    const wallGlitchEdge = Math.max(
+      this._wallGlitchZoneMinSegments,
+      Math.floor(n * this._wallGlitchZonePercent)
+    );
+    const isGlitchZoneIndex = (segIndex) => segIndex <= wallGlitchEdge || segIndex >= n - wallGlitchEdge;
+    const isStartGoalGlitchZone = isGlitchZoneIndex(idx);
     if (isStartGoalGlitchZone) {
       return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
     }
@@ -1290,7 +1285,7 @@ window.createTrackGrand = function () {
     for (let k = -4; k <= 4; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
-      if (this._isWallGlitchZone(j)) continue;
+      if (isGlitchZoneIndex(j)) continue;
       const pj = this.pathPoints[j];
       const seg = this._segNorm[j];
       const rxj = x - pj.x, rzj = z - pj.z;

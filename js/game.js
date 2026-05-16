@@ -12,6 +12,8 @@ const Game = {
   totalLaps: 3,
   lastSendTime: 0,
   netSendInterval: 50,
+  netIdleHeartbeatInterval: 220,
+  _lastSentState: null,
 
   miniCtx: null,
   miniCanvas: null,
@@ -127,6 +129,16 @@ const Game = {
     this.localCar = null;
 
     const numCars = playersList.length;
+    if (this.mode === 'multi') {
+      // 多人数時は送信頻度を少し落として、ホスト中継負荷を抑える
+      if (numCars >= 6) this.netSendInterval = 85;
+      else if (numCars >= 5) this.netSendInterval = 75;
+      else if (numCars >= 4) this.netSendInterval = 65;
+      else this.netSendInterval = 50;
+    } else {
+      this.netSendInterval = 50;
+    }
+    this._lastSentState = null;
     const positions = Track.getStartPositions(numCars);
 
     for (let i = 0; i < playersList.length; i++) {
@@ -339,20 +351,40 @@ const Game = {
   _sendNetwork(now) {
     if (this.mode !== 'multi') return;
     if (!this.localCar) return;
-    if (now - this.lastSendTime < this.netSendInterval) return;
+    const c = this.localCar;
+    const state = {
+      x: Math.round(c.x * 100) / 100,
+      z: Math.round(c.z * 100) / 100,
+      angle: Math.round(c.angle * 1000) / 1000,
+      speed: Math.round(c.speed * 100) / 100,
+      lap: c.lap,
+      totalProgress: Math.round(c.totalProgress * 10) / 10,
+      boost: c.boostTimer > 0,
+      mini: c.miniTurboTimer > 0,
+      shield: c.invincibleTimer > 0,
+      squish: c.squishTimer > 0,
+      ghost: c.ghostTimer > 0,
+      y: Math.round(c.y * 100) / 100,
+    };
+    const prev = this._lastSentState;
+    const changed = !prev ||
+      Math.abs(state.x - prev.x) > 0.18 ||
+      Math.abs(state.z - prev.z) > 0.18 ||
+      Math.abs(Utils.angDiff(state.angle, prev.angle)) > 0.03 ||
+      Math.abs(state.speed - prev.speed) > 0.6 ||
+      Math.abs(state.totalProgress - prev.totalProgress) > 0.35 ||
+      Math.abs(state.y - prev.y) > 0.12 ||
+      state.lap !== prev.lap ||
+      state.boost !== prev.boost ||
+      state.mini !== prev.mini ||
+      state.shield !== prev.shield ||
+      state.squish !== prev.squish ||
+      state.ghost !== prev.ghost;
+    const minInterval = changed ? this.netSendInterval : this.netIdleHeartbeatInterval;
+    if (now - this.lastSendTime < minInterval) return;
     this.lastSendTime = now;
-    Net.sendState({
-      x: this.localCar.x, z: this.localCar.z, angle: this.localCar.angle,
-      speed: this.localCar.speed,
-      lap: this.localCar.lap,
-      totalProgress: this.localCar.totalProgress,
-      boost: this.localCar.boostTimer > 0,
-      mini: this.localCar.miniTurboTimer > 0,
-      shield: this.localCar.invincibleTimer > 0,
-      squish: this.localCar.squishTimer > 0,
-      ghost: this.localCar.ghostTimer > 0,
-      y: this.localCar.y,
-    });
+    this._lastSentState = state;
+    Net.sendState(state);
   },
 
   applyRemoteState(id, state) {

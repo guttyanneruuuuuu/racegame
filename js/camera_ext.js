@@ -1,6 +1,6 @@
-// ============= カメラ拡張: 視点切替 (チェイス/コックピット/俯瞰/後方) =============
+// ============= カメラ拡張: 視点切替 (通常/コックピット/後方) =============
 const CameraExt = {
-  mode: 'chase', // 'chase' | 'cockpit' | 'top' | 'cinematic'
+  mode: 'chase', // 'chase' | 'cockpit' | 'rear'
   installed: false,
 
   install() {
@@ -9,7 +9,7 @@ const CameraExt = {
     this.installed = true;
     // 保存された設定
     const saved = localStorage.getItem('gyrorush-camera-mode');
-    if (saved && ['chase', 'cockpit', 'top', 'cinematic'].includes(saved)) this.mode = saved;
+    if (saved && ['chase', 'cockpit', 'rear'].includes(saved)) this.mode = saved;
 
     // Game._updateCamera をラップ
     const origUpdate = Game._updateCamera.bind(Game);
@@ -20,26 +20,26 @@ const CameraExt = {
         return this._chase(dt, snap, true);
       }
       if (this.mode === 'cockpit') return this._cockpit(dt, snap);
-      if (this.mode === 'top')     return this._top(dt, snap);
-      if (this.mode === 'cinematic') return this._cinematic(dt, snap);
+      if (this.mode === 'rear') return this._rear(dt, snap);
       return origUpdate(dt, snap);
     };
   },
 
   setMode(m) {
+    if (!['chase', 'cockpit', 'rear'].includes(m)) m = 'chase';
     this.mode = m;
     localStorage.setItem('gyrorush-camera-mode', m);
     if (window.showToast) showToast(`📷 視点: ${this._label(m)}`, 900);
   },
 
   cycle() {
-    const order = ['chase', 'cockpit', 'top', 'cinematic'];
+    const order = ['chase', 'cockpit', 'rear'];
     const idx = order.indexOf(this.mode);
     this.setMode(order[(idx + 1) % order.length]);
   },
 
   _label(m) {
-    return { chase: 'チェイス', cockpit: 'コックピット', top: '俯瞰', cinematic: 'シネマ' }[m] || m;
+    return { chase: '通常', cockpit: 'コックピット', rear: '後方' }[m] || m;
   },
 
   _chase(dt, snap, lookBack) {
@@ -93,41 +93,8 @@ const CameraExt = {
     Game.camera.updateProjectionMatrix();
   },
 
-  _top(dt, snap) {
-    const c = Game.localCar;
-    const tx = c.x;
-    const tz = c.z - 0.001;  // ほぼ真上、僅かに後ろ
-    const ty = 22 + Math.abs(c.speed) * 0.05;
-    if (snap) Game.camera.position.set(tx, ty, tz);
-    else {
-      Game.camera.position.x = Utils.lerp(Game.camera.position.x, tx, 0.25);
-      Game.camera.position.y = Utils.lerp(Game.camera.position.y, ty, 0.18);
-      Game.camera.position.z = Utils.lerp(Game.camera.position.z, tz, 0.25);
-    }
-    Game.camera.lookAt(c.x, 0, c.z);
-    Game.camera.fov = Utils.lerp(Game.camera.fov, 60, 0.1);
-    Game.camera.updateProjectionMatrix();
-  },
-
-  _cinematic(dt, snap) {
-    // 進行方向の右側 or 左側にカメラ。リプレイ風
-    const c = Game.localCar;
-    const t = performance.now() * 0.0003;
-    const side = Math.sin(t) > 0 ? 1 : -1;
-    const offBack = 6 + Math.sin(t * 1.7) * 2;
-    const offSide = 6 + Math.cos(t * 1.3) * 3;
-    const tx = c.x - Math.sin(c.angle) * offBack + Math.cos(c.angle) * offSide * side;
-    const tz = c.z - Math.cos(c.angle) * offBack - Math.sin(c.angle) * offSide * side;
-    const ty = 3.0 + Math.sin(t * 2) * 0.6 + c.y * 0.5;
-    if (snap) Game.camera.position.set(tx, ty, tz);
-    else {
-      Game.camera.position.x = Utils.lerp(Game.camera.position.x, tx, 0.08);
-      Game.camera.position.y = Utils.lerp(Game.camera.position.y, ty, 0.08);
-      Game.camera.position.z = Utils.lerp(Game.camera.position.z, tz, 0.08);
-    }
-    Game.camera.lookAt(c.x, 1.0, c.z);
-    Game.camera.fov = Utils.lerp(Game.camera.fov, 38, 0.05);
-    Game.camera.updateProjectionMatrix();
+  _rear(dt, snap) {
+    return this._chase(dt, snap, true);
   },
 };
 window.CameraExt = CameraExt;

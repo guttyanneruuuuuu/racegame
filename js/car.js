@@ -1340,7 +1340,7 @@ class Car {
   }
   consumeItem() {
     const it = this.item;
-    this.item = this.itemExtra || null;
+    this.item = this.itemExtra;
     this.itemExtra = null;
     this._normalizeItemSlots();
     return it;

@@ -568,12 +568,12 @@ const Game = {
         if (Track.collectItemBox(c.x, c.z, 2.4)) {
           const rank = this._getRank(c);
           const firstItem = ItemSystem.weightedRoll(rank, this.cars.length);
-          const isDouble = Math.random() < this.DOUBLE_ITEM_BOX_PROBABILITY;
+          const canHoldDouble = typeof c.setDoubleItems === 'function';
+          const isDouble = canHoldDouble && Math.random() < this.DOUBLE_ITEM_BOX_PROBABILITY;
           let secondItem = null;
           if (isDouble) {
             secondItem = ItemSystem.weightedRoll(rank, this.cars.length);
-            if (typeof c.setDoubleItems === 'function') c.setDoubleItems(firstItem, secondItem);
-            else c.setItem(firstItem);
+            c.setDoubleItems(firstItem, secondItem);
           } else {
             c.setItem(firstItem);
           }

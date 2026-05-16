@@ -357,9 +357,12 @@ const GameUI = {
     const slot = document.getElementById('hud-item-slot');
     if (!slot) return;
     const MAX_ITEM_SLOTS = 2;
-    const items = Array.isArray(itemOrItems)
-      ? itemOrItems.filter(Boolean).slice(0, MAX_ITEM_SLOTS)
-      : (itemOrItems ? [itemOrItems] : []);
+    let items = [];
+    if (Array.isArray(itemOrItems)) {
+      items = itemOrItems.filter(Boolean).slice(0, MAX_ITEM_SLOTS);
+    } else if (itemOrItems) {
+      items = [itemOrItems];
+    }
 
     if (items.length === 0) {
       slot.innerHTML = '<div class="item-stack"><div class="item-box">?</div></div>';

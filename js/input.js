@@ -24,8 +24,12 @@ const Input = {
   _shakeAxisSmoothed: 0,
   _shakeCooldownMs: 500,
   // 低パス係数 in (keep は 1 - in): 小さな縦振りを拾えるように追従寄り
+  // Low-pass input weight for vertical shake detection smoothing.
   _shakeSmoothIn: 0.18,
+  // z軸寄与の重み / Z-axis assist weight (pitch寄り端末の検出補助)
   _shakeZAssist: 0.35,
+  // 横振り時(14)より小さな縦振りを拾うため閾値を半分(7)に調整
+  // Vertical shake threshold (reduced from 14 -> 7 for smaller gesture input).
   _shakeVerticalThreshold: 7,
 
   // ジャイロ感度設定

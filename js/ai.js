@@ -116,6 +116,10 @@ const AIDriver = {
       else if (itm === 'phaseShift') {
         use = this._threatBehind(car, allCars) || this._enemiesNearby(car, allCars, 8) >= 1 || Math.random() < 0.4;
       }
+      // ストームクラウド: 前にライバルがいる時に使う
+      else if (itm === 'stormCloud') {
+        use = this._hasRivalAhead(car, allCars) || this._enemiesNearby(car, allCars, 10) >= 1 || Math.random() < 0.35;
+      }
       if (use) {
         Game.useItem(car, allCars);
         st.itemCooldown = 2.5 + Math.random() * 2.5;

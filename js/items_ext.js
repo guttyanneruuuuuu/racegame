@@ -3,6 +3,7 @@
 // items.js は変更せず、ここで動的に拡張する。
 const ItemExt = {
   installed: false,
+  NEW_ITEM_IDS: ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'freeze', 'shockwave', 'swap', 'phaseShift'],
 
   install() {
     if (this.installed) return;
@@ -10,11 +11,22 @@ const ItemExt = {
     this.installed = true;
 
     // 既存配列に追加
-    const newItems = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy', 'killer',
-                      'freeze', 'shockwave', 'swap', 'phaseShift'];
+    const newItems = [...this.NEW_ITEM_IDS, 'killer'];
     for (const it of newItems) {
       if (!ItemSystem.ITEMS.includes(it)) ItemSystem.ITEMS.push(it);
     }
+    ItemSystem.isFreshItem = (item) => this.NEW_ITEM_IDS.includes(item);
+    ItemSystem._pickWeighted = (weights) => {
+      let sum = 0;
+      for (const k in weights) sum += Math.max(0, weights[k] || 0);
+      if (sum <= 0) return 'boost';
+      let r = Math.random() * sum;
+      for (const k in weights) {
+        r -= Math.max(0, weights[k] || 0);
+        if (r <= 0) return k;
+      }
+      return Object.keys(weights)[0] || 'boost';
+    };
 
     // 表示情報を拡張
     const origDisp = ItemSystem.getDisplay.bind(ItemSystem);
@@ -38,8 +50,7 @@ const ItemExt = {
     };
 
     // 重み付け抽選: 既存の関数を差し替えてバランスをとる
-    const origRoll = ItemSystem.weightedRoll.bind(ItemSystem);
-    ItemSystem.weightedRoll = (rank, totalPlayers) => {
+    ItemSystem.weightedRoll = (rank, totalPlayers, dryStreak = 0) => {
       const ratio = totalPlayers > 1 ? (rank - 1) / (totalPlayers - 1) : 0.5;
       // 既存ベース重み(items.js のロジックに新規分を追加)
       const w = {
@@ -56,39 +67,44 @@ const ItemExt = {
         tripleRocket: Utils.lerp(0.05, 1.1, ratio),
         lightning:    Utils.lerp(0.03, 1.2, ratio),
         // 既存追加アイテム
-        fog:          Utils.lerp(0.1, 1.2, ratio),
-        block:        Utils.lerp(0.6, 1.1, ratio),
-        mini:         Utils.lerp(0.1, 0.9, ratio),
-        boomerang:    Utils.lerp(0.5, 1.4, ratio),
-        megaShield:   Utils.lerp(0.0, 0.5, ratio),
+        fog:          Utils.lerp(0.18, 1.45, ratio),
+        block:        Utils.lerp(0.8, 1.35, ratio),
+        mini:         Utils.lerp(0.18, 1.05, ratio),
+        boomerang:    Utils.lerp(0.72, 1.7, ratio),
+        megaShield:   Utils.lerp(0.02, 0.65, ratio),
         // === 新規ユニークアイテム ===
-        teleport:     Utils.lerp(0.05, 1.6, ratio),  // 下位救済: 前方ワープ
-        emp:          Utils.lerp(0.2, 1.4, ratio),   // HUDジャミング + 短い制御不能
-        decoy:        Utils.lerp(0.5, 1.0, ratio),   // ロケット囮: 駆け引きアイテム
+        teleport:     Utils.lerp(0.12, 1.95, ratio), // 下位救済: 前方ワープ
+        emp:          Utils.lerp(0.35, 1.75, ratio), // HUDジャミング + 短い制御不能
+        decoy:        Utils.lerp(0.75, 1.28, ratio), // ロケット囮: 駆け引きアイテム
         killer:       Utils.lerp(0.01, 2.8, ratio),  // 下位専用の超加速アイテム
       };
       // === 新規追加アイテム重み ===
       // freeze: 周囲を凍結 (中位救済)
-      w.freeze     = Utils.lerp(0.0, 1.0, ratio);
+      w.freeze     = Utils.lerp(0.14, 1.3, ratio);
       // shockwave: 周囲を強力に弾く防御兼攻撃 (中位)
-      w.shockwave  = Utils.lerp(0.2, 1.2, ratio);
+      w.shockwave  = Utils.lerp(0.35, 1.45, ratio);
       // swap: 前方のライバルと順位交換 (下位救済)
-      w.swap       = Utils.lerp(0.0, 1.3, ratio);
+      w.swap       = Utils.lerp(0.05, 1.55, ratio);
       // phaseShift: 短時間の透過 + 速度ブースト (中下位)
-      w.phaseShift = Utils.lerp(0.1, 1.4, ratio);
+      w.phaseShift = Utils.lerp(0.2, 1.7, ratio);
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
         w.rocket = Math.max(w.rocket, Utils.lerp(2.2, 3.8, ratio));
         w.tripleRocket = Math.max(w.tripleRocket, Utils.lerp(0.45, 1.8, ratio));
       }
-      let sum = 0;
-      for (const k in w) sum += w[k];
-      let r = Math.random() * sum;
-      for (const k in w) {
-        r -= w[k];
-        if (r <= 0) return k;
+      if (dryStreak >= 2) {
+        for (const it of this.NEW_ITEM_IDS) {
+          if (w[it] !== undefined) w[it] *= 1.25 + dryStreak * 0.22;
+        }
       }
-      return 'boost';
+      if (dryStreak >= 4) {
+        const freshWeights = {};
+        for (const it of this.NEW_ITEM_IDS) {
+          if (w[it] !== undefined) freshWeights[it] = w[it];
+        }
+        return ItemSystem._pickWeighted(freshWeights);
+      }
+      return ItemSystem._pickWeighted(w);
     };
 
     // 投射物更新の差し込み (ブーメラン挙動)
@@ -531,8 +547,7 @@ const ItemExt = {
       // 新規アイテムの処理を先取り
       if (!car.item) return;
       const it = car.item;
-      const isNew = ['fog', 'block', 'mini', 'boomerang', 'megaShield', 'teleport', 'emp', 'decoy',
-                     'freeze', 'shockwave', 'swap', 'phaseShift'].includes(it);
+      const isNew = this.NEW_ITEM_IDS.includes(it);
       if (!isNew) {
         return origUse(car, allCars);
       }

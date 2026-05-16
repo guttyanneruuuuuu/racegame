@@ -423,7 +423,7 @@ const UIExt = {
     set('set-quality',    localStorage.getItem('gyrorush-quality') || 'med');
     set('set-particles',  localStorage.getItem('gyrorush-particles') || 'normal');
     set('set-weather',    localStorage.getItem('gyrorush-weather') || 'clear');
-    set('set-difficulty', localStorage.getItem('gyrorush-difficulty') || 'normal');
+    set('set-difficulty', localStorage.getItem('gyrorush-difficulty') || localStorage.getItem('gr_ai_difficulty') || 'normal');
     set('set-ai-count',   localStorage.getItem('gyrorush-ai-count') || '5');
     set('set-laps',       localStorage.getItem('gyrorush-laps') || '3');
     set('set-drift',      localStorage.getItem('gyrorush-drift') || '1.0');

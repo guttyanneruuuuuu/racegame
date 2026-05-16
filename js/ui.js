@@ -233,11 +233,12 @@ const GameUI = {
     const players = [
       { id: localId, name: info.name, color: info.color, isAI: false },
     ];
-    const aiNames = ['ターボ', 'ジェット', 'ロケット', 'ボルト', 'スピード'];
+    const aiCount = this._getSoloAiCount();
+    const aiNames = ['ターボ', 'ジェット', 'ロケット', 'ボルト', 'スピード', 'ブリッツ', 'ファング'];
     const palette = ['#1E88E5', '#FDD835', '#43A047', '#8E24AA', '#FB8C00', '#E53935', '#26C6DA'];
-    const aiColors = palette.filter(c => c !== info.color).slice(0, 5);
-    for (let i = 0; i < 5; i++) {
-      players.push({ id: 'ai-' + i, name: aiNames[i], color: aiColors[i] || '#888', isAI: true });
+    const aiColors = palette.filter(c => c !== info.color);
+    for (let i = 0; i < aiCount; i++) {
+      players.push({ id: 'ai-' + i, name: aiNames[i] || `CPU ${i + 1}`, color: aiColors[i % aiColors.length] || '#888', isAI: true });
     }
     await this._beginRace(players, localId, 'solo', this.getSelectedMap());
   },
@@ -315,6 +316,11 @@ const GameUI = {
   },
   _storageSet(key, value) {
     try { if (this._safeStorage) this._safeStorage.setItem(key, value); } catch (_) {}
+  },
+
+  _getSoloAiCount() {
+    const raw = parseInt(this._storageGet('gyrorush-ai-count') || '5', 10);
+    return Utils.clamp(Number.isFinite(raw) ? raw : 5, 1, 7);
   },
 
   updateLobby(players) {

@@ -305,12 +305,12 @@ const PartyExt = {
         if (!window.Game || Game._partyPatched) return;
         Game._partyPatched = true;
         const originalSetupRace = Game.setupRace.bind(Game);
-        Game.setupRace = (players, localId, mode) => {
+        Game.setupRace = (players, localId, mode, mapId) => {
             let nextPlayers = players;
             if (mode === 'solo') {
                 nextPlayers = this._fillSoloPlayers(players || []);
             }
-            originalSetupRace(nextPlayers, localId, mode);
+            originalSetupRace(nextPlayers, localId, mode, mapId);
             this._afterRaceSetup();
         };
 
@@ -321,45 +321,58 @@ const PartyExt = {
         };
 
         const originalUseItem = Game.useItem.bind(Game);
-        Game.useItem = () => {
-            const car = Game.getLocalCar && Game.getLocalCar();
-            if (car && car.item && this._usePartyItem(car, car.item)) {
-                if (typeof car.consumeItem === 'function') car.consumeItem();
-                else car.item = null;
-                if (Game.updateUI) Game.updateUI();
+        Game.useItem = (car, allCars) => {
+            const activeCar = car || Game.localCar || null;
+            if (activeCar && activeCar.item && this._usePartyItem(activeCar, activeCar.item)) {
+                const usedItem = activeCar.item;
+                if (typeof activeCar.consumeItem === 'function') activeCar.consumeItem();
+                else activeCar.item = null;
+                if (activeCar.isLocal && window.GameUI && GameUI.updateItem) {
+                    GameUI.updateItem(activeCar.item, activeCar.itemSecondary);
+                }
+                if (activeCar.isLocal && typeof showToast === 'function' && window.ItemSystem && ItemSystem.getDisplay) {
+                    const disp = ItemSystem.getDisplay(usedItem);
+                    showToast(`${disp.emoji || '🎉'} ${disp.label || usedItem}!`, 900);
+                }
                 return;
             }
-            originalUseItem();
+            return originalUseItem(activeCar, allCars || Game.cars);
         };
 
         const originalRemoteAction = Game.applyRemoteAction ? Game.applyRemoteAction.bind(Game) : null;
         if (originalRemoteAction) {
-            Game.applyRemoteAction = (playerId, action) => {
+            Game.applyRemoteAction = (action) => {
                 if (action && action.type === 'party-emote') {
-                    const car = Game.cars && Game.cars[playerId];
+                    const car = Game.cars && Game.cars.find((c) => c.id === action.by);
                     if (car) this._spawnEmote(car, action.emote);
                     return;
                 }
-                originalRemoteAction(playerId, action);
+                originalRemoteAction(action);
             };
         }
     },
 
     _fillSoloPlayers(players) {
         const base = [...players];
-        const colors = [0xff1744, 0x00e5ff, 0xffea00, 0x76ff03, 0xff6d00, 0xd500f9];
-        const names = ['YOU', 'Mika', 'Ren', 'Aoi', 'Kai', 'Sora'];
-        while (base.length < 6) {
+        const colors = ['#ff1744', '#00e5ff', '#ffea00', '#76ff03', '#ff6d00', '#d500f9', '#7c4dff', '#00c853'];
+        const names = ['YOU', 'Mika', 'Ren', 'Aoi', 'Kai', 'Sora', 'Rei', 'Luna'];
+        const carTypes = ['balanced', 'speed', 'accel', 'handling', 'heavy', 'drift', 'stunt', 'turbo'];
+        let total = 6;
+        try {
+            const savedAi = parseInt(localStorage.getItem('gyrorush-ai-count') || '5', 10);
+            if (Number.isFinite(savedAi)) total = Math.max(2, Math.min(8, savedAi + 1));
+        } catch (_) {}
+        while (base.length < total) {
             const i = base.length;
             base.push({
                 id: `party-ai-${i}`,
                 name: names[i],
                 color: colors[i],
-                carType: ['sport', 'muscle', 'compact', 'rally', 'retro', 'truck'][i % 6],
+                carType: carTypes[i % carTypes.length],
                 isAI: true
             });
         }
-        return base.slice(0, 6);
+        return base.slice(0, total);
     },
 
     _afterRaceSetup() {

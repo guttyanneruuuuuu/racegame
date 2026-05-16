@@ -23,6 +23,7 @@ const Input = {
   _shakeLastAt: 0,
   _shakeAxisSmoothed: 0,
   _shakeCooldownMs: 500,
+  // 低パス係数 (keep + in = 1.0): 小さな縦振りを拾えるように追従寄り
   _shakeSmoothKeep: 0.82,
   _shakeSmoothIn: 0.18,
   _shakeZAssist: 0.35,

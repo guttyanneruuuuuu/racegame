@@ -69,8 +69,12 @@ const Input = {
         if (Game && Game.localCar && !Game.localCar.finished) Game.localCar.respawn();
       }
       if (e.key.toLowerCase() === 'c') {
-        // C: 後方視点 トグル
-        this.lookBack = !this.lookBack;
+        // C: 視点切替
+        if (window.CameraExt && CameraExt.cycle) CameraExt.cycle();
+      }
+      if (e.key.toLowerCase() === 'b') {
+        // B: 一時的に後方を見る（押している間）
+        this.lookBack = true;
       }
       if (e.key.toLowerCase() === 'q') {
         // Q: 巻き戻し
@@ -82,6 +86,7 @@ const Input = {
     window.addEventListener('keyup', (e) => {
       this._keys[e.key.toLowerCase()] = false;
       this._updateFromKeys();
+      if (e.key.toLowerCase() === 'b') this.lookBack = false;
     });
   },
   _updateFromKeys() {

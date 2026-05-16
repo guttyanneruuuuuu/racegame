@@ -20,8 +20,6 @@ window.createTrackGrand = function () {
 
   wallSegmentsOuter: [],
   wallSegmentsInner: [],
-  _wallGlitchZoneMinSegments: 6,
-  _wallGlitchZonePercent: 0.03,
 
   _segDir: [],
   _segNorm: [],
@@ -915,6 +913,7 @@ window.createTrackGrand = function () {
       this.group.add(m);
 
       this.shortcuts.push({
+        from: sc.from, to: sc.to,
         x: cx, z: cz, halfLen: len / 2, halfWid: 4, ang,
         cosA: Math.cos(ang), sinA: Math.sin(ang),
       });
@@ -948,6 +947,32 @@ window.createTrackGrand = function () {
       if (Math.abs(lx) < sc.halfWid && Math.abs(lz) < sc.halfLen) return true;
     }
     return false;
+  },
+
+  _resolveShortcutSideWalls(x, z, radius) {
+    const inset = 0.18;
+    for (const sc of this.shortcuts) {
+      const rx = x - sc.x, rz = z - sc.z;
+      const lx = rx * sc.cosA - rz * sc.sinA;
+      const lz = rx * sc.sinA + rz * sc.cosA;
+      if (Math.abs(lz) >= sc.halfLen) continue; // 入口/出口は開放
+      const sideLimit = sc.halfWid - radius;
+      if (sideLimit <= 0 || Math.abs(lx) <= sideLimit) continue;
+
+      const sign = lx >= 0 ? 1 : -1;
+      const excess = Math.abs(lx) - sideLimit;
+      const newLx = lx - sign * (excess + inset);
+      const newX = sc.x + newLx * sc.cosA + lz * sc.sinA;
+      const newZ = sc.z - newLx * sc.sinA + lz * sc.cosA;
+      return {
+        x: newX, z: newZ, hit: true,
+        nx: -sign * sc.cosA,
+        nz: sign * sc.sinA,
+        lateral: lx,
+        index: sc.from,
+      };
+    }
+    return null;
   },
 
   _buildDecorations() {
@@ -1259,16 +1284,13 @@ window.createTrackGrand = function () {
     const w = this.widthAt(idx);
     const limit = w - radius;
 
-    const n = this.pathPoints.length;
-    const wallGlitchEdge = Math.max(
-      this._wallGlitchZoneMinSegments,
-      Math.floor(n * this._wallGlitchZonePercent)
-    );
-    const isGlitchZoneIndex = (segIndex) => segIndex <= wallGlitchEdge || segIndex >= n - wallGlitchEdge;
-    const isStartGoalGlitchZone = isGlitchZoneIndex(idx);
-    if (isStartGoalGlitchZone) {
+    const shortcutHit = this._resolveShortcutSideWalls(x, z, radius);
+    if (shortcutHit) return shortcutHit;
+    if (this.isOnShortcut(x, z)) {
       return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
     }
+
+    const n = this.pathPoints.length;
 
     // 最大めり込みを追跡 (代表セグメントから周辺まで全部見て最深を採用)
     let bestExcess = -Infinity;
@@ -1285,7 +1307,6 @@ window.createTrackGrand = function () {
     for (let k = -4; k <= 4; k++) {
       if (k === 0) continue;
       const j = ((idx + k) % n + n) % n;
-      if (isGlitchZoneIndex(j)) continue;
       const pj = this.pathPoints[j];
       const seg = this._segNorm[j];
       const rxj = x - pj.x, rzj = z - pj.z;

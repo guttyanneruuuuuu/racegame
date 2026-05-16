@@ -1008,6 +1008,7 @@ window.createTrackVolcano = function () {
       this.group.add(m);
 
       this.shortcuts.push({
+        from: sc.from, to: sc.to,
         x: cx, z: cz, halfLen: len / 2, halfWid: 4, ang,
         cosA: Math.cos(ang), sinA: Math.sin(ang),
       });
@@ -1323,6 +1324,32 @@ window.createTrackVolcano = function () {
     return false;
   },
 
+  _resolveShortcutSideWalls(x, z, radius) {
+    const inset = 0.18;
+    for (const sc of this.shortcuts) {
+      const rx = x - sc.x, rz = z - sc.z;
+      const lx = rx * sc.cosA - rz * sc.sinA;
+      const lz = rx * sc.sinA + rz * sc.cosA;
+      if (Math.abs(lz) >= sc.halfLen) continue; // 入口/出口は開放
+      const sideLimit = sc.halfWid - radius;
+      if (sideLimit <= 0 || Math.abs(lx) <= sideLimit) continue;
+
+      const sign = lx >= 0 ? 1 : -1;
+      const excess = Math.abs(lx) - sideLimit;
+      const newLx = lx - sign * (excess + inset);
+      const newX = sc.x + newLx * sc.cosA + lz * sc.sinA;
+      const newZ = sc.z - newLx * sc.sinA + lz * sc.cosA;
+      return {
+        x: newX, z: newZ, hit: true,
+        nx: -sign * sc.cosA,
+        nz: sign * sc.sinA,
+        lateral: lx,
+        index: sc.from,
+      };
+    }
+    return null;
+  },
+
   // 壁衝突解決 (Grand と同じ堅牢ロジック + 探索範囲拡大 + タンジェント許容拡大):
   // - 近傍 -6..+6 セグメントを走査 (前作 -4..+4)
   // - MAX_TANGENT_DISTANCE を 24 → 28 に拡大して、高速で飛び込んだ際の取りこぼし防止
@@ -1345,14 +1372,18 @@ window.createTrackVolcano = function () {
     const w = this.widthAt(idx);
     const limit = w - radius;
 
+    const shortcutHit = this._resolveShortcutSideWalls(x, z, radius);
+    if (shortcutHit) return shortcutHit;
+    if (this.isOnShortcut(x, z)) {
+      return { x, z, hit: false, nx: 0, nz: 0, lateral, index: idx };
+    }
+
     let bestExcess = -Infinity;
     let bestSeg = null;
 
     if (Math.abs(lateral) > limit) {
-      if (!this.isOnShortcut(x, z)) {
-        bestExcess = Math.abs(lateral) - limit;
-        bestSeg = { sign: lateral >= 0 ? 1 : -1, nx, nz, lateral, index: idx };
-      }
+      bestExcess = Math.abs(lateral) - limit;
+      bestSeg = { sign: lateral >= 0 ? 1 : -1, nx, nz, lateral, index: idx };
     }
 
     const n = this.pathPoints.length;
@@ -1370,7 +1401,6 @@ window.createTrackVolcano = function () {
       const tang = Math.abs(rxj * segDir.ux + rzj * segDir.uz);
       if (tang > MAX_TANGENT_DISTANCE) continue;
       if (Math.abs(latj) > limj) {
-        if (this.isOnShortcut(x, z)) continue;
         const excess = Math.abs(latj) - limj;
         if (excess > bestExcess) {
           bestExcess = excess;
@@ -1405,7 +1435,7 @@ window.createTrackVolcano = function () {
       const vrz = newZ - vCur.z;
       const vLateral = vrx * vNorm.nx + vrz * vNorm.nz;
       const vLimit = this.widthAt(vIdx) - radius - 0.02;
-      if (Math.abs(vLateral) > vLimit && !this.isOnShortcut(newX, newZ)) {
+      if (Math.abs(vLateral) > vLimit) {
         const vSign = vLateral >= 0 ? 1 : -1;
         const vExcess = Math.abs(vLateral) - vLimit;
         newX -= vSign * vNorm.nx * (vExcess + VERIFICATION_PUSHBACK);

@@ -5,6 +5,7 @@ const SMALL_JUMP_PAD_POWER = 11;
 const MINIMAP_STYLE = {
   AIR_RING_MARKER_LINE_WIDTH: 1.4,
   AIR_RING_MARKER_RADIUS: 2.6,
+  AIR_RING_MARKER_COLOR: '#80DEEA',
 };
 
 const Game = {
@@ -930,7 +931,7 @@ const Game = {
         }
       }
       if (Track.airBoostRings) {
-        sctx.strokeStyle = '#80DEEA';
+        sctx.strokeStyle = MINIMAP_STYLE.AIR_RING_MARKER_COLOR;
         sctx.lineWidth = MINIMAP_STYLE.AIR_RING_MARKER_LINE_WIDTH;
         for (const r of Track.airBoostRings) {
           sctx.beginPath();

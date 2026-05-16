@@ -81,8 +81,8 @@ const ItemExt = {
       w.stormCloud = Utils.lerp(0.0, 1.3, ratio);
       // 強アイテムは 1位/2位には絶対出さない
       if (rank <= 2) {
-        const top2Blocked = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
-        for (const k of top2Blocked) w[k] = 0;
+        const topRankBlockedItems = ['killer', 'lightning', 'stormCloud', 'tripleRocket', 'megaShield', 'swap', 'phaseShift'];
+        for (const k of topRankBlockedItems) w[k] = 0;
       }
       if (totalPlayers <= 2) {
         // 2人対戦ではロケット系の抽選率を底上げ
@@ -359,6 +359,13 @@ const ItemExt = {
     };
 
     // ===== 🌩 ストームクラウド (狙った相手の頭上に雲を作り落雷) =====
+    /**
+     * 狙った相手の頭上に雲を生成し、少し遅れて落雷させる。
+     * @param {object} owner - 発動した車
+     * @param {Array<object>} allCars - レース中の全車
+     * @param {string|null} preferredTargetId - 同期時に優先する対象ID
+     * @returns {object|null} 選ばれた対象車。対象がいない時は null
+     */
     ItemSystem.triggerStormCloud = function(owner, allCars, preferredTargetId = null) {
       let target = null;
       if (preferredTargetId) {
@@ -483,14 +490,17 @@ const ItemExt = {
             p.z = tgt.z;
           }
           if (p.mesh) {
+            const CLOUD_HEIGHT = 6.5;
+            const CLOUD_FLOAT_AMPLITUDE = 0.35;
             const t = performance.now() * 0.005;
-            p.mesh.position.set(p.x, 6.5 + Math.sin(t) * 0.35, p.z);
+            p.mesh.position.set(p.x, CLOUD_HEIGHT + Math.sin(t) * CLOUD_FLOAT_AMPLITUDE, p.z);
             p.mesh.rotation.y += dt * 0.7;
           }
           if (p.marker) {
             p.marker.position.set(p.x, 0.15, p.z);
             p.marker.material.opacity = 0.45 + Math.abs(Math.sin(performance.now() * 0.012)) * 0.45;
           }
+          // life が strikeAt を下回った瞬間に一度だけ落雷を発生させる
           if (!p.struck && p.life <= p.strikeAt) {
             p.struck = true;
             ItemSystem._spawnShockwave(p.x, p.z, 4.5, 0x90CAF9);

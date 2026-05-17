@@ -406,11 +406,13 @@ const GameUI = {
     row.textContent = `${ownerName} の ${itemLabel} が ${targetName} にヒット`;
     feed.prepend(row);
     while (feed.children.length > 4) feed.removeChild(feed.lastElementChild);
+    const displayMs = this.ITEM_HIT_DISPLAY_MS;
+    const fadeMs = this.ITEM_HIT_FADE_MS;
 
-    setTimeout(() => row.classList.add('fade-out'), this.ITEM_HIT_DISPLAY_MS - this.ITEM_HIT_FADE_MS);
+    setTimeout(() => row.classList.add('fade-out'), displayMs - fadeMs);
     setTimeout(() => {
       if (row.parentNode) row.parentNode.removeChild(row);
-    }, this.ITEM_HIT_DISPLAY_MS);
+    }, displayMs);
   },
 
   // コイン枚数表示更新 (10枚で最大、speedボーナス % も表示)

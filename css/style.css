@@ -610,12 +610,25 @@ input { font-family: inherit; outline: none; }
   transform: translateY(3px);
   box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 4px 8px rgba(0,0,0,0.3);
 }
-.ctrl-accel { background: linear-gradient(180deg, #66BB6A, #2E7D32); width: 102px; height: 84px; font-size: 14px; border-radius: 16px; }
+.ctrl-accel {
+  background: linear-gradient(180deg, #66BB6A, #2E7D32);
+  width: 102px;
+  height: 84px;
+  font-size: 14px;
+  border-radius: 16px;
+}
 .ctrl-brake { background: linear-gradient(180deg, #EF5350, #C62828); }
-.ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 72px; height: 72px; font-size: 11px; }
+.ctrl-item  {
+  background: linear-gradient(180deg, #FFCA28, #F57C00);
+  width: 72px;
+  height: 72px;
+  font-size: 11px;
+}
 .ctrl-rewind {
   background: linear-gradient(180deg, #7E57C2, #4527A0);
-  width: 60px; height: 56px; font-size: 10px;
+  width: 60px;
+  height: 56px;
+  font-size: 10px;
 }
 .ctrl-rewind.used {
   background: linear-gradient(180deg, #757575, #424242);

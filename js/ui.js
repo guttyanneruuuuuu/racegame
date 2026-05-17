@@ -3,6 +3,8 @@ const GameUI = {
   selectedColor: '#E53935',
   selectedCarType: 'balanced',
   selectedMap: 'grand',
+  ITEM_HIT_DISPLAY_MS: 5000,
+  ITEM_HIT_FADE_MS: 250,
   _safeStorage: null,
   _speedLineTimerId: null,
 
@@ -405,10 +407,10 @@ const GameUI = {
     feed.prepend(row);
     while (feed.children.length > 4) feed.removeChild(feed.lastElementChild);
 
-    setTimeout(() => row.classList.add('fade-out'), 4750);
+    setTimeout(() => row.classList.add('fade-out'), this.ITEM_HIT_DISPLAY_MS - this.ITEM_HIT_FADE_MS);
     setTimeout(() => {
       if (row.parentNode) row.parentNode.removeChild(row);
-    }, 5000);
+    }, this.ITEM_HIT_DISPLAY_MS);
   },
 
   // コイン枚数表示更新 (10枚で最大、speedボーナス % も表示)

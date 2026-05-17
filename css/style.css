@@ -1083,8 +1083,7 @@ input { font-family: inherit; outline: none; }
 }
 
 /* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
-.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 66px; height: 66px; font-size: 24px; }
-.ctrl-look    { width: 56px; height: 56px; font-size: 20px; }
+.ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 56px; height: 56px; font-size: 20px; }
 .ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 56px; height: 56px; font-size: 18px; }
 
 /* ============= アイテム命中ログ ============= */

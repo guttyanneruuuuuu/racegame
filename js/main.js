@@ -14,6 +14,7 @@ window.addEventListener('load', () => {
     if (typeof NetExt !== 'undefined' && NetExt.install) NetExt.install();
     if (typeof GameExt !== 'undefined' && GameExt.install) GameExt.install();
     if (typeof UIExt !== 'undefined' && UIExt.install) UIExt.install();
+    if (typeof OnlineExt !== 'undefined' && OnlineExt.install) OnlineExt.install();
     if (typeof ItemExt !== 'undefined' && ItemExt.hookGameUseItem) ItemExt.hookGameUseItem();
 
     // PartyExt は後付けファイルとして読み込み、6人プレイ向けの
@@ -114,11 +115,18 @@ window.addEventListener('load', () => {
   // 初期画面
   GameUI.showScreen('screen-title');
 
-  // URLパラメータで自動テスト
+  // URLパラメータで自動テスト / PWAショートカット
   const params = new URLSearchParams(location.search);
-  if (params.get('autosolo') === '1') {
+  if (params.get('autosolo') === '1' || params.get('solo') === '1') {
     setTimeout(() => {
-      document.getElementById('btn-solo').click();
+      const b = document.getElementById('btn-solo');
+      if (b) b.click();
     }, 500);
+  }
+  if (params.get('quickplay') === '1') {
+    setTimeout(() => {
+      const b = document.getElementById('btn-quickplay');
+      if (b) b.click();
+    }, 600);
   }
 });

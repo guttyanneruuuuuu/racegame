@@ -1,13 +1,39 @@
 {
   "name": "GyroRush - スマホジャイロレース",
   "short_name": "GyroRush",
-  "start_url": ".",
+  "id": "/gyrorush/",
+  "start_url": "./",
+  "scope": "./",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "orientation": "landscape",
-  "background_color": "#FFB347",
-  "theme_color": "#FF7043",
-  "description": "ジャイロセンサーで操作する3Dマルチプレイヤーレースゲーム",
+  "background_color": "#1a1a2e",
+  "theme_color": "#E53935",
+  "description": "ジャイロセンサーで操作する3Dマルチプレイヤーレースゲーム。最大6人でオンラインプレイ可能。",
+  "lang": "ja",
+  "categories": ["games", "entertainment"],
   "icons": [
-    { "src": "favicon.png", "sizes": "16x16", "type": "image/png" }
-  ]
+    { "src": "favicon.png", "sizes": "16x16", "type": "image/png" },
+    { "src": "favicon.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "ひとりで練習",
+      "short_name": "Solo",
+      "description": "AIと一人で練習レース",
+      "url": "./?solo=1",
+      "icons": [{ "src": "icons/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "クイックプレイ",
+      "short_name": "Quick",
+      "description": "PUBLIC ROOMに参加または作成",
+      "url": "./?quickplay=1",
+      "icons": [{ "src": "icons/icon-192.svg", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
 }

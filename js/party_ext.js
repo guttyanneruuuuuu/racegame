@@ -189,8 +189,9 @@ const PartyExt = {
 
     _decorateExistingMenus() {
         const addPanels = () => {
-            const title = document.getElementById('title-screen');
-            const lobby = document.getElementById('lobby-screen');
+            // Real screen ids are screen-title and screen-lobby
+            const title = document.getElementById('screen-title');
+            const lobby = document.getElementById('screen-lobby');
             this._addPanel(title, 'title');
             this._addPanel(lobby, 'lobby');
         };
@@ -241,7 +242,7 @@ const PartyExt = {
             localStorage.setItem('race-ai-count', '5');
             this._flash('6人わちゃわちゃ設定をON');
         });
-        const anchor = parent.querySelector('.menu-buttons') || parent.querySelector('.lobby-controls') || parent;
+        const anchor = parent.querySelector('.title-content') || parent.querySelector('.lobby-panel') || parent;
         anchor.appendChild(panel);
     },
 
@@ -251,52 +252,44 @@ const PartyExt = {
     },
 
     _patchItems() {
+        // ItemSystem.ITEMS is an Array of strings (item keys). Party items are stored
+        // separately in a meta map and exposed via getDisplay augmentation.
         if (!window.ItemSystem || ItemSystem._partyPatched) return;
         ItemSystem._partyPatched = true;
-        ItemSystem.ITEMS.partyHorn = {
-            name: 'PARTY HORN',
-            color: 0xffcc33,
-            icon: '📣',
-            description: '前方の相手をスピンさせる音波'
+        const PARTY_META = {
+            partyHorn:  { name: 'PARTY HORN', color: '#ffcc33', icon: '📣', description: '前方の相手をスピンさせる音波' },
+            bubble:     { name: 'BUBBLE',     color: '#67e8f9', icon: '🫧', description: '短時間守りつつ小ジャンプ' },
+            partySwap:  { name: 'P-SWAP',     color: '#a78bfa', icon: '🔁', description: '近い相手と位置を入れ替え' },
+            coinStorm:  { name: 'COIN STORM', color: '#fde047', icon: '🪙', description: '周囲にコイン嵐を起こす' },
         };
-        ItemSystem.ITEMS.bubble = {
-            name: 'BUBBLE',
-            color: 0x67e8f9,
-            icon: '🫧',
-            description: '短時間守りつつ小ジャンプ'
-        };
-        ItemSystem.ITEMS.swap = {
-            name: 'SWAP',
-            color: 0xa78bfa,
-            icon: '🔁',
-            description: '近い相手と位置を入れ替え'
-        };
-        ItemSystem.ITEMS.coinStorm = {
-            name: 'COIN STORM',
-            color: 0xfde047,
-            icon: '🪙',
-            description: '周囲にコイン嵐を起こす'
-        };
-        if (typeof ItemSystem.getItemDisplay === 'function') {
-            const originalDisplay = ItemSystem.getItemDisplay.bind(ItemSystem);
-            ItemSystem.getItemDisplay = (item) => {
-                if (item && ItemSystem.ITEMS[item]) {
-                    return {
-                        icon: ItemSystem.ITEMS[item].icon,
-                        name: ItemSystem.ITEMS[item].name,
-                        color: ItemSystem.ITEMS[item].color
-                    };
+        this._partyMeta = PARTY_META;
+        // augment ITEMS list so they appear in dex (avoid duplicates)
+        for (const k of Object.keys(PARTY_META)) {
+            if (!ItemSystem.ITEMS.includes(k)) ItemSystem.ITEMS.push(k);
+        }
+        // augment getDisplay (the actual API used by Game/UI)
+        if (typeof ItemSystem.getDisplay === 'function') {
+            const orig = ItemSystem.getDisplay.bind(ItemSystem);
+            ItemSystem.getDisplay = (item) => {
+                if (PARTY_META[item]) {
+                    return { emoji: PARTY_META[item].icon, label: PARTY_META[item].name, color: PARTY_META[item].color };
                 }
-                return originalDisplay(item);
+                return orig(item);
             };
         }
-        if (typeof ItemSystem.getRandomItem === 'function') {
-            const originalRandom = ItemSystem.getRandomItem.bind(ItemSystem);
-            ItemSystem.getRandomItem = (position, total) => {
-                if (!this.settings.partyItems || Math.random() > 0.32) return originalRandom(position, total);
-                const backBias = total && position > Math.max(2, total / 2);
-                const pool = backBias ? ['swap', 'partyHorn', 'coinStorm', 'bubble'] : ['partyHorn', 'bubble', 'coinStorm'];
-                return pool[Math.floor(Math.random() * pool.length)];
+        // Patch weightedRoll to occasionally drop a party item when enabled
+        if (typeof ItemSystem.weightedRoll === 'function') {
+            const origRoll = ItemSystem.weightedRoll.bind(ItemSystem);
+            const self = this;
+            ItemSystem.weightedRoll = (rank, total) => {
+                if (self.settings.partyItems && Math.random() < 0.18) {
+                    const backBias = total && rank > Math.max(2, total / 2);
+                    const pool = backBias
+                        ? ['partySwap', 'partyHorn', 'coinStorm', 'bubble']
+                        : ['partyHorn', 'bubble', 'coinStorm'];
+                    return pool[Math.floor(Math.random() * pool.length)];
+                }
+                return origRoll(rank, total);
             };
         }
     },
@@ -305,12 +298,9 @@ const PartyExt = {
         if (!window.Game || Game._partyPatched) return;
         Game._partyPatched = true;
         const originalSetupRace = Game.setupRace.bind(Game);
-        Game.setupRace = (players, localId, mode) => {
-            let nextPlayers = players;
-            if (mode === 'solo') {
-                nextPlayers = this._fillSoloPlayers(players || []);
-            }
-            originalSetupRace(nextPlayers, localId, mode);
+        Game.setupRace = (players, localId, mode, mapId) => {
+            // Do NOT auto-fill players in solo — UI already supplies 6 AI cars
+            originalSetupRace(players, localId, mode, mapId);
             this._afterRaceSetup();
         };
 
@@ -320,45 +310,48 @@ const PartyExt = {
             this._update();
         };
 
+        // useItem(car, allCars) is the actual signature
         const originalUseItem = Game.useItem.bind(Game);
-        Game.useItem = () => {
-            const car = Game.getLocalCar && Game.getLocalCar();
+        Game.useItem = (car, allCars) => {
             if (car && car.item && this._usePartyItem(car, car.item)) {
-                car.item = null;
-                if (Game.updateUI) Game.updateUI();
+                // consume item via Car API
+                if (typeof car.consumeItem === 'function') car.consumeItem();
+                else car.item = null;
+                if (car.isLocal && window.GameUI && GameUI.updateItem) {
+                    const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
+                    GameUI.updateItem(held.length ? held : null);
+                }
                 return;
             }
-            originalUseItem();
+            originalUseItem(car, allCars);
         };
 
-        const originalRemoteAction = Game.applyRemoteAction ? Game.applyRemoteAction.bind(Game) : null;
-        if (originalRemoteAction) {
-            Game.applyRemoteAction = (playerId, action) => {
-                if (action && action.type === 'party-emote') {
-                    const car = Game.cars && Game.cars[playerId];
+        // remote emotes via _emote action
+        if (typeof Net !== 'undefined' && Net.on) {
+            Net.on('action', (action) => {
+                if (action && action.kind === '_emote') {
+                    const car = (Game.cars || []).find(c => c.id === action.by);
                     if (car) this._spawnEmote(car, action.emote);
-                    return;
                 }
-                originalRemoteAction(playerId, action);
-            };
+            });
         }
     },
 
+    _getLocalCar() {
+        return Game.localCar || null;
+    },
+
+    _getCarsArray() {
+        return Array.isArray(Game.cars) ? Game.cars : [];
+    },
+
+    _getPathPoints() {
+        return (window.Track && Track.pathPoints) ? Track.pathPoints : [];
+    },
+
     _fillSoloPlayers(players) {
-        const base = [...players];
-        const colors = [0xff1744, 0x00e5ff, 0xffea00, 0x76ff03, 0xff6d00, 0xd500f9];
-        const names = ['YOU', 'Mika', 'Ren', 'Aoi', 'Kai', 'Sora'];
-        while (base.length < 6) {
-            const i = base.length;
-            base.push({
-                id: `party-ai-${i}`,
-                name: names[i],
-                color: colors[i],
-                carType: ['sport', 'muscle', 'compact', 'rally', 'retro', 'truck'][i % 6],
-                isAI: true
-            });
-        }
-        return base.slice(0, 6);
+        // Kept for backward compatibility — but no longer used (UI already fills 6 cars)
+        return players;
     },
 
     _afterRaceSetup() {
@@ -422,14 +415,15 @@ const PartyExt = {
     },
 
     _buildWorldExtras() {
-        if (!Game.scene || !Game.track || !Game.track.pathPoints) return;
+        if (!Game.scene || !this._getPathPoints().length) return;
         if (this.settings.gates) this._buildPartyGates();
         this._buildBalloons();
         this._buildConfettiCannons();
     },
 
     _buildPartyGates() {
-        const points = Game.track.pathPoints;
+        const points = this._getPathPoints();
+        if (!points.length) return;
         const spots = [0.13, 0.26, 0.39, 0.52, 0.65, 0.78, 0.91];
         spots.forEach((t, index) => {
             const position = this._pointAt(t);
@@ -553,8 +547,8 @@ const PartyExt = {
         this.hud.fill.style.width = `${Math.max(0, Math.min(100, this.partyMeter))}%`;
         this.hud.meterText.textContent = `${Math.round(this.partyMeter)}%`;
         if (this.settings.assist && this.hud.tiltDot) {
-            const car = Game.getLocalCar && Game.getLocalCar();
-            const input = car && car.input ? car.input.steer : 0;
+            // Input is a global module; steer is in [-1, 1]
+            const input = (window.Input && typeof Input.steer === 'number') ? Input.steer : 0;
             const x = 50 + Math.max(-1, Math.min(1, input)) * 42;
             this.hud.tiltDot.style.transform = `translateX(calc(${x}% - 7px))`;
             this.hud.tiltText.textContent = input.toFixed(2);
@@ -584,35 +578,41 @@ const PartyExt = {
     },
 
     _checkGates() {
-        if (!Game.cars) return;
-        const cars = Object.values(Game.cars);
+        const cars = this._getCarsArray();
+        if (!cars.length) return;
         this.gateMeshes.forEach((gate, gateIndex) => {
             const gatePos = gate.mesh.position;
             cars.forEach((car) => {
-                if (!car || !car.mesh || gate.hit.has(car.playerId)) return;
+                if (!car || !car.mesh || gate.hit.has(car.id)) return;
                 const dist = car.mesh.position.distanceTo(gatePos);
                 if (dist > gate.radius) return;
-                gate.hit.add(car.playerId);
+                gate.hit.add(car.id);
                 this._rewardGatePass(car, gateIndex);
-                setTimeout(() => gate.hit.delete(car.playerId), 2200);
+                setTimeout(() => gate.hit.delete(car.id), 2200);
             });
         });
     },
 
     _rewardGatePass(car, gateIndex) {
-        car.speed = Math.min(car.maxSpeed * 1.25, car.speed + 0.42);
-        car.coins = Math.min(999, (car.coins || 0) + 1);
+        const maxSp = (window.CarPhysics && CarPhysics.MAX_SPEED) || 54;
+        car.speed = Math.min(maxSp * 1.25, car.speed + 4.0);
+        if (typeof car.addCoin === 'function') car.addCoin(1);
+        else car.coins = Math.min(10, (car.coins || 0) + 1);
         this._spawnConfetti(car.mesh.position);
-        if (car.playerId === Game.localPlayerId) {
+        if (car.isLocal) {
             this.partyMeter = Math.min(100, this.partyMeter + 9);
             this.localCombo += 1;
             this._flash(`GATE BONUS x${this.localCombo}`);
-            if (Game.playSound) Game.playSound('coin');
+            if (window.SFX) SFX.play('pickup');
             if (this.partyMeter >= 100) {
                 this.partyMeter = 20;
-                car.item = car.item || 'coinStorm';
+                if (!car.item && typeof car.setItem === 'function') car.setItem('coinStorm');
+                else if (!car.item) car.item = 'coinStorm';
                 this._flash('PARTY ITEM READY');
-                if (Game.updateUI) Game.updateUI();
+                if (window.GameUI && GameUI.updateItem) {
+                    const held = (typeof car.getHeldItems === 'function') ? car.getHeldItems() : (car.item ? [car.item] : []);
+                    GameUI.updateItem(held.length ? held : null);
+                }
             }
         }
     },
@@ -633,23 +633,33 @@ const PartyExt = {
         this.activeEvent = event;
         this.eventEndsAt = Date.now() + 10500;
         this.lastEventAt = Date.now();
+        const cars = this._getCarsArray();
+        const maxSp = (window.CarPhysics && CarPhysics.MAX_SPEED) || 54;
         if (event === 'coinRush') {
             this._flash('COIN RUSH');
             this._spawnCoinLine();
         } else if (event === 'tailwind') {
             this._flash('TAILWIND');
-            Object.values(Game.cars || {}).forEach((car) => {
-                car.speed = Math.min(car.maxSpeed * 1.35, car.speed + 0.6);
+            cars.forEach((car) => {
+                car.speed = Math.min(maxSp * 1.35, car.speed + 5.0);
             });
         } else if (event === 'itemFever') {
             this._flash('ITEM BOX FEVER');
-            Object.values(Game.cars || {}).forEach((car) => {
-                if (!car.item) car.item = ItemSystem.getRandomItem(car.position || 3, Object.keys(Game.cars || {}).length || 6);
+            cars.forEach((car, idx) => {
+                if (!car.item) {
+                    const item = ItemSystem.weightedRoll(idx + 1, cars.length);
+                    if (typeof car.setItem === 'function') car.setItem(item);
+                    else car.item = item;
+                }
             });
-            if (Game.updateUI) Game.updateUI();
+            const local = this._getLocalCar();
+            if (local && local.isLocal && window.GameUI && GameUI.updateItem) {
+                const held = (typeof local.getHeldItems === 'function') ? local.getHeldItems() : (local.item ? [local.item] : []);
+                GameUI.updateItem(held.length ? held : null);
+            }
         } else {
             this._flash('MAKE SOME NOISE');
-            Object.values(Game.cars || {}).forEach((car) => this._spawnEmote(car, ['🔥', '😂', '👍', '👑'][Math.floor(Math.random() * 4)]));
+            cars.forEach((car) => this._spawnEmote(car, ['🔥', '😂', '👍', '👑'][Math.floor(Math.random() * 4)]));
         }
     },
 
@@ -675,36 +685,25 @@ const PartyExt = {
 
     _usePartyItem(car, item) {
         if (!this.settings.partyItems) return false;
-        if (item === 'partyHorn') {
-            this._partyHorn(car);
-            return true;
-        }
-        if (item === 'bubble') {
-            this._bubble(car);
-            return true;
-        }
-        if (item === 'swap') {
-            this._swap(car);
-            return true;
-        }
-        if (item === 'coinStorm') {
-            this._coinStorm(car);
-            return true;
-        }
+        if (item === 'partyHorn') { this._partyHorn(car); return true; }
+        if (item === 'bubble')    { this._bubble(car);    return true; }
+        if (item === 'partySwap') { this._swap(car);      return true; }
+        if (item === 'coinStorm') { this._coinStorm(car); return true; }
         return false;
     },
 
     _partyHorn(car) {
         this._flash('PARTY HORN');
         this._spawnRing(car.mesh.position, 0xffcc33);
-        Object.values(Game.cars || {}).forEach((target) => {
+        this._getCarsArray().forEach((target) => {
             if (!target || target === car || !target.mesh) return;
+            if (target.invincibleTimer > 0 || target.ghostTimer > 0) return;
             const dist = target.mesh.position.distanceTo(car.mesh.position);
             if (dist > 20) return;
-            const forward = new THREE.Vector3(Math.sin(car.rotation || 0), 0, Math.cos(car.rotation || 0));
+            const forward = new THREE.Vector3(Math.sin(car.angle || 0), 0, Math.cos(car.angle || 0));
             const toTarget = target.mesh.position.clone().sub(car.mesh.position).normalize();
             if (forward.dot(toTarget) < 0.12) return;
-            target.spinOutTimer = Math.max(target.spinOutTimer || 0, 1.45);
+            target.spinTimer = Math.max(target.spinTimer || 0, 1.45);
             target.speed *= 0.62;
             this._spawnEmote(target, '😂');
         });
@@ -712,9 +711,11 @@ const PartyExt = {
 
     _bubble(car) {
         this._flash('BUBBLE BOOST');
-        car.shieldTimer = Math.max(car.shieldTimer || 0, 3.5);
-        car.speed = Math.min(car.maxSpeed * 1.22, car.speed + 0.55);
-        car.verticalVelocity = Math.max(car.verticalVelocity || 0, 0.18);
+        if (typeof car.giveShield === 'function') car.giveShield(3.5);
+        else car.invincibleTimer = Math.max(car.invincibleTimer || 0, 3.5);
+        const maxSp = (window.CarPhysics && CarPhysics.MAX_SPEED) || 54;
+        car.speed = Math.min(maxSp * 1.22, car.speed + 5.0);
+        if (typeof car.applyJump === 'function') car.applyJump(6);
         const bubble = new THREE.Mesh(
             new THREE.SphereGeometry(2.2, 24, 18),
             new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.24, wireframe: true })
@@ -740,27 +741,29 @@ const PartyExt = {
             this._flash('SWAP MISS');
             return;
         }
-        const a = car.mesh.position.clone();
-        const b = target.mesh.position.clone();
-        car.mesh.position.copy(b);
-        target.mesh.position.copy(a);
+        const ax = car.x, az = car.z;
+        const bx = target.x, bz = target.z;
+        car.x = bx; car.z = bz;
+        target.x = ax; target.z = az;
         const tempSpeed = car.speed;
-        car.speed = Math.max(target.speed || 0, car.maxSpeed * 0.35);
-        target.speed = Math.max(tempSpeed || 0, target.maxSpeed * 0.25);
+        const maxSp = (window.CarPhysics && CarPhysics.MAX_SPEED) || 54;
+        car.speed = Math.max(target.speed || 0, maxSp * 0.35);
+        target.speed = Math.max(tempSpeed || 0, maxSp * 0.25);
         this._spawnRing(car.mesh.position, 0xa78bfa);
         this._spawnRing(target.mesh.position, 0xa78bfa);
         this._flash('POSITION SWAP');
     },
 
     _findSwapTarget(car) {
-        const candidates = Object.values(Game.cars || {}).filter((target) => target && target !== car && target.mesh);
+        const candidates = this._getCarsArray().filter((target) => target && target !== car && target.mesh && !target.finished);
         candidates.sort((a, b) => car.mesh.position.distanceTo(a.mesh.position) - car.mesh.position.distanceTo(b.mesh.position));
         return candidates[0];
     },
 
     _coinStorm(car) {
         this._flash('COIN STORM');
-        car.coins = Math.min(999, (car.coins || 0) + 8);
+        if (typeof car.addCoin === 'function') car.addCoin(8);
+        else car.coins = Math.min(10, (car.coins || 0) + 8);
         for (let i = 0; i < 24; i += 1) {
             const angle = Math.PI * 2 * (i / 24);
             const radius = 2 + (i % 4) * 1.2;
@@ -770,25 +773,24 @@ const PartyExt = {
                 z: car.mesh.position.z + Math.sin(angle) * radius
             }, 1300 + Math.random() * 700);
         }
-        Object.values(Game.cars || {}).forEach((target) => {
+        this._getCarsArray().forEach((target) => {
             if (!target || target === car || !target.mesh) return;
+            if (target.invincibleTimer > 0 || target.ghostTimer > 0) return;
             if (target.mesh.position.distanceTo(car.mesh.position) > 15) return;
-            target.coins = Math.max(0, (target.coins || 0) - 2);
+            if (typeof target.dropCoin === 'function') target.dropCoin(2);
+            else target.coins = Math.max(0, (target.coins || 0) - 2);
             target.speed *= 0.78;
-            target.spinOutTimer = Math.max(target.spinOutTimer || 0, 0.7);
+            target.spinTimer = Math.max(target.spinTimer || 0, 0.7);
         });
-        if (Game.updateUI) Game.updateUI();
+        if (car.isLocal && window.GameUI && GameUI.updateCoins) GameUI.updateCoins(car.coins || 0);
     },
 
     _sendEmote(emote) {
-        const car = Game.getLocalCar && Game.getLocalCar();
+        const car = this._getLocalCar();
         if (!car) return;
         this._spawnEmote(car, emote);
-        if (Game.socket && Game.roomId) {
-            Game.socket.emit('game-action', {
-                roomId: Game.roomId,
-                action: { type: 'party-emote', emote }
-            });
+        if (typeof Net !== 'undefined' && typeof Net.sendAction === 'function' && Game.mode === 'multi') {
+            try { Net.sendAction({ kind: '_emote', emote }); } catch (_) {}
         }
     },
 
@@ -945,23 +947,11 @@ const PartyExt = {
     },
 
     _patchItemDex() {
-        if (!window.UIExt || !UIExt.buildItemDex || UIExt._partyDexPatched) return;
+        // UIExt._renderItemDex reads from ItemSystem.ITEMS which now contains the
+        // party item keys (pushed in _patchItems), so the dex includes them automatically.
+        // No-op kept for forward compatibility with any external UIExt.buildItemDex impl.
+        if (!window.UIExt || UIExt._partyDexPatched) return;
         UIExt._partyDexPatched = true;
-        const originalBuild = UIExt.buildItemDex.bind(UIExt);
-        UIExt.buildItemDex = () => {
-            originalBuild();
-            const list = document.querySelector('.item-dex-list');
-            if (!list || list.querySelector('[data-party-dex]')) return;
-            ['partyHorn', 'bubble', 'swap', 'coinStorm'].forEach((key) => {
-                const item = ItemSystem.ITEMS[key];
-                if (!item) return;
-                const row = document.createElement('div');
-                row.className = 'item-dex-entry';
-                row.dataset.partyDex = key;
-                row.innerHTML = `<span class="item-dex-icon">${item.icon}</span><span><strong>${item.name}</strong><small>${item.description}</small></span>`;
-                list.appendChild(row);
-            });
-        };
     }
 };
 

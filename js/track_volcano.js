@@ -13,7 +13,7 @@ window.createTrackVolcano = function () {
   pathPoints: [],
   pathLength: 0,
   cumLen: [],
-  width: 22,
+  width: 28,
   widthArray: [],
   wallHeight: 3.0,
   surfaceHeights: [],
@@ -184,8 +184,8 @@ window.createTrackVolcano = function () {
       const a = this._segDir[prev], b = this._segDir[nxt];
       const dot = a.ux * b.ux + a.uz * b.uz;
       const curveSharp = 1 - Math.max(-1, Math.min(1, dot));
-      // ベース 22 + 急カーブで最大 +3 (折り返し点の自己交差防止 & 走りやすさ)
-      this.widthArray[i] = this.width + curveSharp * 2.4;
+      // ベース 28 + 急カーブでさらに余裕を持たせる
+      this.widthArray[i] = this.width + curveSharp * 3.2;
     }
     // 平滑化 (急な幅変化を抑制)
     const smoothed = new Array(n);

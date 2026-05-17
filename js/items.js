@@ -192,7 +192,7 @@ const ItemSystem = {
   _notifyItemHit(ownerId, itemKind, targetCar, allCars) {
     if (!targetCar || !allCars || !itemKind) return;
     const owner = allCars.find(c => c.id === ownerId);
-    if (!owner || owner.id === targetCar.id) return;
+    if (!owner) return;
     this._notifyItemHitByCar(owner, itemKind, targetCar);
   },
 

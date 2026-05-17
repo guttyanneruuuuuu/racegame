@@ -5,6 +5,7 @@ const GameUI = {
   selectedMap: 'grand',
   ITEM_HIT_DISPLAY_MS: 5000,
   ITEM_HIT_FADE_MS: 250,
+  MAX_HIT_FEED_ENTRIES: 4,
   _safeStorage: null,
   _speedLineTimerId: null,
 
@@ -405,7 +406,7 @@ const GameUI = {
     row.className = 'hit-feed-row';
     row.textContent = `${ownerName} の ${itemLabel} が ${targetName} にヒット`;
     feed.prepend(row);
-    while (feed.children.length > 4) feed.removeChild(feed.lastElementChild);
+    while (feed.children.length > this.MAX_HIT_FEED_ENTRIES) feed.removeChild(feed.lastElementChild);
     const displayMs = this.ITEM_HIT_DISPLAY_MS;
     const fadeMs = this.ITEM_HIT_FADE_MS;
 

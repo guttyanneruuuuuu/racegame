@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#C62828"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD54F"/>
+      <stop offset="100%" stop-color="#FF9800"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FFF59D" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#FF9800" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="90" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="220" fill="url(#glow)"/>
+  <!-- checkered flag stripe -->
+  <g opacity="0.18">
+    <rect x="0"   y="30" width="50" height="50" fill="#fff"/>
+    <rect x="100" y="30" width="50" height="50" fill="#fff"/>
+    <rect x="200" y="30" width="50" height="50" fill="#fff"/>
+    <rect x="300" y="30" width="50" height="50" fill="#fff"/>
+    <rect x="400" y="30" width="50" height="50" fill="#fff"/>
+    <rect x="50"  y="80" width="50" height="50" fill="#fff"/>
+    <rect x="150" y="80" width="50" height="50" fill="#fff"/>
+    <rect x="250" y="80" width="50" height="50" fill="#fff"/>
+    <rect x="350" y="80" width="50" height="50" fill="#fff"/>
+  </g>
+  <!-- car body -->
+  <g transform="translate(256 290)">
+    <ellipse cx="0" cy="56" rx="170" ry="22" fill="rgba(0,0,0,0.35)"/>
+    <path d="M -150,-8 Q -135,-60 -60,-70 L 60,-70 Q 135,-60 150,-8 L 150,42 Q 150,58 134,58 L -134,58 Q -150,58 -150,42 Z"
+          fill="url(#body)" stroke="#311B92" stroke-width="8"/>
+    <!-- windshield -->
+    <path d="M -86,-58 Q -60,-78 0,-78 Q 60,-78 86,-58 L 68,-12 L -68,-12 Z" fill="#1565C0" opacity="0.88"/>
+    <path d="M -84,-56 Q -60,-72 0,-72 L -50,-16 L -68,-14 Z" fill="#42A5F5" opacity="0.3"/>
+    <!-- wheels -->
+    <circle cx="-86" cy="46" r="28" fill="#212121"/>
+    <circle cx="-86" cy="46" r="12" fill="#FAFAFA"/>
+    <circle cx="-86" cy="46" r="6"  fill="#616161"/>
+    <circle cx="86"  cy="46" r="28" fill="#212121"/>
+    <circle cx="86"  cy="46" r="12" fill="#FAFAFA"/>
+    <circle cx="86"  cy="46" r="6"  fill="#616161"/>
+    <!-- headlights -->
+    <ellipse cx="-128" cy="-2" rx="14" ry="10" fill="#FFEB3B"/>
+    <ellipse cx="128"  cy="-2" rx="14" ry="10" fill="#FFEB3B"/>
+    <!-- racing number -->
+    <circle cx="0" cy="-20" r="22" fill="#fff" stroke="#311B92" stroke-width="4"/>
+    <text x="0" y="-10" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="32" font-weight="900" fill="#C62828">1</text>
+  </g>
+  <!-- title -->
+  <text x="256" y="460" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="58" font-weight="900" fill="#fff" stroke="#311B92" stroke-width="3">GYRO RUSH</text>
+</svg>

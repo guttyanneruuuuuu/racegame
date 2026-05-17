@@ -952,7 +952,7 @@ window.createTrackVolcano = function () {
     const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 11;
     const FORWARD_INDEX_RATIO = 0.035;
-    const RING_OFFSET_Y = 7.2;        // 飛行軌道に合わせて高度を最適化 (peak~9.6m, glide 6-8m)
+    const RING_OFFSET_Y = 22.0;       // さらに5下げて通しやすさを改善
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x66e0ff, transparent: true, opacity: 0.92, depthWrite: false,
@@ -982,8 +982,8 @@ window.createTrackVolcano = function () {
         innerMesh: innerRing,
         x: pp.x, z: pp.z, y: py + RING_OFFSET_Y,
         radius: 5.0,
-        yMin: py + 3.4,                // 通り抜け判定をかなり広く
-        yMax: py + 12.0,
+        yMin: py + RING_OFFSET_Y - 3.8,
+        yMax: py + RING_OFFSET_Y + 4.8,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });

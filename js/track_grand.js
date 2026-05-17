@@ -884,7 +884,7 @@ window.createTrackGrand = function () {
     const RING_TUBULAR_SEGMENTS = 24;
     const MIN_FORWARD_INDEX_OFFSET = 9;
     const FORWARD_INDEX_RATIO = 0.03;
-    const RING_CENTER_Y = 6.8;      // 飛行軌道に合わせた高度 (peak~9.6m, glide 6-8m)
+    const RING_CENTER_Y = 20.4;     // さらに5下げて通しやすさを改善
     const ringGeo = new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, RING_RADIAL_SEGMENTS, RING_TUBULAR_SEGMENTS);
     for (const p of this.jumpPads) {
       const base = this.getProgress(p.x, p.z).index;
@@ -912,8 +912,8 @@ window.createTrackGrand = function () {
         innerMesh: innerRing,
         x: pp.x, z: pp.z, y: RING_CENTER_Y,
         radius: 4.8,             // 横方向の判定も少し広く
-        yMin: 3.2,               // 通り抜け判定はさらに広く
-        yMax: 11.5,
+        yMin: RING_CENTER_Y - 3.6,
+        yMax: RING_CENTER_Y + 4.7,
         _phase: Math.random() * Math.PI * 2,
         _lastTrigger: new Map(),
       });

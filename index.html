@@ -9,6 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>GyroRush - スマホジャイロレース</title>
   <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/icon-192.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -265,6 +267,18 @@
   <script src="js/net_ext.js"></script>
   <script src="js/game_ext.js"></script>
   <script src="js/ui_ext.js"></script>
+  <script src="js/online_ext.js"></script>
   <script src="js/main.js"></script>
+
+  <!-- PWA Service Worker registration (graceful: no-op if unsupported / on file://) -->
+  <script>
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
+          console.warn('SW register failed:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

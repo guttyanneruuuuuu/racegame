@@ -309,6 +309,7 @@ input { font-family: inherit; outline: none; }
 .lobby-panel .lobby-actions { grid-area: actions; align-self: center; }
 .lobby-panel .hint { grid-area: hint; }
 .lobby-panel #lobby-chat { grid-area: chat; }
+.lobby-panel #oe-ready-row { grid-area: ready; }
 .lobby-panel {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
@@ -317,6 +318,7 @@ input { font-family: inherit; outline: none; }
     "code   actions"
     "count  actions"
     "list   chat"
+    "ready  ready"
     "hint   hint";
   gap: 8px 16px;
   align-items: start;
@@ -887,6 +889,7 @@ input { font-family: inherit; outline: none; }
       "code"
       "count"
       "list"
+      "ready"
       "actions"
       "chat"
       "hint";

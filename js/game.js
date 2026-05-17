@@ -1,4 +1,13 @@
 // ============= ゲームコア =============
+// ジャンプ台の調整値
+const BIG_JUMP_PAD_POWER = 16;
+const SMALL_JUMP_PAD_POWER = 11;
+const MINIMAP_STYLE = {
+  AIR_RING_MARKER_LINE_WIDTH: 1.4,
+  AIR_RING_MARKER_RADIUS: 2.6,
+  AIR_RING_MARKER_COLOR: '#80DEEA',
+};
+
 const Game = {
   renderer: null,
   scene: null,
@@ -244,7 +253,7 @@ const Game = {
       if (Input.consumeItemUse() && this.localCar.item) {
         this.useItem(this.localCar, this.cars);
       }
-      // 小ジャンプ中の横振りでトリック (横持ち端末を素早く振ると車体一回転)
+      // 小ジャンプ中の小さい縦振りでトリック (横持ち端末を軽く上下に振ると車体一回転)
       const shaken = (typeof Input.consumeShake === 'function') ? Input.consumeShake() : false;
       // キーボード操作のテスト用: Shift キーでも代用可能
       const kbTrick = !!(Input._keys && (Input._keys['shift'] || Input._keys[' ']));
@@ -592,7 +601,7 @@ const Game = {
       }
       if (r.jump) {
         // 大ジャンプ: 加速リングに届くようパワーUP + 上昇推進付きグライダー
-        c.applyJump(24);
+        c.applyJump(BIG_JUMP_PAD_POWER);
         c.deployGlider(3.8);
         if (c.isLocal) {
           showToast('💨 GEYSER!', 700);
@@ -600,14 +609,14 @@ const Game = {
         }
       }
       if (r.smallJump) {
-        // 小ジャンプ盤: 軽くポップしてトリック (横振り) チャンス
+        // 小ジャンプ盤: 軽くポップしてトリック (小さい縦振り) チャンス
         if (typeof c.beginSmallJump === 'function') {
-          c.beginSmallJump(11);
+          c.beginSmallJump(SMALL_JUMP_PAD_POWER);
         } else {
-          c.applyJump(11);
+          c.applyJump(SMALL_JUMP_PAD_POWER);
         }
         if (c.isLocal) {
-          showToast('🤸 SMALL JUMP — 横振りでトリック!', 900);
+          showToast('🤸 SMALL JUMP — 小さい縦振りでトリック!', 900);
           if (window.SFX) SFX.play('jump');
         }
       }
@@ -919,6 +928,15 @@ const Game = {
           sctx.beginPath();
           sctx.arc(toX(p.x), toZ(p.z), 3.2, 0, Math.PI * 2);
           sctx.fill();
+        }
+      }
+      if (Track.airBoostRings) {
+        sctx.strokeStyle = MINIMAP_STYLE.AIR_RING_MARKER_COLOR;
+        sctx.lineWidth = MINIMAP_STYLE.AIR_RING_MARKER_LINE_WIDTH;
+        for (const r of Track.airBoostRings) {
+          sctx.beginPath();
+          sctx.arc(toX(r.x), toZ(r.z), MINIMAP_STYLE.AIR_RING_MARKER_RADIUS, 0, Math.PI * 2);
+          sctx.stroke();
         }
       }
       if (Track.lavaPools) {

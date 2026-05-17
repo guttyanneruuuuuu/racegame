@@ -360,6 +360,10 @@ const UIExt = {
       swap:         { rarity: '超レア', desc: '前方の最も近いライバルと位置交換！' },
       phaseShift:   { rarity: '超レア', desc: '2.5秒透過 + ブースト + 短無敵' },
       stormCloud:   { rarity: 'レア', desc: '狙った相手の頭上に雲を出し、雷を落とす' },
+      partyHorn:    { rarity: 'パーティ', desc: '前方の相手をスピンさせる音波' },
+      bubble:       { rarity: 'パーティ', desc: '短時間バリア + 軽いジャンプブースト' },
+      partySwap:    { rarity: 'パーティ', desc: '最も近いライバルと位置を交換' },
+      coinStorm:    { rarity: 'パーティ', desc: '周囲にコインの嵐 + 周辺の相手のコイン奪取' },
     };
     for (const it of ItemSystem.ITEMS) {
       const d = ItemSystem.getDisplay(it);

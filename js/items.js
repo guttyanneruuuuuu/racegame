@@ -171,6 +171,7 @@ const ItemSystem = {
       if (c.id === owner.id) continue;
       if (c.finished) continue;
       c.hitInkSplash();
+      this._notifyItemHitByCar(owner, 'ink', c);
     }
     if (window.GameUI) window.GameUI.flashInk();
   },
@@ -181,10 +182,25 @@ const ItemSystem = {
       if (c.id === owner.id) continue;
       if (c.finished) continue;
       c.hitLightning();
+      this._notifyItemHitByCar(owner, 'lightning', c);
     }
     if (window.GameUI) window.GameUI.flashScreen('#fff', 250);
     // ショックウェーブ
     this._spawnShockwave(owner.x, owner.z, 60, 0xFFEB3B);
+  },
+
+  _notifyItemHit(ownerId, itemKind, targetCar, allCars) {
+    if (!targetCar || !allCars || !itemKind) return;
+    const owner = allCars.find(c => c.id === ownerId);
+    if (!owner || owner.id === targetCar.id) return;
+    this._notifyItemHitByCar(owner, itemKind, targetCar);
+  },
+
+  _notifyItemHitByCar(ownerCar, itemKind, targetCar) {
+    if (!ownerCar || !targetCar || ownerCar.id === targetCar.id || !itemKind) return;
+    if (window.GameUI && typeof GameUI.reportItemHit === 'function') {
+      GameUI.reportItemHit(ownerCar.name || 'プレイヤー', itemKind, targetCar.name || 'プレイヤー');
+    }
   },
 
   // ===== ゴースト (5秒間半透明 + 衝突無効) =====
@@ -395,6 +411,7 @@ const ItemSystem = {
             if (c.hitMine()) consumed = true;
           }
           if (consumed) {
+            this._notifyItemHit(p.ownerId, p.kind, c, allCars);
             if (p.kind === 'rocket') this._spawnExplosion(p.x, p.z, 0xffa726, 1.2, 0.5);
             else if (p.kind === 'mine') this._spawnExplosion(p.x, p.z, 0xff5722, 2.2, 0.7);
             else if (p.kind === 'oil') this._spawnSplash(p.x, p.z, 0x111111);

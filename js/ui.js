@@ -384,6 +384,33 @@ const GameUI = {
     setTimeout(() => slot.classList.remove('rolling'), 600);
   },
 
+  reportItemHit(ownerName, itemKind, targetName) {
+    if (!ownerName || !itemKind || !targetName) return;
+    let feed = document.getElementById('hud-item-hit-feed');
+    if (!feed) {
+      const hud = document.getElementById('hud');
+      if (!hud) return;
+      feed = document.createElement('div');
+      feed.id = 'hud-item-hit-feed';
+      feed.className = 'hud-item-hit-feed';
+      hud.appendChild(feed);
+    }
+
+    const d = (window.ItemSystem && ItemSystem.getDisplay) ? ItemSystem.getDisplay(itemKind) : null;
+    const itemLabel = d ? `${d.emoji} ${d.label}` : itemKind;
+
+    const row = document.createElement('div');
+    row.className = 'hit-feed-row';
+    row.textContent = `${ownerName} の ${itemLabel} が ${targetName} にヒット`;
+    feed.prepend(row);
+    while (feed.children.length > 4) feed.removeChild(feed.lastElementChild);
+
+    setTimeout(() => row.classList.add('fade-out'), 4750);
+    setTimeout(() => {
+      if (row.parentNode) row.parentNode.removeChild(row);
+    }, 5000);
+  },
+
   // コイン枚数表示更新 (10枚で最大、speedボーナス % も表示)
   updateCoins(count) {
     let el = document.getElementById('hud-coins');

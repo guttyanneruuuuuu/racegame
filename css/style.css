@@ -578,7 +578,9 @@ input { font-family: inherit; outline: none; }
 .touch-controls {
   position: absolute;
   bottom: 14px; left: 14px;
-  display: flex; gap: 10px;
+  display: flex; gap: 8px;
+  flex-wrap: wrap;
+  max-width: min(62vw, 520px);
   z-index: 10;
   pointer-events: auto;
 }
@@ -591,9 +593,9 @@ input { font-family: inherit; outline: none; }
 }
 .ctrl-btn {
   padding: 0;
-  width: 102px; height: 84px;
-  border-radius: 16px;
-  font-size: 14px;
+  width: 84px; height: 66px;
+  border-radius: 14px;
+  font-size: 12px;
   font-weight: 900;
   color: white;
   letter-spacing: 1px;
@@ -608,12 +610,12 @@ input { font-family: inherit; outline: none; }
   transform: translateY(3px);
   box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 4px 8px rgba(0,0,0,0.3);
 }
-.ctrl-accel { background: linear-gradient(180deg, #66BB6A, #2E7D32); }
+.ctrl-accel { background: linear-gradient(180deg, #66BB6A, #2E7D32); width: 102px; height: 84px; font-size: 14px; border-radius: 16px; }
 .ctrl-brake { background: linear-gradient(180deg, #EF5350, #C62828); }
-.ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 82px; height: 82px; }
+.ctrl-item  { background: linear-gradient(180deg, #FFCA28, #F57C00); width: 72px; height: 72px; font-size: 11px; }
 .ctrl-rewind {
   background: linear-gradient(180deg, #7E57C2, #4527A0);
-  width: 70px; height: 66px; font-size: 12px;
+  width: 60px; height: 56px; font-size: 10px;
 }
 .ctrl-rewind.used {
   background: linear-gradient(180deg, #757575, #424242);
@@ -1082,7 +1084,44 @@ input { font-family: inherit; outline: none; }
 
 /* ============= 追加: 後ろを見るボタン & 復帰ボタン ============= */
 .ctrl-look    { background: linear-gradient(180deg, #78909C, #37474F); width: 66px; height: 66px; font-size: 24px; }
-.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 66px; height: 66px; font-size: 22px; }
+.ctrl-look    { width: 56px; height: 56px; font-size: 20px; }
+.ctrl-respawn { background: linear-gradient(180deg, #FFB74D, #E65100); width: 56px; height: 56px; font-size: 18px; }
+
+/* ============= アイテム命中ログ ============= */
+.hud-item-hit-feed {
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80vw, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 45;
+}
+.hit-feed-row {
+  align-self: center;
+  max-width: 100%;
+  background: rgba(17, 25, 38, 0.88);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-weight: 800;
+  font-size: 12px;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.45);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.hit-feed-row.fade-out {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 
 /* ============= 追加: アイテムスロットロール演出 ============= */
 .hud-item.rolling .item-box {
@@ -1150,6 +1189,8 @@ input { font-family: inherit; outline: none; }
   .ctrl-btn { width: 90px; height: 70px; font-size: 12px; }
   .ctrl-item { width: 70px; height: 70px; font-size: 12px; }
   .ctrl-look, .ctrl-respawn { width: 58px; height: 58px; font-size: 19px; }
+  .ctrl-rewind { width: 56px; height: 52px; font-size: 9px; }
+  .ctrl-accel { width: 92px; height: 74px; font-size: 12px; }
   .hud-mini { width: 96px; height: 96px; }
   .hud-speed { padding: 6px 14px; }
   .speed-val { font-size: 28px; }
@@ -1159,6 +1200,8 @@ input { font-family: inherit; outline: none; }
   .btn-icon { width: 34px; height: 34px; font-size: 15px; }
   .wrong-way { font-size: 18px; padding: 10px 22px; }
   .drift-charge { bottom: 110px; font-size: 12px; padding: 3px 12px; }
+  .hud-item-hit-feed { top: 104px; }
+  .hit-feed-row { font-size: 11px; padding: 6px 10px; }
 }
 
 /* ============= 拡張UI: タイトルの追加ボタン ============= */

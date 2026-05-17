@@ -269,6 +269,7 @@ const ItemExt = {
           c.applyConfuse && c.applyConfuse(0.5);                       // 軽い操作鈍化
           c.slowTimer = Math.max(c.slowTimer || 0, 1.2);
           c.slowMul = Math.min(c.slowMul || 1, 0.7);
+          if (this._notifyItemHitByCar) this._notifyItemHitByCar(owner, 'emp', c);
           hit++;
         }
       }
@@ -295,6 +296,7 @@ const ItemExt = {
           c.driftActive = false; c.driftCharge = 0;
           c.speed *= 0.25;
           c.freezeTimer = Math.max(c.freezeTimer || 0, 1.4);
+          if (this._notifyItemHitByCar) this._notifyItemHitByCar(owner, 'freeze', c);
           hit++;
         }
       }
@@ -321,6 +323,7 @@ const ItemExt = {
           c.speed *= 0.4;
           c.spinTimer = Math.max(c.spinTimer || 0, 0.8);
           c.driftActive = false; c.driftCharge = 0;
+          if (this._notifyItemHitByCar) this._notifyItemHitByCar(owner, 'shockwave', c);
           hit++;
         }
       }
@@ -540,7 +543,10 @@ const ItemExt = {
               if (c.finished) continue;
               if (c.invincibleTimer > 0 || c.ghostTimer > 0 || c.killerTimer > 0) continue;
               const d = Utils.dist2(p.x, p.z, c.x, c.z);
-              if (d < p.radius) c.hitLightning();
+              if (d < p.radius) {
+                c.hitLightning();
+                if (ItemSystem._notifyItemHit) ItemSystem._notifyItemHit(p.ownerId, 'stormCloud', c, allCars);
+              }
             }
           }
           continue;
@@ -586,6 +592,7 @@ const ItemExt = {
               consumed = true;
             }
             if (consumed) {
+              if (ItemSystem._notifyItemHit) ItemSystem._notifyItemHit(p.ownerId, p.kind, c, allCars);
               if (p.kind === 'boomerang') ItemSystem._spawnSplash(p.x, p.z, 0xff7043);
               else if (p.kind === 'decoy') ItemSystem._spawnSplash(p.x, p.z, 0xB388FF);
               else ItemSystem._spawnSplash(p.x, p.z, 0xa1887f);
